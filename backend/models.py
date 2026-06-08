@@ -163,3 +163,16 @@ class ImportRecord(Base):
     imported_count = Column(Integer, default=0)
 
     program = relationship("Program", back_populates="import_records")
+
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+
+    id = Column(String, primary_key=True, default=new_uuid)
+    # No FK constraints — audit records are kept even if the user/program is deleted
+    github_id = Column(String, nullable=False, index=True)
+    action = Column(String(20), nullable=False)        # "create" | "update" | "delete"
+    resource_type = Column(String(50), nullable=False)  # "program" | "finding" | etc.
+    resource_id = Column(String, nullable=False)
+    program_id = Column(String, default="")             # context only, no FK
+    timestamp = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
