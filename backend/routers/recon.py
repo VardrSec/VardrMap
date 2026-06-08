@@ -32,5 +32,5 @@ def get_recon(
             ReconItem.title.ilike(term),
         ))
     total = query.count()
-    items = query.offset(offset).limit(limit).all()
+    items = query.order_by(ReconItem.id).offset(offset).limit(limit).all()
     return {"recon": [serialize_recon_item(r) for r in items], "total": total, "offset": offset, "limit": limit}

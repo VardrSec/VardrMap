@@ -81,7 +81,7 @@ export default function DashboardSection({ program }: { program: Program }) {
                     style={{ width: `${closedPct}%` }} />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 {STATUS_CONFIG.map(({ status, label, color }) => {
                   const count = findings.filter((f) => f.status === status).length;
                   return (

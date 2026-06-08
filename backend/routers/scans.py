@@ -26,7 +26,7 @@ def get_scans(
     if status:
         query = query.filter(ScanItem.status == status)
     total = query.count()
-    items = query.offset(offset).limit(limit).all()
+    items = query.order_by(ScanItem.id).offset(offset).limit(limit).all()
     return {"scans": [serialize_scan_item(s) for s in items], "total": total, "offset": offset, "limit": limit}
 
 

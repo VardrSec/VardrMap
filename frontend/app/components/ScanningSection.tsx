@@ -111,7 +111,7 @@ export default function ScanningSection({ programId, authFetch, setMessage, onPr
           </button>
           <button onClick={() => bulkUpdateStatus("promoted")}
             className="rounded-md border border-[#2e2e2e] px-2.5 py-1 text-xs font-semibold text-[#f59e0b] transition hover:border-[#f59e0b]/30">
-            Promote
+            Mark Promoted
           </button>
           <button onClick={() => setSelected(new Set())}
             className="ml-auto rounded-md border border-[#2e2e2e] px-2.5 py-1 text-xs text-[#52525b] transition hover:text-[#94a3b8]">
