@@ -394,7 +394,9 @@ def serialize_import_record(r: ImportRecord) -> dict:
     }
 
 
-def serialize_program(p: Program) -> dict:
+def serialize_program(p: Program, db: Session) -> dict:
+    recon_count = db.query(ReconItem).filter(ReconItem.program_id == p.id).count()
+    scans_count = db.query(ScanItem).filter(ScanItem.program_id == p.id).count()
     return {
         "id": p.id,
         "owner_github_id": p.owner_github_id,
@@ -409,8 +411,8 @@ def serialize_program(p: Program) -> dict:
             "out": [serialize_scope_item(i) for i in p.scope_items if i.scope_type == "out"],
         },
         "imports": [serialize_import_record(r) for r in p.import_records],
-        "recon_count": len(p.recon_items),
-        "scans_count": len(p.scan_items),
+        "recon_count": recon_count,
+        "scans_count": scans_count,
         "manual_tests": [serialize_manual_test(t) for t in p.manual_tests],
         "findings": [serialize_finding(f) for f in p.findings],
         "reports": [serialize_report(r) for r in p.reports],
@@ -625,7 +627,7 @@ def get_programs(
     db: Session = Depends(get_db),
 ):
     rows = db.query(Program).filter(Program.owner_github_id == current_user["github_id"]).all()
-    return {"programs": [serialize_program(p) for p in rows]}
+    return {"programs": [serialize_program(p, db) for p in rows]}
 
 
 @app.post("/programs")
@@ -657,7 +659,7 @@ def create_program(
     db.add(program)
     db.commit()
     db.refresh(program)
-    return serialize_program(program)
+    return serialize_program(program, db)
 
 
 @app.get("/programs/{program_id}")
@@ -667,7 +669,7 @@ def get_program(
     db: Session = Depends(get_db),
 ):
     program = get_program_or_404(program_id, current_user, db)
-    return serialize_program(program)
+    return serialize_program(program, db)
 
 
 @app.patch("/programs/{program_id}")
@@ -682,7 +684,7 @@ def update_program(
         setattr(program, key, value)
     db.commit()
     db.refresh(program)
-    return serialize_program(program)
+    return serialize_program(program, db)
 
 
 @app.delete("/programs/{program_id}")
@@ -1046,5 +1048,5 @@ async def import_results(
     return {
         "message": "Import complete",
         "import_record": serialize_import_record(record),
-        "program": serialize_program(program),
+        "program": serialize_program(program, db),
     }

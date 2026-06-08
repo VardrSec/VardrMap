@@ -45,7 +45,7 @@ export default function FindingsSection({ program, authFetch, onRefresh, setMess
       setForm(prefill);
       onPrefillConsumed();
     }
-  }, [prefill]);
+  }, [prefill, onPrefillConsumed]);
 
   async function addFinding() {
     if (!form.title.trim()) return;
@@ -98,7 +98,6 @@ export default function FindingsSection({ program, authFetch, onRefresh, setMess
             <div className="space-y-3">
               {(program.findings ?? []).map((finding) =>
                 editingId === finding.id ? (
-                  {/* amber border signals "this card is being edited" */}
                   <div key={finding.id} className="rounded-xl border border-[#f59e0b]/30 bg-[#161616] p-4 space-y-3">
                     <FindingForm value={editForm} onChange={setEditForm} />
                     <div className="flex gap-2">

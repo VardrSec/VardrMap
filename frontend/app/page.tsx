@@ -88,6 +88,12 @@ export default function Home() {
   // authFetch needs a stable reference (empty deps) so child components can safely
   // put it in their own useEffect dependency arrays without causing infinite loops.
   // A ref lets it always read the latest session without re-creating the function.
+  useEffect(() => {
+    if (!message) return;
+    const id = setTimeout(() => setMessage(""), 4000);
+    return () => clearTimeout(id);
+  }, [message]);
+
   const sessionRef = useRef(session);
   useEffect(() => { sessionRef.current = session; }, [session]);
 
