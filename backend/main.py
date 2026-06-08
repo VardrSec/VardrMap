@@ -255,6 +255,25 @@ class FindingCreate(BaseModel):
     def sanitize_long(cls, v): return strip_html(v)
 
 
+class FindingUpdate(BaseModel):
+    title: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    severity: Optional[Severity] = None
+    asset: Optional[str] = Field(default=None, max_length=500)
+    status: Optional[FindingStatus] = None
+    summary: Optional[str] = Field(default=None, max_length=5000)
+    steps: Optional[str] = Field(default=None, max_length=10000)
+    impact: Optional[str] = Field(default=None, max_length=5000)
+    remediation: Optional[str] = Field(default=None, max_length=5000)
+
+    @field_validator("title", "asset", mode="before")
+    @classmethod
+    def sanitize_short(cls, v): return sanitize_identifier(v) if v else v
+
+    @field_validator("summary", "steps", "impact", "remediation", mode="before")
+    @classmethod
+    def sanitize_long(cls, v): return strip_html(v) if v else v
+
+
 class ReportCreate(BaseModel):
     finding_id: Optional[str] = Field(default="", max_length=100)
     title: str = Field(min_length=1, max_length=200)
@@ -390,8 +409,8 @@ def serialize_program(p: Program) -> dict:
             "out": [serialize_scope_item(i) for i in p.scope_items if i.scope_type == "out"],
         },
         "imports": [serialize_import_record(r) for r in p.import_records],
-        "recon": [serialize_recon_item(r) for r in p.recon_items],
-        "scans": [serialize_scan_item(s) for s in p.scan_items],
+        "recon_count": len(p.recon_items),
+        "scans_count": len(p.scan_items),
         "manual_tests": [serialize_manual_test(t) for t in p.manual_tests],
         "findings": [serialize_finding(f) for f in p.findings],
         "reports": [serialize_report(r) for r in p.reports],
@@ -401,6 +420,11 @@ def serialize_program(p: Program) -> dict:
 # Auth helpers
 # -----------------------------------------------------------------------------
 
+# Auth flow: GitHub OAuth is handled entirely by NextAuth on the frontend.
+# After sign-in, NextAuth mints a short-lived JWT (signed with BACKEND_JWT_SECRET)
+# that includes the GitHub user's ID, username, and email. Every request from
+# the frontend carries that token in the Authorization header, and this function
+# verifies it. The backend never talks to GitHub directly.
 def get_current_user(authorization: str | None = Header(default=None)) -> dict[str, str]:
     if not BACKEND_JWT_SECRET:
         raise HTTPException(status_code=500, detail="Server auth not configured")
@@ -449,6 +473,8 @@ def get_program_or_404(program_id: str, current_user: dict[str, str], db: Sessio
 # Import parsers
 # -----------------------------------------------------------------------------
 
+# Try JSONL first (newline-delimited, what most tools produce with -jsonl flags),
+# then fall back to a single JSON object/array. Both formats are common in the wild.
 def parse_json_or_jsonl(raw: bytes) -> Any:
     text = raw.decode("utf-8", errors="replace").strip()
     if not text:
@@ -461,7 +487,7 @@ def parse_json_or_jsonl(raw: bytes) -> Any:
         try:
             return [json.loads(line) for line in lines]
         except json.JSONDecodeError:
-            pass
+            pass  # not valid JSONL, fall through and try as a single JSON blob
 
     try:
         return json.loads(text)
@@ -469,6 +495,9 @@ def parse_json_or_jsonl(raw: bytes) -> Any:
         raise HTTPException(status_code=400, detail=f"Invalid JSON/JSONL: {exc.msg}")
 
 
+# Different tools wrap their output differently — ffuf wraps results under a
+# "results" key, httpx and nuclei emit a bare array, and sometimes a single-run
+# output is just one object. This flattens all three into the same list shape.
 def normalize_to_list(parsed: Any) -> list[dict[str, Any]]:
     if isinstance(parsed, list):
         return [item for item in parsed if isinstance(item, dict)]
@@ -742,21 +771,29 @@ def delete_scope_item(
 @app.get("/programs/{program_id}/recon")
 def get_recon(
     program_id: str,
+    limit: int = 100,
+    offset: int = 0,
     current_user: dict[str, str] = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    program = get_program_or_404(program_id, current_user, db)
-    return {"recon": [serialize_recon_item(r) for r in program.recon_items]}
+    get_program_or_404(program_id, current_user, db)
+    total = db.query(ReconItem).filter(ReconItem.program_id == program_id).count()
+    items = db.query(ReconItem).filter(ReconItem.program_id == program_id).offset(offset).limit(limit).all()
+    return {"recon": [serialize_recon_item(r) for r in items], "total": total, "offset": offset, "limit": limit}
 
 
 @app.get("/programs/{program_id}/scans")
 def get_scans(
     program_id: str,
+    limit: int = 100,
+    offset: int = 0,
     current_user: dict[str, str] = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    program = get_program_or_404(program_id, current_user, db)
-    return {"scans": [serialize_scan_item(s) for s in program.scan_items]}
+    get_program_or_404(program_id, current_user, db)
+    total = db.query(ScanItem).filter(ScanItem.program_id == program_id).count()
+    items = db.query(ScanItem).filter(ScanItem.program_id == program_id).offset(offset).limit(limit).all()
+    return {"scans": [serialize_scan_item(s) for s in items], "total": total, "offset": offset, "limit": limit}
 
 # -----------------------------------------------------------------------------
 # Manual tests
@@ -855,7 +892,7 @@ def add_finding(
 def update_finding(
     program_id: str,
     finding_id: str,
-    payload: FindingCreate,
+    payload: FindingUpdate,
     current_user: dict[str, str] = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -866,7 +903,7 @@ def update_finding(
     ).first()
     if not finding:
         raise HTTPException(status_code=404, detail="Finding not found")
-    for key, value in payload.model_dump().items():
+    for key, value in payload.model_dump(exclude_unset=True).items():
         setattr(finding, key, value)
     db.commit()
     db.refresh(finding)
@@ -994,6 +1031,8 @@ async def import_results(
             db.add(s)
         imported_count = len(scan_items)
 
+    # Store "redacted" instead of the real filename — the original file path
+    # often leaks local directory structure and isn't useful after import anyway.
     record = ImportRecord(
         program_id=program_id,
         tool_type=tool_type,
