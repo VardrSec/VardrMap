@@ -23,6 +23,9 @@ export default function ProgramSection({ program, authFetch, onRefresh, onDelete
       scope_summary: program.scope_summary, severity_guidance: program.severity_guidance,
       safe_harbor_notes: program.safe_harbor_notes,
     });
+  // Intentionally keyed on program.id only — re-running on every field change
+  // would overwrite edits the user is currently typing in the form.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [program.id]);
 
   async function saveProfile() {

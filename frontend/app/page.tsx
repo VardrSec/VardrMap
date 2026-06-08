@@ -37,6 +37,7 @@ const NAV_ITEMS: { section: Section; label: string; icon: string }[] = [
 
 // Defensively coerce every field so components never have to deal with undefined
 // coming from the API — e.g. a missing recon_count just becomes 0.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function normalizeProgram(raw: any): Program {
   return {
     id:                 String(raw?.id ?? ""),
@@ -139,6 +140,9 @@ export default function Home() {
       void syncUser();
       void loadPrograms();
     }
+  // syncUser and loadPrograms are function declarations that re-create each render;
+  // adding them to deps would cause an infinite loop.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading, session?.backendToken]);
 
   async function bootstrapSession() {
