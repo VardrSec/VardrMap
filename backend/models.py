@@ -56,6 +56,7 @@ class ScopeItem(Base):
     value = Column(String(500), nullable=False)
     kind = Column(String(20), default="domain")
     notes = Column(Text, default="")
+    created_at = Column(DateTime, nullable=True, default=lambda: datetime.now(timezone.utc))
 
     program = relationship("Program", back_populates="scope_items")
 
@@ -70,6 +71,7 @@ class ManualTest(Base):
     payload = Column(Text, default="")
     evidence = Column(Text, default="")
     status = Column(String(20), default="new")
+    created_at = Column(DateTime, nullable=True, default=lambda: datetime.now(timezone.utc))
 
     program = relationship("Program", back_populates="manual_tests")
 
@@ -106,6 +108,7 @@ class Report(Base):
     cwe = Column(String(50), default="")
     cvss = Column(String(50), default="")
     status = Column(String(20), default="draft")
+    created_at = Column(DateTime, nullable=True, default=lambda: datetime.now(timezone.utc))
 
     program = relationship("Program", back_populates="reports")
 
@@ -129,6 +132,7 @@ class ReconItem(Base):
     words = Column(Integer, nullable=True)
     lines = Column(Integer, nullable=True)
     notes = Column(Text, default="")
+    created_at = Column(DateTime, nullable=True, default=lambda: datetime.now(timezone.utc))
 
     program = relationship("Program", back_populates="recon_items")
 
@@ -149,6 +153,7 @@ class ScanItem(Base):
     status = Column(String(20), default="new")
     cwe = Column(String(50), default="")
     cvss = Column(String(50), default="")
+    created_at = Column(DateTime, nullable=True, default=lambda: datetime.now(timezone.utc))
 
     program = relationship("Program", back_populates="scan_items")
 
@@ -161,6 +166,7 @@ class ImportRecord(Base):
     tool_type = Column(String(20), default="")
     filename = Column(String(200), default="redacted")
     imported_count = Column(Integer, default=0)
+    created_at = Column(DateTime, nullable=True, default=lambda: datetime.now(timezone.utc))
 
     program = relationship("Program", back_populates="import_records")
 

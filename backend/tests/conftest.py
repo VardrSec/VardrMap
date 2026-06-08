@@ -21,6 +21,7 @@ _TEST_DB = "sqlite:///./test_vardrmap.db"
 _engine = create_engine(_TEST_DB, connect_args={"check_same_thread": False})
 _SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=_engine)
 
+Base.metadata.drop_all(bind=_engine)
 Base.metadata.create_all(bind=_engine)
 
 
