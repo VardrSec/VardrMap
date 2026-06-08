@@ -1,0 +1,58 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { Program, AuthFetch } from "../types";
+import { Panel, Input, Textarea, PrimaryButton, DangerButton, SectionHeader } from "./ui";
+
+export default function ProgramSection({ program, authFetch, onRefresh, onDelete, setMessage }: {
+  program: Program;
+  authFetch: AuthFetch;
+  onRefresh: () => Promise<void>;
+  onDelete: () => Promise<void>;
+  setMessage: (m: string) => void;
+}) {
+  const [form, setForm] = useState({
+    name: program.name, platform: program.platform, program_url: program.program_url,
+    scope_summary: program.scope_summary, severity_guidance: program.severity_guidance,
+    safe_harbor_notes: program.safe_harbor_notes,
+  });
+
+  useEffect(() => {
+    setForm({
+      name: program.name, platform: program.platform, program_url: program.program_url,
+      scope_summary: program.scope_summary, severity_guidance: program.severity_guidance,
+      safe_harbor_notes: program.safe_harbor_notes,
+    });
+  }, [program.id]);
+
+  async function saveProfile() {
+    try {
+      const res = await authFetch(`/programs/${program.id}`, { method: "PATCH", body: JSON.stringify(form) });
+      if (!res.ok) throw new Error();
+      await onRefresh();
+      setMessage("Program saved.");
+    } catch { setMessage("Failed to save program."); }
+  }
+
+  return (
+    <div className="space-y-7">
+      <SectionHeader title="Program Profile" description="Track target program details, policies, and notes." />
+      <Panel title="Edit Program">
+        <div className="grid gap-4 md:grid-cols-2">
+          <Input label="Program Name"      value={form.name}               onChange={(v) => setForm({ ...form, name: v })} />
+          <Input label="Platform"          value={form.platform}           onChange={(v) => setForm({ ...form, platform: v })} />
+          <Input label="Program URL"       value={form.program_url}        onChange={(v) => setForm({ ...form, program_url: v })} />
+          <Input label="Severity Guidance" value={form.severity_guidance}  onChange={(v) => setForm({ ...form, severity_guidance: v })} />
+        </div>
+        <div className="mt-4 grid gap-4">
+          <Textarea label="Scope Summary"    value={form.scope_summary}    onChange={(v) => setForm({ ...form, scope_summary: v })} />
+          <Textarea label="Safe Harbor Notes" value={form.safe_harbor_notes} onChange={(v) => setForm({ ...form, safe_harbor_notes: v })} />
+        </div>
+        <div className="mt-5 flex gap-3">
+          <PrimaryButton onClick={saveProfile} label="Save Profile" />
+          <DangerButton  onClick={onDelete}    label="Delete Program" />
+        </div>
+      </Panel>
+    </div>
+  );
+}
