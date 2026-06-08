@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Program, AuthFetch, Finding, FindingFormState } from "../types";
 import { Panel, Input, Textarea, SelectField, PrimaryButton, DangerButton, SeverityBadge, StatusBadge, SectionHeader } from "./ui";
 
@@ -34,9 +34,21 @@ export default function FindingsSection({ program, authFetch, onRefresh, setMess
   onPrefillConsumed: () => void;
   onPromoteToReport: (finding: Finding) => void;
 }) {
+  const [findings,  setFindings]  = useState<Finding[]>([]);
   const [form,      setForm]      = useState<FindingFormState>(EMPTY);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm,  setEditForm]  = useState<FindingFormState>(EMPTY);
+
+  const loadFindings = useCallback(async () => {
+    try {
+      const res = await authFetch(`/programs/${program.id}/findings`);
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      setFindings(Array.isArray(data?.findings) ? data.findings : []);
+    } catch { setMessage("Failed to load findings."); }
+  }, [program.id, authFetch, setMessage]);
+
+  useEffect(() => { void loadFindings(); }, [loadFindings]);
 
   // Apply the prefill from a promoted scan, then immediately tell the parent to
   // clear it. If we didn't clear it, navigating away and back to this section
@@ -54,6 +66,7 @@ export default function FindingsSection({ program, authFetch, onRefresh, setMess
       const res = await authFetch(`/programs/${program.id}/findings`, { method: "POST", body: JSON.stringify(form) });
       if (!res.ok) throw new Error();
       setForm(EMPTY);
+      await loadFindings();
       await onRefresh();
       setMessage("Finding added.");
     } catch { setMessage("Failed to add finding."); }
@@ -62,6 +75,7 @@ export default function FindingsSection({ program, authFetch, onRefresh, setMess
   async function deleteFinding(findingId: string) {
     try {
       await authFetch(`/programs/${program.id}/findings/${findingId}`, { method: "DELETE" });
+      await loadFindings();
       await onRefresh();
       setMessage("Finding deleted.");
     } catch { setMessage("Failed to delete finding."); }
@@ -77,6 +91,7 @@ export default function FindingsSection({ program, authFetch, onRefresh, setMess
       const res = await authFetch(`/programs/${program.id}/findings/${findingId}`, { method: "PATCH", body: JSON.stringify(editForm) });
       if (!res.ok) throw new Error();
       setEditingId(null);
+      await loadFindings();
       await onRefresh();
       setMessage("Finding updated.");
     } catch { setMessage("Failed to update finding."); }
@@ -93,11 +108,11 @@ export default function FindingsSection({ program, authFetch, onRefresh, setMess
           </div>
         </Panel>
         <Panel title="Finding Tracker">
-          {(program.findings ?? []).length === 0 ? (
+          {findings.length === 0 ? (
             <p className="text-sm text-[#3a3a3a]">No findings yet.</p>
           ) : (
             <div className="space-y-3">
-              {(program.findings ?? []).map((finding) =>
+              {findings.map((finding) =>
                 editingId === finding.id ? (
                   <div key={finding.id} className="rounded-xl border border-[#f59e0b]/30 bg-[#161616] p-4 space-y-3">
                     <FindingForm value={editForm} onChange={setEditForm} />

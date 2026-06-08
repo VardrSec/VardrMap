@@ -16,8 +16,14 @@ def get_manual_tests(
     current_user: dict[str, str] = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    program = get_program_or_404(program_id, current_user, db)
-    return {"manual_tests": [serialize_manual_test(t) for t in program.manual_tests]}
+    get_program_or_404(program_id, current_user, db)
+    tests = (
+        db.query(ManualTest)
+        .filter(ManualTest.program_id == program_id)
+        .order_by(ManualTest.created_at.desc())
+        .all()
+    )
+    return {"manual_tests": [serialize_manual_test(t) for t in tests]}
 
 
 @router.post("/programs/{program_id}/manual-tests")

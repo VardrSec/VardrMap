@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Program, ManualTest, AuthFetch } from "../types";
 import { Panel, Input, Textarea, SelectField, PrimaryButton, DangerButton, StatusBadge, SectionHeader } from "./ui";
 
@@ -26,9 +26,21 @@ export default function ManualSection({ program, authFetch, onRefresh, setMessag
   onRefresh: () => Promise<void>;
   setMessage: (m: string) => void;
 }) {
-  const [form,      setForm]      = useState<ManualFormState>(EMPTY);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editForm,  setEditForm]  = useState<ManualFormState>(EMPTY);
+  const [manualTests, setManualTests] = useState<ManualTest[]>([]);
+  const [form,        setForm]        = useState<ManualFormState>(EMPTY);
+  const [editingId,   setEditingId]   = useState<string | null>(null);
+  const [editForm,    setEditForm]    = useState<ManualFormState>(EMPTY);
+
+  const loadManualTests = useCallback(async () => {
+    try {
+      const res = await authFetch(`/programs/${program.id}/manual-tests`);
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      setManualTests(Array.isArray(data?.manual_tests) ? data.manual_tests : []);
+    } catch { setMessage("Failed to load manual tests."); }
+  }, [program.id, authFetch, setMessage]);
+
+  useEffect(() => { void loadManualTests(); }, [loadManualTests]);
 
   async function addManualTest() {
     if (!form.title.trim()) return;
@@ -36,6 +48,7 @@ export default function ManualSection({ program, authFetch, onRefresh, setMessag
       const res = await authFetch(`/programs/${program.id}/manual-tests`, { method: "POST", body: JSON.stringify(form) });
       if (!res.ok) throw new Error();
       setForm(EMPTY);
+      await loadManualTests();
       await onRefresh();
       setMessage("Manual test added.");
     } catch { setMessage("Failed to add manual test."); }
@@ -44,6 +57,7 @@ export default function ManualSection({ program, authFetch, onRefresh, setMessag
   async function deleteManualTest(testId: string) {
     try {
       await authFetch(`/programs/${program.id}/manual-tests/${testId}`, { method: "DELETE" });
+      await loadManualTests();
       await onRefresh();
       setMessage("Manual test deleted.");
     } catch { setMessage("Failed to delete manual test."); }
@@ -59,6 +73,7 @@ export default function ManualSection({ program, authFetch, onRefresh, setMessag
       const res = await authFetch(`/programs/${program.id}/manual-tests/${testId}`, { method: "PATCH", body: JSON.stringify(editForm) });
       if (!res.ok) throw new Error();
       setEditingId(null);
+      await loadManualTests();
       await onRefresh();
       setMessage("Manual test updated.");
     } catch { setMessage("Failed to update manual test."); }
@@ -75,11 +90,11 @@ export default function ManualSection({ program, authFetch, onRefresh, setMessag
           </div>
         </Panel>
         <Panel title="Saved Manual Tests">
-          {(program.manual_tests ?? []).length === 0 ? (
+          {manualTests.length === 0 ? (
             <p className="text-sm text-[#3a3a3a]">No manual tests saved yet.</p>
           ) : (
             <div className="space-y-3">
-              {(program.manual_tests ?? []).map((test) =>
+              {manualTests.map((test) =>
                 editingId === test.id ? (
                   <div key={test.id} className="rounded-xl border border-[#f59e0b]/30 bg-[#161616] p-4 space-y-3">
                     <ManualForm value={editForm} onChange={setEditForm} />

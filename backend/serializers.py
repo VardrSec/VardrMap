@@ -1,3 +1,4 @@
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from models import Finding, ImportRecord, ManualTest, Program, ReconItem, Report, ScanItem, ScopeItem
@@ -100,9 +101,39 @@ def serialize_import_record(r: ImportRecord) -> dict:
     }
 
 
+_SEVERITIES = ["critical", "high", "medium", "low", "info"]
+_FINDING_STATUSES = ["new", "candidate", "triaged", "in_progress", "closed"]
+
+
 def serialize_program(p: Program, db: Session) -> dict:
-    recon_count = db.query(ReconItem).filter(ReconItem.program_id == p.id).count()
-    scans_count = db.query(ScanItem).filter(ScanItem.program_id == p.id).count()
+    recon_count  = db.query(ReconItem).filter(ReconItem.program_id == p.id).count()
+    scans_count  = db.query(ScanItem).filter(ScanItem.program_id == p.id).count()
+    manual_count = db.query(ManualTest).filter(ManualTest.program_id == p.id).count()
+    finding_count = db.query(Finding).filter(Finding.program_id == p.id).count()
+    report_count  = db.query(Report).filter(Report.program_id == p.id).count()
+
+    sev_rows = (
+        db.query(Finding.severity, func.count(Finding.id))
+        .filter(Finding.program_id == p.id)
+        .group_by(Finding.severity)
+        .all()
+    )
+    findings_by_severity = {s: 0 for s in _SEVERITIES}
+    for sev, cnt in sev_rows:
+        if sev in findings_by_severity:
+            findings_by_severity[sev] = cnt
+
+    status_rows = (
+        db.query(Finding.status, func.count(Finding.id))
+        .filter(Finding.program_id == p.id)
+        .group_by(Finding.status)
+        .all()
+    )
+    findings_by_status = {s: 0 for s in _FINDING_STATUSES}
+    for status, cnt in status_rows:
+        if status in findings_by_status:
+            findings_by_status[status] = cnt
+
     return {
         "id": p.id,
         "owner_github_id": p.owner_github_id,
@@ -113,13 +144,15 @@ def serialize_program(p: Program, db: Session) -> dict:
         "severity_guidance": p.severity_guidance or "",
         "safe_harbor_notes": p.safe_harbor_notes or "",
         "scope": {
-            "in": [serialize_scope_item(i) for i in p.scope_items if i.scope_type == "in"],
+            "in":  [serialize_scope_item(i) for i in p.scope_items if i.scope_type == "in"],
             "out": [serialize_scope_item(i) for i in p.scope_items if i.scope_type == "out"],
         },
-        "imports": [serialize_import_record(r) for r in p.import_records],
-        "recon_count": recon_count,
-        "scans_count": scans_count,
-        "manual_tests": [serialize_manual_test(t) for t in p.manual_tests],
-        "findings": [serialize_finding(f) for f in p.findings],
-        "reports": [serialize_report(r) for r in p.reports],
+        "imports":              [serialize_import_record(r) for r in p.import_records],
+        "recon_count":          recon_count,
+        "scans_count":          scans_count,
+        "manual_tests_count":   manual_count,
+        "findings_count":       finding_count,
+        "findings_by_severity": findings_by_severity,
+        "findings_by_status":   findings_by_status,
+        "reports_count":        report_count,
     }

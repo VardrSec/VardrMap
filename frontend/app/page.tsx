@@ -38,26 +38,33 @@ const NAV_ITEMS: { section: Section; label: string; icon: string }[] = [
 // Defensively coerce every field so components never have to deal with undefined
 // coming from the API — e.g. a missing recon_count just becomes 0.
 function normalizeProgram(raw: unknown): Program {
-  const program = raw && typeof raw === "object" ? raw as Record<string, unknown> : {};
-  const scope = program.scope && typeof program.scope === "object" ? program.scope as Record<string, unknown> : {};
+  const p = raw && typeof raw === "object" ? raw as Record<string, unknown> : {};
+  const scope = p.scope && typeof p.scope === "object" ? p.scope as Record<string, unknown> : {};
+  const n = (v: unknown) => (typeof v === "number" ? v : 0);
+  const asRecord = (v: unknown): Record<string, number> =>
+    v && typeof v === "object" && !Array.isArray(v)
+      ? Object.fromEntries(Object.entries(v as Record<string, unknown>).map(([k, val]) => [k, n(val)]))
+      : {};
   return {
-    id:                 String(program.id ?? ""),
-    name:               String(program.name ?? ""),
-    platform:           String(program.platform ?? ""),
-    program_url:        String(program.program_url ?? ""),
-    scope_summary:      String(program.scope_summary ?? ""),
-    severity_guidance:  String(program.severity_guidance ?? ""),
-    safe_harbor_notes:  String(program.safe_harbor_notes ?? ""),
+    id:                   String(p.id ?? ""),
+    name:                 String(p.name ?? ""),
+    platform:             String(p.platform ?? ""),
+    program_url:          String(p.program_url ?? ""),
+    scope_summary:        String(p.scope_summary ?? ""),
+    severity_guidance:    String(p.severity_guidance ?? ""),
+    safe_harbor_notes:    String(p.safe_harbor_notes ?? ""),
     scope: {
       in:  Array.isArray(scope.in)  ? scope.in  : [],
       out: Array.isArray(scope.out) ? scope.out : [],
     },
-    imports:      Array.isArray(program.imports)      ? program.imports      : [],
-    recon_count:  typeof program.recon_count  === "number" ? program.recon_count  : 0,
-    scans_count:  typeof program.scans_count  === "number" ? program.scans_count  : 0,
-    manual_tests: Array.isArray(program.manual_tests) ? program.manual_tests : [],
-    findings:     Array.isArray(program.findings)     ? program.findings     : [],
-    reports:      Array.isArray(program.reports)      ? program.reports      : [],
+    imports:              Array.isArray(p.imports) ? p.imports : [],
+    recon_count:          n(p.recon_count),
+    scans_count:          n(p.scans_count),
+    manual_tests_count:   n(p.manual_tests_count),
+    findings_count:       n(p.findings_count),
+    findings_by_severity: asRecord(p.findings_by_severity),
+    findings_by_status:   asRecord(p.findings_by_status),
+    reports_count:        n(p.reports_count),
   };
 }
 

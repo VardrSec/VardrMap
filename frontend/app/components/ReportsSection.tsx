@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Program, Report, AuthFetch, ReportFormState } from "../types";
+import { Program, Finding, Report, AuthFetch, ReportFormState } from "../types";
 import { Panel, Input, Textarea, SelectField, PrimaryButton, DangerButton, StatusBadge, SectionHeader } from "./ui";
 
 const EMPTY: ReportFormState = { finding_id: "", title: "", summary: "", steps: "", impact: "", remediation: "", cwe: "", cvss: "", status: "draft" };
@@ -59,9 +59,34 @@ export default function ReportsSection({ program, authFetch, onRefresh, setMessa
   prefill?: ReportFormState | null;
   onPrefillConsumed?: () => void;
 }) {
+  const [reports,   setReports]   = useState<Report[]>([]);
+  const [findings,  setFindings]  = useState<Finding[]>([]);
   const [form,      setForm]      = useState<ReportFormState>(EMPTY);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm,  setEditForm]  = useState<ReportFormState>(EMPTY);
+
+  const loadReports = useCallback(async () => {
+    try {
+      const res = await authFetch(`/programs/${program.id}/reports`);
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      setReports(Array.isArray(data?.reports) ? data.reports : []);
+    } catch { setMessage("Failed to load reports."); }
+  }, [program.id, authFetch, setMessage]);
+
+  const loadFindings = useCallback(async () => {
+    try {
+      const res = await authFetch(`/programs/${program.id}/findings`);
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      setFindings(Array.isArray(data?.findings) ? data.findings : []);
+    } catch { /* non-blocking — dropdown just stays empty */ }
+  }, [program.id, authFetch]);
+
+  useEffect(() => {
+    void loadReports();
+    void loadFindings();
+  }, [loadReports, loadFindings]);
 
   useEffect(() => {
     if (prefill) {
@@ -94,6 +119,7 @@ export default function ReportsSection({ program, authFetch, onRefresh, setMessa
       const res = await authFetch(`/programs/${program.id}/reports`, { method: "POST", body: JSON.stringify(form) });
       if (!res.ok) throw new Error();
       setForm(EMPTY);
+      await loadReports();
       await onRefresh();
       setMessage("Report saved.");
     } catch { setMessage("Failed to save report."); }
@@ -102,6 +128,7 @@ export default function ReportsSection({ program, authFetch, onRefresh, setMessa
   async function deleteReport(reportId: string) {
     try {
       await authFetch(`/programs/${program.id}/reports/${reportId}`, { method: "DELETE" });
+      await loadReports();
       await onRefresh();
       setMessage("Report deleted.");
     } catch { setMessage("Failed to delete report."); }
@@ -117,6 +144,7 @@ export default function ReportsSection({ program, authFetch, onRefresh, setMessa
       const res = await authFetch(`/programs/${program.id}/reports/${reportId}`, { method: "PATCH", body: JSON.stringify(editForm) });
       if (!res.ok) throw new Error();
       setEditingId(null);
+      await loadReports();
       await onRefresh();
       setMessage("Report updated.");
     } catch { setMessage("Failed to update report."); }
@@ -137,12 +165,12 @@ export default function ReportsSection({ program, authFetch, onRefresh, setMessa
                 value={form.finding_id}
                 onChange={(e) => {
                   const fid = e.target.value;
-                  const f = (program.findings ?? []).find((x) => x.id === fid);
+                  const f = findings.find((x) => x.id === fid);
                   setForm({ ...form, finding_id: fid, title: f?.title || form.title, summary: f?.summary || form.summary, steps: f?.steps || form.steps, impact: f?.impact || form.impact, remediation: f?.remediation || form.remediation });
                 }}
               >
                 <option value="">No linked finding</option>
-                {(program.findings ?? []).map((f) => <option key={f.id} value={f.id}>{f.title}</option>)}
+                {findings.map((f) => <option key={f.id} value={f.id}>{f.title}</option>)}
               </select>
             </div>
             <ReportFields value={form} onChange={setForm} />
@@ -170,7 +198,7 @@ export default function ReportsSection({ program, authFetch, onRefresh, setMessa
           </div>
 
           <div className="mt-5 space-y-2">
-            {(program.reports ?? []).map((report) =>
+            {reports.map((report) =>
               editingId === report.id ? (
                 <div key={report.id} className="rounded-xl border border-[#f59e0b]/30 bg-[#161616] p-4 space-y-3">
                   <ReportFields value={editForm} onChange={setEditForm} />

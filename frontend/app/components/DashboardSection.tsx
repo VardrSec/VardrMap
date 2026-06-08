@@ -29,23 +29,24 @@ function DashboardCard({ title, value, accent }: { title: string; value: number;
 }
 
 export default function DashboardSection({ program }: { program: Program }) {
-  const findings    = program.findings ?? [];
-  const total       = findings.length;
-  const closedCount = findings.filter((f) => f.status === "closed").length;
-  const closedPct   = total > 0 ? Math.round((closedCount / total) * 100) : 0;
-  const maxCount    = Math.max(...SEVERITY_CONFIG.map((s) => findings.filter((f) => f.severity === s.key).length), 1);
+  const total      = program.findings_count;
+  const bySeverity = program.findings_by_severity;
+  const byStatus   = program.findings_by_status;
+  const closed     = byStatus["closed"] ?? 0;
+  const closedPct  = total > 0 ? Math.round((closed / total) * 100) : 0;
+  const maxSevCount = Math.max(...SEVERITY_CONFIG.map((s) => bySeverity[s.key] ?? 0), 1);
 
   return (
     <div className="space-y-7">
       <SectionHeader title={program.name} description="Select a program, confirm scope, import tool output, review recon, validate findings, and draft a report." />
 
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        <DashboardCard title="In-Scope Assets" value={program.scope?.in?.length ?? 0}      accent="#f59e0b" />
-        <DashboardCard title="Recon Entries"   value={program.recon_count}                  accent="#89b4fa" />
-        <DashboardCard title="Scan Results"    value={program.scans_count}                  accent="#f38ba8" />
-        <DashboardCard title="Manual Tests"    value={program.manual_tests?.length ?? 0}    accent="#fab387" />
-        <DashboardCard title="Findings"        value={total}                                accent="#f9e2af" />
-        <DashboardCard title="Reports"         value={program.reports?.length ?? 0}         accent="#a6e3a1" />
+        <DashboardCard title="In-Scope Assets" value={program.scope?.in?.length ?? 0}    accent="#f59e0b" />
+        <DashboardCard title="Recon Entries"   value={program.recon_count}                accent="#89b4fa" />
+        <DashboardCard title="Scan Results"    value={program.scans_count}                accent="#f38ba8" />
+        <DashboardCard title="Manual Tests"    value={program.manual_tests_count}         accent="#fab387" />
+        <DashboardCard title="Findings"        value={total}                              accent="#f9e2af" />
+        <DashboardCard title="Reports"         value={program.reports_count}              accent="#a6e3a1" />
       </div>
 
       {total > 0 && (
@@ -53,8 +54,8 @@ export default function DashboardSection({ program }: { program: Program }) {
           <Panel title="Findings by Severity">
             <div className="space-y-2.5">
               {SEVERITY_CONFIG.map(({ key, color, label }) => {
-                const count = findings.filter((f) => f.severity === key).length;
-                const pct   = Math.round((count / maxCount) * 100);
+                const count = bySeverity[key] ?? 0;
+                const pct   = Math.round((count / maxSevCount) * 100);
                 return (
                   <div key={key} className="flex items-center gap-3">
                     <span className="w-14 flex-shrink-0 text-[11px] font-medium text-[#52525b]">{label}</span>
@@ -74,7 +75,7 @@ export default function DashboardSection({ program }: { program: Program }) {
               <div>
                 <div className="mb-1.5 flex items-center justify-between text-xs">
                   <span className="text-[#52525b]">Resolved</span>
-                  <span className="font-mono text-[#a6e3a1]">{closedCount} / {total} ({closedPct}%)</span>
+                  <span className="font-mono text-[#a6e3a1]">{closed} / {total} ({closedPct}%)</span>
                 </div>
                 <div className="h-2 w-full overflow-hidden rounded-full bg-[#2e2e2e]">
                   <div className="h-full rounded-full bg-[#a6e3a1] transition-all duration-500"
@@ -83,7 +84,7 @@ export default function DashboardSection({ program }: { program: Program }) {
               </div>
               <div className="grid grid-cols-3 gap-2">
                 {STATUS_CONFIG.map(({ status, label, color }) => {
-                  const count = findings.filter((f) => f.status === status).length;
+                  const count = byStatus[status] ?? 0;
                   return (
                     <div key={status} className="flex items-center justify-between rounded-lg border border-[#2e2e2e] bg-[#161616] px-3 py-2">
                       <span className="text-xs text-[#52525b]">{label}</span>

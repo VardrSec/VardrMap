@@ -16,8 +16,14 @@ def get_findings(
     current_user: dict[str, str] = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    program = get_program_or_404(program_id, current_user, db)
-    return {"findings": [serialize_finding(f) for f in program.findings]}
+    get_program_or_404(program_id, current_user, db)
+    findings = (
+        db.query(Finding)
+        .filter(Finding.program_id == program_id)
+        .order_by(Finding.created_at.desc())
+        .all()
+    )
+    return {"findings": [serialize_finding(f) for f in findings]}
 
 
 @router.post("/programs/{program_id}/findings")

@@ -21,9 +21,11 @@ export type Program = {
   imports: ImportRecord[];
   recon_count: number;
   scans_count: number;
-  manual_tests: ManualTest[];
-  findings: Finding[];
-  reports: Report[];
+  manual_tests_count: number;
+  findings_count: number;
+  findings_by_severity: Record<string, number>;
+  findings_by_status: Record<string, number>;
+  reports_count: number;
 };
 export type Section = "dashboard" | "program" | "scope" | "imports" | "recon" | "scanning" | "manual" | "findings" | "reports";
 export type AppSession = {

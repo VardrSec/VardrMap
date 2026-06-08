@@ -16,8 +16,14 @@ def get_reports(
     current_user: dict[str, str] = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    program = get_program_or_404(program_id, current_user, db)
-    return {"reports": [serialize_report(r) for r in program.reports]}
+    get_program_or_404(program_id, current_user, db)
+    reports = (
+        db.query(Report)
+        .filter(Report.program_id == program_id)
+        .order_by(Report.created_at.desc())
+        .all()
+    )
+    return {"reports": [serialize_report(r) for r in reports]}
 
 
 @router.post("/programs/{program_id}/reports")
