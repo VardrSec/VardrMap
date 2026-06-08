@@ -22,13 +22,15 @@ export function SeverityBadge({ severity }: { severity: string }) {
 export function StatusBadge({ status }: { status: string }) {
   const s = status?.toLowerCase();
   const color =
-    s === "validated" || s === "accepted"   ? "bg-emerald-950 text-emerald-400 border-emerald-800" :
-    s === "in_progress" || s === "triaged"  ? "bg-emerald-950 text-emerald-400 border-emerald-800" :
-    s === "closed" || s === "resolved"      ? "bg-[#161616] text-[#6e6a86] border-[#2a2a3e]" :
-                                              "bg-[#161616] text-[#6b7280] border-[#2a2a3e]";
+    s === "validated" || s === "accepted" || s === "promoted" ? "bg-emerald-950 text-emerald-400 border-emerald-800" :
+    s === "in_progress" || s === "triaged"                    ? "bg-blue-950 text-blue-400 border-blue-800" :
+    s === "false_positive"                                    ? "bg-red-950 text-red-400 border-red-800" :
+    s === "reviewed"                                          ? "bg-purple-950 text-purple-400 border-purple-800" :
+    s === "closed" || s === "resolved"                        ? "bg-[#161616] text-[#6e6a86] border-[#2a2a3e]" :
+                                                                "bg-[#161616] text-[#6b7280] border-[#2a2a3e]";
   return (
     <span className={`inline-flex items-center rounded border px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wider ${color}`}>
-      {status || "—"}
+      {status ? status.replace(/_/g, " ") : "—"}
     </span>
   );
 }

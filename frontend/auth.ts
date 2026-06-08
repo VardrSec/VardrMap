@@ -27,6 +27,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.email = String(token.email ?? "");
       }
 
+      // Regenerate the backend token on every callback so it never expires
+      // mid-session. Without this the 1h token goes stale while the NextAuth
+      // session (30-day default) is still valid, causing silent 401s.
       if (token.githubId) {
         token.backendToken = await new SignJWT({
           sub: String(token.githubId),

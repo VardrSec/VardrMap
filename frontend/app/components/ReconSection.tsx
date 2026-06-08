@@ -14,17 +14,19 @@ export default function ReconSection({ programId, authFetch, setMessage }: {
   authFetch: AuthFetch;
   setMessage: (m: string) => void;
 }) {
-  const [items,   setItems]   = useState<ReconItem[]>([]);
-  const [total,   setTotal]   = useState(0);
-  const [offset,  setOffset]  = useState(0);
-  const [loading, setLoading] = useState(false);
+  const [items,        setItems]        = useState<ReconItem[]>([]);
+  const [total,        setTotal]        = useState(0);
+  const [offset,       setOffset]       = useState(0);
+  const [loading,      setLoading]      = useState(false);
+  const [search,       setSearch]       = useState("");
+  const [searchInput,  setSearchInput]  = useState("");
 
-  // replace=true on initial load or program switch; replace=false when the user
-  // clicks "Load more" so we append instead of wiping what's already visible.
-  const load = useCallback(async (off: number, replace: boolean) => {
+  // replace=true on initial load or program/search change; false for "Load more"
+  const load = useCallback(async (off: number, replace: boolean, q: string) => {
     setLoading(true);
     try {
-      const res = await authFetch(`/programs/${programId}/recon?limit=${PAGE_SIZE}&offset=${off}`);
+      const params = `limit=${PAGE_SIZE}&offset=${off}${q ? `&search=${encodeURIComponent(q)}` : ""}`;
+      const res = await authFetch(`/programs/${programId}/recon?${params}`);
       if (!res.ok) throw new Error();
       const data = await res.json();
       setTotal(data.total ?? 0);
@@ -33,15 +35,44 @@ export default function ReconSection({ programId, authFetch, setMessage }: {
     } catch { setMessage("Failed to load recon."); } finally { setLoading(false); }
   }, [programId, authFetch, setMessage]);
 
-  useEffect(() => { void load(0, true); }, [load]);
+  useEffect(() => { void load(0, true, search); }, [load, search]);
+
+  function handleSearch(e: React.FormEvent) {
+    e.preventDefault();
+    setSearch(searchInput);
+  }
+
+  function clearSearch() {
+    setSearch("");
+    setSearchInput("");
+  }
 
   return (
     <div className="space-y-7">
       <SectionHeader title="Recon" description="Review discovered subdomains, endpoints, paths, and technologies." />
+
+      <form onSubmit={handleSearch} className="flex gap-2">
+        <input
+          className="flex-1 rounded-md border border-[#2e2e2e] bg-[#161616] px-3 py-2 text-sm text-[#f1f5f9] placeholder-[#3a3a3a] transition focus:border-[#f59e0b] focus:outline-none"
+          placeholder="Search URLs, hosts, paths, titles…"
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
+        />
+        <button type="submit" className="rounded-md border border-[#2e2e2e] px-4 py-2 text-xs text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#94a3b8]">
+          Search
+        </button>
+        {search && (
+          <button type="button" onClick={clearSearch}
+            className="rounded-md border border-[#2e2e2e] px-4 py-2 text-xs text-[#52525b] transition hover:text-[#94a3b8]">
+            Clear
+          </button>
+        )}
+      </form>
+
       <div className="grid gap-5 xl:grid-cols-2">
         <Panel title={`Discovered Assets (${total})`}>
           {items.length === 0 && !loading ? (
-            <p className="text-sm text-[#3a3a3a]">No recon data imported yet.</p>
+            <p className="text-sm text-[#3a3a3a]">{search ? "No results for that search." : "No recon data imported yet."}</p>
           ) : (
             <>
               <div className="overflow-x-auto">
@@ -66,7 +97,7 @@ export default function ReconSection({ programId, authFetch, setMessage }: {
                 </table>
               </div>
               {items.length < total && (
-                <button onClick={() => load(offset + PAGE_SIZE, false)} disabled={loading}
+                <button onClick={() => load(offset + PAGE_SIZE, false, search)} disabled={loading}
                   className="mt-4 rounded-md border border-[#2e2e2e] px-4 py-2 text-xs text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#94a3b8] disabled:opacity-50">
                   {loading ? "Loading…" : `Load more (${total - items.length} remaining)`}
                 </button>
@@ -76,7 +107,7 @@ export default function ReconSection({ programId, authFetch, setMessage }: {
         </Panel>
         <Panel title="Technology / Metadata">
           {items.length === 0 ? (
-            <p className="text-sm text-[#3a3a3a]">No recon data imported yet.</p>
+            <p className="text-sm text-[#3a3a3a]">{search ? "No results for that search." : "No recon data imported yet."}</p>
           ) : (
             <div className="space-y-2">
               {items.map((item) => (

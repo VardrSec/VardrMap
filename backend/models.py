@@ -87,6 +87,7 @@ class Finding(Base):
     steps = Column(Text, default="")
     impact = Column(Text, default="")
     remediation = Column(Text, default="")
+    created_at = Column(DateTime, nullable=True, default=lambda: datetime.now(timezone.utc))
 
     program = relationship("Program", back_populates="findings")
 

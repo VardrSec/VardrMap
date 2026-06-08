@@ -116,6 +116,11 @@ export default function FindingsSection({ program, authFetch, onRefresh, setMess
                           <SeverityBadge severity={finding.severity} />
                           <StatusBadge   status={finding.status} />
                           {finding.asset && <span className="font-mono text-xs text-[#52525b]">{finding.asset}</span>}
+                          {finding.created_at && (
+                            <span className="font-mono text-xs text-[#3a3a3a]">
+                              {new Date(finding.created_at).toLocaleDateString()}
+                            </span>
+                          )}
                         </div>
                       </div>
                       <div className="flex gap-2">

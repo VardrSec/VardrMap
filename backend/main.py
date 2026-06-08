@@ -11,11 +11,17 @@ from fastapi import (
     Form,
     Header,
     HTTPException,
+    Request,
     UploadFile,
 )
 from fastapi.middleware.cors import CORSMiddleware
 from jose import JWTError, jwt
 from pydantic import BaseModel, Field, field_validator
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+from slowapi.util import get_remote_address
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 import re
 import bleach
@@ -69,7 +75,12 @@ ALLOWED_CONTENT_TYPES = {
 # App
 # -----------------------------------------------------------------------------
 
+limiter = Limiter(key_func=get_remote_address, default_limits=["200/minute"])
+
 app = FastAPI(title="VardrMap API")
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
@@ -86,6 +97,7 @@ app.add_middleware(
 Severity = Literal["info", "low", "medium", "high", "critical"]
 FindingStatus = Literal["new", "candidate", "triaged", "in_progress", "closed"]
 ManualStatus = Literal["new", "in_progress", "validated", "closed"]
+ScanStatus = Literal["new", "reviewed", "false_positive", "promoted"]
 ScopeKind = Literal["domain", "subdomain", "url", "cidr", "api", "mobile"]
 ReportStatus = Literal["draft", "submitted", "accepted", "duplicate", "informative", "resolved"]
 ToolType = Literal["ffuf", "httpx", "nuclei"]
@@ -274,6 +286,46 @@ class FindingUpdate(BaseModel):
     def sanitize_long(cls, v): return strip_html(v) if v else v
 
 
+class ManualTestUpdate(BaseModel):
+    title: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    hypothesis: Optional[str] = Field(default=None, max_length=5000)
+    payload: Optional[str] = Field(default=None, max_length=10000)
+    evidence: Optional[str] = Field(default=None, max_length=10000)
+    status: Optional[ManualStatus] = None
+
+    @field_validator("title", mode="before")
+    @classmethod
+    def sanitize_title(cls, v): return sanitize_identifier(v) if v else v
+
+    @field_validator("hypothesis", "evidence", mode="before")
+    @classmethod
+    def sanitize_long(cls, v): return strip_html(v) if v else v
+    # payload intentionally not stripped
+
+
+class ReportUpdate(BaseModel):
+    title: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    summary: Optional[str] = Field(default=None, max_length=5000)
+    steps: Optional[str] = Field(default=None, max_length=10000)
+    impact: Optional[str] = Field(default=None, max_length=5000)
+    remediation: Optional[str] = Field(default=None, max_length=5000)
+    cwe: Optional[str] = Field(default=None, max_length=50)
+    cvss: Optional[str] = Field(default=None, max_length=50)
+    status: Optional[ReportStatus] = None
+
+    @field_validator("title", mode="before")
+    @classmethod
+    def sanitize_title(cls, v): return sanitize_identifier(v) if v else v
+
+    @field_validator("summary", "steps", "impact", "remediation", "cwe", "cvss", mode="before")
+    @classmethod
+    def sanitize_long(cls, v): return strip_html(v) if v else v
+
+
+class ScanStatusUpdate(BaseModel):
+    status: ScanStatus
+
+
 class ReportCreate(BaseModel):
     finding_id: Optional[str] = Field(default="", max_length=100)
     title: str = Field(min_length=1, max_length=200)
@@ -329,6 +381,7 @@ def serialize_finding(f: Finding) -> dict:
         "steps": f.steps or "",
         "impact": f.impact or "",
         "remediation": f.remediation or "",
+        "created_at": f.created_at.isoformat() if f.created_at else None,
     }
 
 
@@ -775,12 +828,22 @@ def get_recon(
     program_id: str,
     limit: int = 100,
     offset: int = 0,
+    search: Optional[str] = None,
     current_user: dict[str, str] = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     get_program_or_404(program_id, current_user, db)
-    total = db.query(ReconItem).filter(ReconItem.program_id == program_id).count()
-    items = db.query(ReconItem).filter(ReconItem.program_id == program_id).offset(offset).limit(limit).all()
+    query = db.query(ReconItem).filter(ReconItem.program_id == program_id)
+    if search:
+        term = f"%{search}%"
+        query = query.filter(or_(
+            ReconItem.url.ilike(term),
+            ReconItem.host.ilike(term),
+            ReconItem.path.ilike(term),
+            ReconItem.title.ilike(term),
+        ))
+    total = query.count()
+    items = query.offset(offset).limit(limit).all()
     return {"recon": [serialize_recon_item(r) for r in items], "total": total, "offset": offset, "limit": limit}
 
 
@@ -789,13 +852,37 @@ def get_scans(
     program_id: str,
     limit: int = 100,
     offset: int = 0,
+    status: Optional[str] = None,
     current_user: dict[str, str] = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     get_program_or_404(program_id, current_user, db)
-    total = db.query(ScanItem).filter(ScanItem.program_id == program_id).count()
-    items = db.query(ScanItem).filter(ScanItem.program_id == program_id).offset(offset).limit(limit).all()
+    query = db.query(ScanItem).filter(ScanItem.program_id == program_id)
+    if status:
+        query = query.filter(ScanItem.status == status)
+    total = query.count()
+    items = query.offset(offset).limit(limit).all()
     return {"scans": [serialize_scan_item(s) for s in items], "total": total, "offset": offset, "limit": limit}
+
+@app.patch("/programs/{program_id}/scans/{scan_id}")
+def update_scan_status(
+    program_id: str,
+    scan_id: str,
+    payload: ScanStatusUpdate,
+    current_user: dict[str, str] = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    get_program_or_404(program_id, current_user, db)
+    scan = db.query(ScanItem).filter(
+        ScanItem.id == scan_id,
+        ScanItem.program_id == program_id,
+    ).first()
+    if not scan:
+        raise HTTPException(status_code=404, detail="Scan item not found")
+    scan.status = payload.status
+    db.commit()
+    db.refresh(scan)
+    return serialize_scan_item(scan)
 
 # -----------------------------------------------------------------------------
 # Manual tests
@@ -828,6 +915,28 @@ def add_manual_test(
         status=payload.status,
     )
     db.add(test)
+    db.commit()
+    db.refresh(test)
+    return serialize_manual_test(test)
+
+
+@app.patch("/programs/{program_id}/manual-tests/{test_id}")
+def update_manual_test(
+    program_id: str,
+    test_id: str,
+    payload: ManualTestUpdate,
+    current_user: dict[str, str] = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    get_program_or_404(program_id, current_user, db)
+    test = db.query(ManualTest).filter(
+        ManualTest.id == test_id,
+        ManualTest.program_id == program_id,
+    ).first()
+    if not test:
+        raise HTTPException(status_code=404, detail="Manual test not found")
+    for key, value in payload.model_dump(exclude_unset=True).items():
+        setattr(test, key, value)
     db.commit()
     db.refresh(test)
     return serialize_manual_test(test)
@@ -965,6 +1074,28 @@ def add_report(
         status=payload.status,
     )
     db.add(report)
+    db.commit()
+    db.refresh(report)
+    return serialize_report(report)
+
+
+@app.patch("/programs/{program_id}/reports/{report_id}")
+def update_report(
+    program_id: str,
+    report_id: str,
+    payload: ReportUpdate,
+    current_user: dict[str, str] = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    get_program_or_404(program_id, current_user, db)
+    report = db.query(Report).filter(
+        Report.id == report_id,
+        Report.program_id == program_id,
+    ).first()
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+    for key, value in payload.model_dump(exclude_unset=True).items():
+        setattr(report, key, value)
     db.commit()
     db.refresh(report)
     return serialize_report(report)

@@ -9,10 +9,10 @@ export type ReconItem = {
 export type ScanItem = {
   id: string; source: string; template_id: string; title: string;
   severity: string; asset: string; matched_at?: string; type?: string;
-  description?: string; status: string;
+  description?: string; status: string; cwe?: string; cvss?: string;
 };
 export type ManualTest = { id: string; title: string; hypothesis: string; payload: string; evidence: string; status: string };
-export type Finding = { id: string; title: string; severity: string; asset: string; status: string; summary: string; steps: string; impact: string; remediation: string };
+export type Finding = { id: string; title: string; severity: string; asset: string; status: string; summary: string; steps: string; impact: string; remediation: string; created_at?: string | null };
 export type Report = { id: string; finding_id: string; title: string; summary: string; steps: string; impact: string; remediation: string; cwe: string; cvss: string; status: string };
 export type Program = {
   id: string; name: string; platform: string; program_url: string;
