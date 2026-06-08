@@ -1,6 +1,6 @@
 from typing import Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
@@ -15,8 +15,8 @@ router = APIRouter()
 @router.get("/programs/{program_id}/recon")
 def get_recon(
     program_id: str,
-    limit: int = 100,
-    offset: int = 0,
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
     search: Optional[str] = None,
     current_user: dict[str, str] = Depends(get_current_user),
     db: Session = Depends(get_db),

@@ -1,10 +1,10 @@
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from db import get_db
-from deps import get_current_user, get_program_or_404
+from deps import get_current_user, get_program_or_404, log_action
 from models import ScanItem
 from schemas import ScanStatusUpdate
 from serializers import serialize_scan_item
@@ -15,8 +15,8 @@ router = APIRouter()
 @router.get("/programs/{program_id}/scans")
 def get_scans(
     program_id: str,
-    limit: int = 100,
-    offset: int = 0,
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
     status: Optional[str] = None,
     current_user: dict[str, str] = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -46,6 +46,7 @@ def update_scan_status(
     if not scan:
         raise HTTPException(status_code=404, detail="Scan item not found")
     scan.status = payload.status
+    log_action(db, current_user["github_id"], "update", "scan_item", scan_id, program_id)
     db.commit()
     db.refresh(scan)
     return serialize_scan_item(scan)

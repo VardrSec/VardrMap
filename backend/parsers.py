@@ -95,7 +95,7 @@ def parse_nuclei(items: list[dict[str, Any]], program_id: str) -> list[ScanItem]
             type=item.get("type") or "",
             description=info.get("description") or "",
             status="new",
-            cwe=classification.get("cwe-id") or "",
+            cwe=",".join(classification.get("cwe-id")) if isinstance(classification.get("cwe-id"), list) else str(classification.get("cwe-id") or ""),
             cvss=str(classification.get("cvss-score") or ""),
         ))
     return out

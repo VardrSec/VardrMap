@@ -40,11 +40,11 @@ class ProgramUpdate(BaseModel):
 
     @field_validator("name", "platform", mode="before")
     @classmethod
-    def sanitize_short(cls, v): return sanitize_identifier(v) if v else v
+    def sanitize_short(cls, v): return sanitize_identifier(v) if v is not None else v
 
     @field_validator("program_url", "scope_summary", "severity_guidance", "safe_harbor_notes", mode="before")
     @classmethod
-    def sanitize_long(cls, v): return strip_html(v) if v else v
+    def sanitize_long(cls, v): return strip_html(v) if v is not None else v
 
 
 class ScopeItemCreate(BaseModel):
@@ -87,11 +87,11 @@ class ManualTestUpdate(BaseModel):
 
     @field_validator("title", mode="before")
     @classmethod
-    def sanitize_title(cls, v): return sanitize_identifier(v) if v else v
+    def sanitize_title(cls, v): return sanitize_identifier(v) if v is not None else v
 
     @field_validator("hypothesis", "evidence", mode="before")
     @classmethod
-    def sanitize_long(cls, v): return strip_html(v) if v else v
+    def sanitize_long(cls, v): return strip_html(v) if v is not None else v
     # payload intentionally not stripped
 
 
@@ -107,7 +107,7 @@ class FindingCreate(BaseModel):
 
     @field_validator("title", "asset", mode="before")
     @classmethod
-    def sanitize_short(cls, v): return sanitize_identifier(v) if v else v
+    def sanitize_short(cls, v): return sanitize_identifier(v) if v is not None else v
 
     @field_validator("summary", "steps", "impact", "remediation", mode="before")
     @classmethod
@@ -126,11 +126,11 @@ class FindingUpdate(BaseModel):
 
     @field_validator("title", "asset", mode="before")
     @classmethod
-    def sanitize_short(cls, v): return sanitize_identifier(v) if v else v
+    def sanitize_short(cls, v): return sanitize_identifier(v) if v is not None else v
 
     @field_validator("summary", "steps", "impact", "remediation", mode="before")
     @classmethod
-    def sanitize_long(cls, v): return strip_html(v) if v else v
+    def sanitize_long(cls, v): return strip_html(v) if v is not None else v
 
 
 class ReportCreate(BaseModel):
@@ -165,11 +165,11 @@ class ReportUpdate(BaseModel):
 
     @field_validator("title", mode="before")
     @classmethod
-    def sanitize_title(cls, v): return sanitize_identifier(v) if v else v
+    def sanitize_title(cls, v): return sanitize_identifier(v) if v is not None else v
 
     @field_validator("summary", "steps", "impact", "remediation", "cwe", "cvss", mode="before")
     @classmethod
-    def sanitize_long(cls, v): return strip_html(v) if v else v
+    def sanitize_long(cls, v): return strip_html(v) if v is not None else v
 
 
 class ScanStatusUpdate(BaseModel):
