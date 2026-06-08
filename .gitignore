@@ -1,4 +1,17 @@
 __pycache__/
 *.pyc
+*.pyo
+.env
 .env.local
 venv/
+.venv/
+
+# Test artefacts
+test_vardrmap.db
+.pytest_cache/
+htmlcov/
+.coverage
+
+# OS
+.DS_Store
+Thumbs.db

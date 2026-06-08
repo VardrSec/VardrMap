@@ -14,10 +14,14 @@ if not DATABASE_URL:
 # Railway (and most Postgres providers) give a postgresql:// URL which SQLAlchemy
 # maps to psycopg2 by default. We use psycopg3 (psycopg[binary]), so rewrite the
 # scheme to opt into the right driver without touching the rest of the URL.
-DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg://", 1)
-DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+psycopg://", 1)
+# SQLite URLs (used in tests) are left untouched and don't get sslmode.
+_is_postgres = DATABASE_URL.startswith(("postgresql://", "postgres://", "postgresql+psycopg://"))
+if _is_postgres:
+    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg://", 1)
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+psycopg://", 1)
 
-engine = create_engine(DATABASE_URL, connect_args={"sslmode": "require"})
+_connect_args = {"sslmode": "require"} if _is_postgres else {}
+engine = create_engine(DATABASE_URL, connect_args=_connect_args)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
