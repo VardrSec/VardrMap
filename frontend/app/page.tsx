@@ -37,26 +37,27 @@ const NAV_ITEMS: { section: Section; label: string; icon: string }[] = [
 
 // Defensively coerce every field so components never have to deal with undefined
 // coming from the API — e.g. a missing recon_count just becomes 0.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function normalizeProgram(raw: any): Program {
+function normalizeProgram(raw: unknown): Program {
+  const program = raw && typeof raw === "object" ? raw as Record<string, unknown> : {};
+  const scope = program.scope && typeof program.scope === "object" ? program.scope as Record<string, unknown> : {};
   return {
-    id:                 String(raw?.id ?? ""),
-    name:               String(raw?.name ?? ""),
-    platform:           String(raw?.platform ?? ""),
-    program_url:        String(raw?.program_url ?? ""),
-    scope_summary:      String(raw?.scope_summary ?? ""),
-    severity_guidance:  String(raw?.severity_guidance ?? ""),
-    safe_harbor_notes:  String(raw?.safe_harbor_notes ?? ""),
+    id:                 String(program.id ?? ""),
+    name:               String(program.name ?? ""),
+    platform:           String(program.platform ?? ""),
+    program_url:        String(program.program_url ?? ""),
+    scope_summary:      String(program.scope_summary ?? ""),
+    severity_guidance:  String(program.severity_guidance ?? ""),
+    safe_harbor_notes:  String(program.safe_harbor_notes ?? ""),
     scope: {
-      in:  Array.isArray(raw?.scope?.in)  ? raw.scope.in  : [],
-      out: Array.isArray(raw?.scope?.out) ? raw.scope.out : [],
+      in:  Array.isArray(scope.in)  ? scope.in  : [],
+      out: Array.isArray(scope.out) ? scope.out : [],
     },
-    imports:      Array.isArray(raw?.imports)      ? raw.imports      : [],
-    recon_count:  typeof raw?.recon_count  === "number" ? raw.recon_count  : 0,
-    scans_count:  typeof raw?.scans_count  === "number" ? raw.scans_count  : 0,
-    manual_tests: Array.isArray(raw?.manual_tests) ? raw.manual_tests : [],
-    findings:     Array.isArray(raw?.findings)     ? raw.findings     : [],
-    reports:      Array.isArray(raw?.reports)      ? raw.reports      : [],
+    imports:      Array.isArray(program.imports)      ? program.imports      : [],
+    recon_count:  typeof program.recon_count  === "number" ? program.recon_count  : 0,
+    scans_count:  typeof program.scans_count  === "number" ? program.scans_count  : 0,
+    manual_tests: Array.isArray(program.manual_tests) ? program.manual_tests : [],
+    findings:     Array.isArray(program.findings)     ? program.findings     : [],
+    reports:      Array.isArray(program.reports)      ? program.reports      : [],
   };
 }
 
