@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
@@ -7,6 +7,8 @@ from sqlalchemy.orm import relationship
 from db import Base
 
 
+# SQLAlchemy's `default=` needs a callable, not a value — passing uuid4 directly
+# would reuse the same UUID for every row. Wrapping it in a function fixes that.
 def new_uuid() -> str:
     return str(uuid.uuid4())
 
@@ -17,7 +19,7 @@ class User(Base):
     github_id = Column(String, primary_key=True)
     username = Column(String(100), default="")
     email = Column(String(200), default="")
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     programs = relationship("Program", back_populates="owner", cascade="all, delete-orphan")
 
@@ -33,7 +35,7 @@ class Program(Base):
     scope_summary = Column(Text, default="")
     severity_guidance = Column(Text, default="")
     safe_harbor_notes = Column(Text, default="")
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     owner = relationship("User", back_populates="programs")
     scope_items = relationship("ScopeItem", back_populates="program", cascade="all, delete-orphan")
