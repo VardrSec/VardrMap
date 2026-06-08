@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { signIn, signOut } from "next-auth/react";
-import { AppSession, FindingFormState, Program, ScanItem, Section } from "./types";
+import { AppSession, Finding, FindingFormState, Program, ReportFormState, ScanItem, Section } from "./types";
 import DashboardSection  from "./components/DashboardSection";
 import ProgramSection    from "./components/ProgramSection";
 import ScopeSection      from "./components/ScopeSection";
@@ -84,6 +84,7 @@ export default function Home() {
   const [newProgram,        setNewProgram]        = useState({ name: "", platform: "", program_url: "" });
   const [loading,           setLoading]           = useState(false);
   const [findingPrefill,    setFindingPrefill]    = useState<FindingFormState | null>(null);
+  const [reportPrefill,     setReportPrefill]     = useState<ReportFormState | null>(null);
 
   // authFetch needs a stable reference (empty deps) so child components can safely
   // put it in their own useEffect dependency arrays without causing infinite loops.
@@ -192,6 +193,21 @@ export default function Home() {
   // Pre-fills the findings form from a scan result so the user doesn't have
   // to retype everything. Status starts as "candidate" — it still needs human
   // validation before it becomes a real finding.
+  function promoteToReport(finding: Finding) {
+    setReportPrefill({
+      finding_id: finding.id,
+      title: finding.title,
+      summary: finding.summary || "",
+      steps: finding.steps || "",
+      impact: finding.impact || "",
+      remediation: finding.remediation || "",
+      cwe: "",
+      cvss: "",
+      status: "draft",
+    });
+    setActiveSection("reports");
+  }
+
   function promoteScanToFinding(scan: ScanItem) {
     setFindingPrefill({
       title: scan.title, severity: scan.severity || "medium",
@@ -342,8 +358,8 @@ export default function Home() {
               {activeSection === "recon"     && <ReconSection     programId={selectedProgram.id} authFetch={authFetch} setMessage={setMessage} />}
               {activeSection === "scanning"  && <ScanningSection  programId={selectedProgram.id} authFetch={authFetch} setMessage={setMessage} onPromote={promoteScanToFinding} />}
               {activeSection === "manual"    && <ManualSection    program={selectedProgram} authFetch={authFetch} onRefresh={refreshSelectedProgram} setMessage={setMessage} />}
-              {activeSection === "findings"  && <FindingsSection  program={selectedProgram} authFetch={authFetch} onRefresh={refreshSelectedProgram} setMessage={setMessage} prefill={findingPrefill} onPrefillConsumed={() => setFindingPrefill(null)} />}
-              {activeSection === "reports"   && <ReportsSection   program={selectedProgram} authFetch={authFetch} onRefresh={refreshSelectedProgram} setMessage={setMessage} />}
+              {activeSection === "findings"  && <FindingsSection  program={selectedProgram} authFetch={authFetch} onRefresh={refreshSelectedProgram} setMessage={setMessage} prefill={findingPrefill} onPrefillConsumed={() => setFindingPrefill(null)} onPromoteToReport={promoteToReport} />}
+              {activeSection === "reports"   && <ReportsSection   program={selectedProgram} authFetch={authFetch} onRefresh={refreshSelectedProgram} setMessage={setMessage} prefill={reportPrefill} onPrefillConsumed={() => setReportPrefill(null)} />}
             </>
           )}
         </section>

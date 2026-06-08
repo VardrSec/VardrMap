@@ -1,12 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Program, Report, AuthFetch } from "../types";
+import { Program, Report, AuthFetch, ReportFormState } from "../types";
 import { Panel, Input, Textarea, SelectField, PrimaryButton, DangerButton, StatusBadge, SectionHeader } from "./ui";
 
-type ReportFormState = { finding_id: string; title: string; summary: string; steps: string; impact: string; remediation: string; cwe: string; cvss: string; status: string };
 const EMPTY: ReportFormState = { finding_id: "", title: "", summary: "", steps: "", impact: "", remediation: "", cwe: "", cvss: "", status: "draft" };
 
 const MD_CLASSES = `text-sm text-[#6b7280] leading-relaxed space-y-2
@@ -52,15 +51,24 @@ function ReportFields({ value, onChange }: { value: ReportFormState; onChange: (
   );
 }
 
-export default function ReportsSection({ program, authFetch, onRefresh, setMessage }: {
+export default function ReportsSection({ program, authFetch, onRefresh, setMessage, prefill, onPrefillConsumed }: {
   program: Program;
   authFetch: AuthFetch;
   onRefresh: () => Promise<void>;
   setMessage: (m: string) => void;
+  prefill?: ReportFormState | null;
+  onPrefillConsumed?: () => void;
 }) {
   const [form,      setForm]      = useState<ReportFormState>(EMPTY);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm,  setEditForm]  = useState<ReportFormState>(EMPTY);
+
+  useEffect(() => {
+    if (prefill) {
+      setForm(prefill);
+      onPrefillConsumed?.();
+    }
+  }, [prefill, onPrefillConsumed]);
 
   async function copyMarkdown() {
     try {

@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from db import get_db
 from deps import get_current_user, get_program_or_404, log_action
 from models import ScanItem
-from schemas import ScanStatusUpdate
+from schemas import BulkScanStatusUpdate, ScanStatusUpdate
 from serializers import serialize_scan_item
 
 router = APIRouter()
@@ -28,6 +28,25 @@ def get_scans(
     total = query.count()
     items = query.offset(offset).limit(limit).all()
     return {"scans": [serialize_scan_item(s) for s in items], "total": total, "offset": offset, "limit": limit}
+
+
+@router.post("/programs/{program_id}/scans/bulk-status")
+def bulk_update_scan_status(
+    program_id: str,
+    payload: BulkScanStatusUpdate,
+    current_user: dict[str, str] = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    get_program_or_404(program_id, current_user, db)
+    scans = db.query(ScanItem).filter(
+        ScanItem.program_id == program_id,
+        ScanItem.id.in_(payload.ids),
+    ).all()
+    for scan in scans:
+        scan.status = payload.status
+    log_action(db, current_user["github_id"], "update", "scan_item", f"bulk:{len(scans)}", program_id)
+    db.commit()
+    return {"updated": len(scans)}
 
 
 @router.patch("/programs/{program_id}/scans/{scan_id}")

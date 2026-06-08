@@ -32,3 +32,4 @@ export type AppSession = {
 };
 export type AuthFetch = (path: string, init?: RequestInit) => Promise<Response>;
 export type FindingFormState = { title: string; severity: string; asset: string; status: string; summary: string; steps: string; impact: string; remediation: string };
+export type ReportFormState = { finding_id: string; title: string; summary: string; steps: string; impact: string; remediation: string; cwe: string; cvss: string; status: string };

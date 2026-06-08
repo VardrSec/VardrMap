@@ -174,3 +174,8 @@ class ReportUpdate(BaseModel):
 
 class ScanStatusUpdate(BaseModel):
     status: ScanStatus
+
+
+class BulkScanStatusUpdate(BaseModel):
+    ids: list[str] = Field(min_length=1, max_length=500)
+    status: ScanStatus

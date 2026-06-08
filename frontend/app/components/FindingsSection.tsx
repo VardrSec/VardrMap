@@ -25,13 +25,14 @@ function FindingForm({ value, onChange }: { value: FindingFormState; onChange: (
   );
 }
 
-export default function FindingsSection({ program, authFetch, onRefresh, setMessage, prefill, onPrefillConsumed }: {
+export default function FindingsSection({ program, authFetch, onRefresh, setMessage, prefill, onPrefillConsumed, onPromoteToReport }: {
   program: Program;
   authFetch: AuthFetch;
   onRefresh: () => Promise<void>;
   setMessage: (m: string) => void;
   prefill: FindingFormState | null;
   onPrefillConsumed: () => void;
+  onPromoteToReport: (finding: Finding) => void;
 }) {
   const [form,      setForm]      = useState<FindingFormState>(EMPTY);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -124,6 +125,9 @@ export default function FindingsSection({ program, authFetch, onRefresh, setMess
                         </div>
                       </div>
                       <div className="flex gap-2">
+                        <button onClick={() => onPromoteToReport(finding)} className="rounded-md border border-[#2e2e2e] px-2.5 py-1 text-xs text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#94a3b8]">
+                          Draft Report →
+                        </button>
                         <button onClick={() => startEdit(finding)} className="rounded-md border border-[#2e2e2e] px-2.5 py-1 text-xs text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#94a3b8]">
                           Edit
                         </button>
