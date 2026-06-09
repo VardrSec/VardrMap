@@ -1,15 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { Program, AuthFetch } from "../types";
+import { Program } from "../types";
+import { useAppContext } from "../context/AppContext";
 import { Panel, Input, Textarea, PrimaryButton, ListCard, SectionHeader } from "./ui";
 
-export default function ScopeSection({ program, authFetch, onRefresh, setMessage }: {
-  program: Program;
-  authFetch: AuthFetch;
-  onRefresh: () => Promise<void>;
-  setMessage: (m: string) => void;
-}) {
+export default function ScopeSection({ program }: { program: Program }) {
+  const { authFetch, setMessage, refreshSelectedProgram } = useAppContext();
   const [scopeIn,  setScopeIn]  = useState({ value: "", kind: "domain", notes: "" });
   const [scopeOut, setScopeOut] = useState({ value: "", kind: "domain", notes: "" });
 
@@ -21,7 +18,7 @@ export default function ScopeSection({ program, authFetch, onRefresh, setMessage
       if (!res.ok) throw new Error();
       if (scopeType === "in") setScopeIn({ value: "", kind: "domain", notes: "" });
       else setScopeOut({ value: "", kind: "domain", notes: "" });
-      await onRefresh();
+      await refreshSelectedProgram(program.id);
       setMessage("Scope updated.");
     } catch { setMessage("Failed to add scope item."); }
   }
@@ -29,7 +26,7 @@ export default function ScopeSection({ program, authFetch, onRefresh, setMessage
   async function deleteScopeItem(scopeType: "in" | "out", itemId: string) {
     try {
       await authFetch(`/programs/${program.id}/scope/${scopeType}/${itemId}`, { method: "DELETE" });
-      await onRefresh();
+      await refreshSelectedProgram(program.id);
       setMessage("Scope item deleted.");
     } catch { setMessage("Failed to delete scope item."); }
   }

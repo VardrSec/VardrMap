@@ -1,19 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { ScanItem, AuthFetch } from "../types";
+import { ScanItem } from "../types";
+import { useAppContext } from "../context/AppContext";
 import { Panel, SeverityBadge, StatusBadge, SectionHeader } from "./ui";
 
 const PAGE_SIZE = 100;
 const STATUS_FILTERS = ["new", "reviewed", "false_positive", "promoted", "all"] as const;
 type StatusFilter = typeof STATUS_FILTERS[number];
 
-export default function ScanningSection({ programId, authFetch, setMessage, onPromote }: {
-  programId: string;
-  authFetch: AuthFetch;
-  setMessage: (m: string) => void;
-  onPromote: (scan: ScanItem) => void;
-}) {
+export default function ScanningSection({ programId }: { programId: string }) {
+  const { authFetch, setMessage, promoteScanToFinding } = useAppContext();
   const [items,        setItems]        = useState<ScanItem[]>([]);
   const [total,        setTotal]        = useState(0);
   const [offset,       setOffset]       = useState(0);
@@ -82,7 +79,7 @@ export default function ScanningSection({ programId, authFetch, setMessage, onPr
 
   async function promote(scan: ScanItem) {
     await updateStatus(scan, "promoted");
-    onPromote(scan);
+    promoteScanToFinding(scan);
   }
 
   const allSelected = items.length > 0 && selected.size === items.length;

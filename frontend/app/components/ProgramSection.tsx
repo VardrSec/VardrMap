@@ -1,16 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Program, AuthFetch } from "../types";
+import { Program } from "../types";
+import { useAppContext } from "../context/AppContext";
 import { Panel, Input, Textarea, PrimaryButton, DangerButton, SectionHeader } from "./ui";
 
-export default function ProgramSection({ program, authFetch, onRefresh, onDelete, setMessage }: {
-  program: Program;
-  authFetch: AuthFetch;
-  onRefresh: () => Promise<void>;
-  onDelete: () => Promise<void>;
-  setMessage: (m: string) => void;
-}) {
+export default function ProgramSection({ program }: { program: Program }) {
+  const { authFetch, setMessage, refreshSelectedProgram, deleteProgram } = useAppContext();
   const [form, setForm] = useState({
     name: program.name, platform: program.platform, program_url: program.program_url,
     scope_summary: program.scope_summary, severity_guidance: program.severity_guidance,
@@ -32,7 +28,7 @@ export default function ProgramSection({ program, authFetch, onRefresh, onDelete
     try {
       const res = await authFetch(`/programs/${program.id}`, { method: "PATCH", body: JSON.stringify(form) });
       if (!res.ok) throw new Error();
-      await onRefresh();
+      await refreshSelectedProgram(program.id);
       setMessage("Program saved.");
     } catch { setMessage("Failed to save program."); }
   }
@@ -53,7 +49,7 @@ export default function ProgramSection({ program, authFetch, onRefresh, onDelete
         </div>
         <div className="mt-5 flex gap-3">
           <PrimaryButton onClick={saveProfile} label="Save Profile" />
-          <DangerButton  onClick={onDelete}    label="Delete Program" />
+          <DangerButton  onClick={deleteProgram} label="Delete Program" />
         </div>
       </Panel>
     </div>

@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Program, Finding, Report, AuthFetch, ReportFormState } from "../types";
+import { Program, Finding, Report, ReportFormState } from "../types";
+import { useAppContext } from "../context/AppContext";
 import { Panel, Input, Textarea, SelectField, PrimaryButton, DangerButton, StatusBadge, SectionHeader } from "./ui";
 
 const EMPTY: ReportFormState = { finding_id: "", title: "", summary: "", steps: "", impact: "", remediation: "", cwe: "", cvss: "", status: "draft" };
@@ -51,14 +52,11 @@ function ReportFields({ value, onChange }: { value: ReportFormState; onChange: (
   );
 }
 
-export default function ReportsSection({ program, authFetch, onRefresh, setMessage, prefill, onPrefillConsumed }: {
-  program: Program;
-  authFetch: AuthFetch;
-  onRefresh: () => Promise<void>;
-  setMessage: (m: string) => void;
-  prefill?: ReportFormState | null;
-  onPrefillConsumed?: () => void;
-}) {
+export default function ReportsSection({ program }: { program: Program }) {
+  const {
+    authFetch, setMessage, refreshSelectedProgram,
+    state: { reportPrefill }, dispatch,
+  } = useAppContext();
   const [reports,     setReports]     = useState<Report[]>([]);
   const [total,       setTotal]       = useState(0);
   const [offset,      setOffset]      = useState(0);
@@ -108,11 +106,11 @@ export default function ReportsSection({ program, authFetch, onRefresh, setMessa
   }, [loadReports, loadFindings]);
 
   useEffect(() => {
-    if (prefill) {
-      setForm(prefill);
-      onPrefillConsumed?.();
+    if (reportPrefill) {
+      setForm(reportPrefill);
+      dispatch({ type: "REPORT_PREFILL_CONSUMED" });
     }
-  }, [prefill, onPrefillConsumed]);
+  }, [reportPrefill, dispatch]);
 
   async function copyMarkdown() {
     try {
@@ -139,7 +137,7 @@ export default function ReportsSection({ program, authFetch, onRefresh, setMessa
       if (!res.ok) throw new Error();
       setForm(EMPTY);
       await loadReports();
-      await onRefresh();
+      await refreshSelectedProgram(program.id);
       setMessage("Report saved.");
     } catch { setMessage("Failed to save report."); }
   }
@@ -148,7 +146,7 @@ export default function ReportsSection({ program, authFetch, onRefresh, setMessa
     try {
       await authFetch(`/programs/${program.id}/reports/${reportId}`, { method: "DELETE" });
       await loadReports();
-      await onRefresh();
+      await refreshSelectedProgram(program.id);
       setMessage("Report deleted.");
     } catch { setMessage("Failed to delete report."); }
   }
@@ -164,7 +162,7 @@ export default function ReportsSection({ program, authFetch, onRefresh, setMessa
       if (!res.ok) throw new Error();
       setEditingId(null);
       await loadReports();
-      await onRefresh();
+      await refreshSelectedProgram(program.id);
       setMessage("Report updated.");
     } catch { setMessage("Failed to update report."); }
   }

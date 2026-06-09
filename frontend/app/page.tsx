@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useState } from "react";
 import { signIn, signOut } from "next-auth/react";
-import { AppSession, Finding, FindingFormState, Program, ReportFormState, ScanItem, Section } from "./types";
+import { Section } from "./types";
+import { AppProvider, normalizeProgram, useAppContext } from "./context/AppContext";
 import DashboardSection  from "./components/DashboardSection";
 import ProgramSection    from "./components/ProgramSection";
 import ScopeSection      from "./components/ScopeSection";
@@ -18,8 +19,6 @@ import SettingsSection   from "./components/SettingsSection";
 // Constants
 // ---------------------------------------------------------------------------
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-
 const NAV_ITEMS: { section: Section; label: string; icon: string }[] = [
   { section: "dashboard", label: "Dashboard",      icon: "⬡" },
   { section: "program",   label: "Program Profile", icon: "◈" },
@@ -34,201 +33,32 @@ const NAV_ITEMS: { section: Section; label: string; icon: string }[] = [
 ];
 
 // ---------------------------------------------------------------------------
-// Helpers
+// App shell — rendered inside AppProvider so it can call useAppContext
 // ---------------------------------------------------------------------------
 
-// Defensively coerce every field so components never have to deal with undefined
-// coming from the API — e.g. a missing recon_count just becomes 0.
-function normalizeProgram(raw: unknown): Program {
-  const p = raw && typeof raw === "object" ? raw as Record<string, unknown> : {};
-  const scope = p.scope && typeof p.scope === "object" ? p.scope as Record<string, unknown> : {};
-  const n = (v: unknown) => (typeof v === "number" ? v : 0);
-  const asRecord = (v: unknown): Record<string, number> =>
-    v && typeof v === "object" && !Array.isArray(v)
-      ? Object.fromEntries(Object.entries(v as Record<string, unknown>).map(([k, val]) => [k, n(val)]))
-      : {};
-  return {
-    id:                   String(p.id ?? ""),
-    name:                 String(p.name ?? ""),
-    platform:             String(p.platform ?? ""),
-    program_url:          String(p.program_url ?? ""),
-    scope_summary:        String(p.scope_summary ?? ""),
-    severity_guidance:    String(p.severity_guidance ?? ""),
-    safe_harbor_notes:    String(p.safe_harbor_notes ?? ""),
-    scope: {
-      in:  Array.isArray(scope.in)  ? scope.in  : [],
-      out: Array.isArray(scope.out) ? scope.out : [],
-    },
-    imports:              Array.isArray(p.imports) ? p.imports : [],
-    recon_count:          n(p.recon_count),
-    scans_count:          n(p.scans_count),
-    manual_tests_count:   n(p.manual_tests_count),
-    findings_count:       n(p.findings_count),
-    findings_by_severity: asRecord(p.findings_by_severity),
-    findings_by_status:   asRecord(p.findings_by_status),
-    reports_count:        n(p.reports_count),
-  };
-}
+function AppShell() {
+  const {
+    state, selectedProgram, authFetch, setMessage,
+    selectProgram, navigate, loadPrograms,
+  } = useAppContext();
+  const { session, authLoading, programs, selectedProgramId, activeSection, message } = state;
 
-async function getFrontendSession(): Promise<AppSession | null> {
-  try {
-    const res = await fetch("/api/auth/session", { method: "GET", credentials: "include", cache: "no-store" });
-    if (!res.ok) return null;
-    const data = await res.json();
-    if (!data || Object.keys(data).length === 0) return null;
-    return data;
-  } catch { return null; }
-}
-
-// ---------------------------------------------------------------------------
-// Main component
-// ---------------------------------------------------------------------------
-
-export default function Home() {
-  const [session,           setSession]           = useState<AppSession | null>(null);
-  const [authLoading,       setAuthLoading]       = useState(true);
-  const [programs,          setPrograms]          = useState<Program[]>([]);
-  const [selectedProgramId, setSelectedProgramId] = useState("");
-  const [activeSection,     setActiveSection]     = useState<Section>("dashboard");
-  const [message,           setMessage]           = useState("");
-  const [sidebarCollapsed,  setSidebarCollapsed]  = useState(false);
-  const [newProgram,        setNewProgram]        = useState({ name: "", platform: "", program_url: "" });
-  const [loading,           setLoading]           = useState(false);
-  const [findingPrefill,    setFindingPrefill]    = useState<FindingFormState | null>(null);
-  const [reportPrefill,     setReportPrefill]     = useState<ReportFormState | null>(null);
-
-  // authFetch needs a stable reference (empty deps) so child components can safely
-  // put it in their own useEffect dependency arrays without causing infinite loops.
-  // A ref lets it always read the latest session without re-creating the function.
-  useEffect(() => {
-    if (!message) return;
-    const id = setTimeout(() => setMessage(""), 4000);
-    return () => clearTimeout(id);
-  }, [message]);
-
-  const sessionRef = useRef(session);
-  useEffect(() => { sessionRef.current = session; }, [session]);
-
-  const selectedProgram = useMemo(
-    () => programs.find((p) => p.id === selectedProgramId) ?? null,
-    [programs, selectedProgramId],
-  );
-
-  const authFetch = useCallback(async (path: string, init: RequestInit = {}) => {
-    const current = sessionRef.current ?? (await getFrontendSession());
-    if (!current?.backendToken) throw new Error("Not authenticated");
-    const headers = new Headers(init.headers || {});
-    headers.set("Authorization", `Bearer ${current.backendToken}`);
-    if (!(init.body instanceof FormData) && !headers.has("Content-Type")) {
-      headers.set("Content-Type", "application/json");
-    }
-    const response = await fetch(`${API_URL}${path}`, { ...init, headers, cache: "no-store" });
-    if (response.status === 401) {
-      setMessage("Session expired. Please sign in again.");
-      throw new Error("Unauthorized");
-    }
-    return response;
-  }, []);
-
-  const refreshSelectedProgram = useCallback(async (programId?: string) => {
-    const id = programId || selectedProgramId;
-    if (!id) return;
-    try {
-      const res = await authFetch(`/programs/${id}`);
-      if (!res.ok) throw new Error();
-      const data = normalizeProgram(await res.json());
-      setPrograms((prev) =>
-        prev.some((p) => p.id === id) ? prev.map((p) => p.id === id ? data : p) : [...prev, data],
-      );
-    } catch { setMessage("Failed to refresh program."); }
-  }, [selectedProgramId, authFetch]);
-
-  useEffect(() => { void bootstrapSession(); }, []);
-
-  useEffect(() => {
-    if (!authLoading && session?.backendToken) {
-      void syncUser();
-      void loadPrograms();
-    }
-  // syncUser and loadPrograms are function declarations that re-create each render;
-  // adding them to deps would cause an infinite loop.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authLoading, session?.backendToken]);
-
-  async function bootstrapSession() {
-    setAuthLoading(true);
-    setSession(await getFrontendSession());
-    setAuthLoading(false);
-  }
-
-  async function syncUser() {
-    try { await authFetch("/auth/sync", { method: "POST" }); } catch { /* non-blocking */ }
-  }
-
-  async function loadPrograms() {
-    try {
-      const res = await authFetch("/programs");
-      if (!res.ok) throw new Error();
-      const data = await res.json();
-      const normalized = Array.isArray(data?.programs) ? data.programs.map(normalizeProgram) : [];
-      setPrograms(normalized);
-      if (!selectedProgramId && normalized.length > 0) setSelectedProgramId(normalized[0].id);
-      if (normalized.length === 0) setSelectedProgramId("");
-    } catch { setPrograms([]); setMessage("Failed to load programs."); }
-  }
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [newProgram, setNewProgram] = useState({ name: "", platform: "", program_url: "" });
+  const [loading, setLoading] = useState(false);
 
   async function createProgram() {
     if (!newProgram.name.trim()) return;
-    setLoading(true); setMessage("");
+    setLoading(true);
     try {
       const res = await authFetch("/programs", { method: "POST", body: JSON.stringify(newProgram) });
       if (!res.ok) throw new Error();
       const created = normalizeProgram(await res.json());
-      setPrograms((prev) => [...prev, created]);
-      setSelectedProgramId(created.id);
+      await loadPrograms();
+      selectProgram(created.id);
       setNewProgram({ name: "", platform: "", program_url: "" });
       setMessage("Program created.");
     } catch { setMessage("Failed to create program."); } finally { setLoading(false); }
-  }
-
-  async function deleteProgram() {
-    if (!selectedProgramId || !confirm("Delete this program?")) return;
-    try {
-      const res = await authFetch(`/programs/${selectedProgramId}`, { method: "DELETE" });
-      if (!res.ok) throw new Error();
-      const remaining = programs.filter((p) => p.id !== selectedProgramId);
-      setPrograms(remaining);
-      setSelectedProgramId(remaining[0]?.id || "");
-      setActiveSection("dashboard");
-      setMessage("Program deleted.");
-    } catch { setMessage("Failed to delete program."); }
-  }
-
-  // Pre-fills the findings form from a scan result so the user doesn't have
-  // to retype everything. Status starts as "candidate" — it still needs human
-  // validation before it becomes a real finding.
-  function promoteToReport(finding: Finding) {
-    setReportPrefill({
-      finding_id: finding.id,
-      title: finding.title,
-      summary: finding.summary || "",
-      steps: finding.steps || "",
-      impact: finding.impact || "",
-      remediation: finding.remediation || "",
-      cwe: "",
-      cvss: "",
-      status: "draft",
-    });
-    setActiveSection("reports");
-  }
-
-  function promoteScanToFinding(scan: ScanItem) {
-    setFindingPrefill({
-      title: scan.title, severity: scan.severity || "medium",
-      asset: scan.asset || "", status: "candidate",
-      summary: scan.description || "", steps: "", impact: "", remediation: "",
-    });
-    setActiveSection("findings");
   }
 
   const isError = message.toLowerCase().includes("fail") ||
@@ -307,7 +137,7 @@ export default function Home() {
             <div className="border-b border-[#2e2e2e] px-3 py-3">
               <label className="mb-1.5 block text-[9px] font-semibold uppercase tracking-widest text-[#52525b]">Active Program</label>
               <select className="w-full rounded-md border border-[#2e2e2e] bg-[#161616] px-2.5 py-1.5 text-xs text-[#f1f5f9] transition focus:border-[#f59e0b] focus:outline-none"
-                value={selectedProgramId} onChange={(e) => setSelectedProgramId(e.target.value)}>
+                value={selectedProgramId} onChange={(e) => selectProgram(e.target.value)}>
                 <option value="">Choose a program</option>
                 {programs.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
@@ -317,7 +147,7 @@ export default function Home() {
           {/* Nav */}
           <nav className="flex-1 space-y-0.5 px-2 py-3">
             {NAV_ITEMS.map(({ section, label, icon }) => (
-              <button key={section} onClick={() => setActiveSection(section)}
+              <button key={section} onClick={() => navigate(section)}
                 className={`group relative flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm transition-all duration-150 ${activeSection === section ? "bg-[#f59e0b]/10 text-[#f59e0b] font-semibold" : "text-[#52525b] hover:bg-[#242424] hover:text-[#94a3b8]"}`}
                 title={sidebarCollapsed ? label : undefined}>
                 {activeSection === section && <span className="absolute left-0 top-1/2 h-4 w-0.5 -translate-y-1/2 rounded-full bg-[#f59e0b]" />}
@@ -360,7 +190,7 @@ export default function Home() {
           )}
 
           {activeSection === "settings" ? (
-            <SettingsSection authFetch={authFetch} setMessage={setMessage} />
+            <SettingsSection />
           ) : !selectedProgram ? (
             <div className="rounded-2xl border border-dashed border-[#2e2e2e] p-14 text-center">
               <p className="text-sm text-[#3a3a3a]">Create or select a program to begin.</p>
@@ -368,18 +198,26 @@ export default function Home() {
           ) : (
             <>
               {activeSection === "dashboard" && <DashboardSection program={selectedProgram} />}
-              {activeSection === "program"   && <ProgramSection   program={selectedProgram} authFetch={authFetch} onRefresh={refreshSelectedProgram} onDelete={deleteProgram} setMessage={setMessage} />}
-              {activeSection === "scope"     && <ScopeSection     program={selectedProgram} authFetch={authFetch} onRefresh={refreshSelectedProgram} setMessage={setMessage} />}
-              {activeSection === "imports"   && <ImportsSection   program={selectedProgram} authFetch={authFetch} onRefresh={refreshSelectedProgram} setMessage={setMessage} />}
-              {activeSection === "recon"     && <ReconSection     programId={selectedProgram.id} authFetch={authFetch} setMessage={setMessage} />}
-              {activeSection === "scanning"  && <ScanningSection  programId={selectedProgram.id} authFetch={authFetch} setMessage={setMessage} onPromote={promoteScanToFinding} />}
-              {activeSection === "manual"    && <ManualSection    program={selectedProgram} authFetch={authFetch} onRefresh={refreshSelectedProgram} setMessage={setMessage} />}
-              {activeSection === "findings"  && <FindingsSection  program={selectedProgram} authFetch={authFetch} onRefresh={refreshSelectedProgram} setMessage={setMessage} prefill={findingPrefill} onPrefillConsumed={() => setFindingPrefill(null)} onPromoteToReport={promoteToReport} />}
-              {activeSection === "reports"   && <ReportsSection   program={selectedProgram} authFetch={authFetch} onRefresh={refreshSelectedProgram} setMessage={setMessage} prefill={reportPrefill} onPrefillConsumed={() => setReportPrefill(null)} />}
+              {activeSection === "program"   && <ProgramSection   program={selectedProgram} />}
+              {activeSection === "scope"     && <ScopeSection     program={selectedProgram} />}
+              {activeSection === "imports"   && <ImportsSection   program={selectedProgram} />}
+              {activeSection === "recon"     && <ReconSection     programId={selectedProgram.id} />}
+              {activeSection === "scanning"  && <ScanningSection  programId={selectedProgram.id} />}
+              {activeSection === "manual"    && <ManualSection    program={selectedProgram} />}
+              {activeSection === "findings"  && <FindingsSection  program={selectedProgram} />}
+              {activeSection === "reports"   && <ReportsSection   program={selectedProgram} />}
             </>
           )}
         </section>
       </div>
     </main>
   );
+}
+
+// ---------------------------------------------------------------------------
+// Root — wraps AppShell in the context provider
+// ---------------------------------------------------------------------------
+
+export default function Home() {
+  return <AppProvider><AppShell /></AppProvider>;
 }

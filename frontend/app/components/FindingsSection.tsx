@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Program, AuthFetch, Finding, FindingFormState } from "../types";
+import { Program, Finding, FindingFormState } from "../types";
+import { useAppContext } from "../context/AppContext";
 import { Panel, Input, Textarea, SelectField, PrimaryButton, DangerButton, SeverityBadge, StatusBadge, SectionHeader } from "./ui";
 
 const EMPTY: FindingFormState = { title: "", severity: "medium", asset: "", status: "new", summary: "", steps: "", impact: "", remediation: "" };
@@ -25,15 +26,11 @@ function FindingForm({ value, onChange }: { value: FindingFormState; onChange: (
   );
 }
 
-export default function FindingsSection({ program, authFetch, onRefresh, setMessage, prefill, onPrefillConsumed, onPromoteToReport }: {
-  program: Program;
-  authFetch: AuthFetch;
-  onRefresh: () => Promise<void>;
-  setMessage: (m: string) => void;
-  prefill: FindingFormState | null;
-  onPrefillConsumed: () => void;
-  onPromoteToReport: (finding: Finding) => void;
-}) {
+export default function FindingsSection({ program }: { program: Program }) {
+  const {
+    authFetch, setMessage, refreshSelectedProgram, promoteToReport,
+    state: { findingPrefill }, dispatch,
+  } = useAppContext();
   const [findings,  setFindings]  = useState<Finding[]>([]);
   const [total,     setTotal]     = useState(0);
   const [offset,    setOffset]    = useState(0);
@@ -69,15 +66,15 @@ export default function FindingsSection({ program, authFetch, onRefresh, setMess
 
   useEffect(() => { void loadFindings(); }, [loadFindings]);
 
-  // Apply the prefill from a promoted scan, then immediately tell the parent to
-  // clear it. If we didn't clear it, navigating away and back to this section
-  // would re-apply the old scan data on top of whatever the user typed.
+  // Apply the prefill from a promoted scan, then immediately clear it from the
+  // reducer. If we didn't clear it, navigating away and back would re-apply the
+  // old scan data on top of whatever the user typed.
   useEffect(() => {
-    if (prefill) {
-      setForm(prefill);
-      onPrefillConsumed();
+    if (findingPrefill) {
+      setForm(findingPrefill);
+      dispatch({ type: "FINDING_PREFILL_CONSUMED" });
     }
-  }, [prefill, onPrefillConsumed]);
+  }, [findingPrefill, dispatch]);
 
   async function addFinding() {
     if (!form.title.trim()) return;
@@ -86,7 +83,7 @@ export default function FindingsSection({ program, authFetch, onRefresh, setMess
       if (!res.ok) throw new Error();
       setForm(EMPTY);
       await loadFindings();
-      await onRefresh();
+      await refreshSelectedProgram(program.id);
       setMessage("Finding added.");
     } catch { setMessage("Failed to add finding."); }
   }
@@ -95,7 +92,7 @@ export default function FindingsSection({ program, authFetch, onRefresh, setMess
     try {
       await authFetch(`/programs/${program.id}/findings/${findingId}`, { method: "DELETE" });
       await loadFindings();
-      await onRefresh();
+      await refreshSelectedProgram(program.id);
       setMessage("Finding deleted.");
     } catch { setMessage("Failed to delete finding."); }
   }
@@ -111,7 +108,7 @@ export default function FindingsSection({ program, authFetch, onRefresh, setMess
       if (!res.ok) throw new Error();
       setEditingId(null);
       await loadFindings();
-      await onRefresh();
+      await refreshSelectedProgram(program.id);
       setMessage("Finding updated.");
     } catch { setMessage("Failed to update finding."); }
   }
@@ -159,7 +156,7 @@ export default function FindingsSection({ program, authFetch, onRefresh, setMess
                         </div>
                       </div>
                       <div className="flex gap-2">
-                        <button onClick={() => onPromoteToReport(finding)} className="rounded-md border border-[#2e2e2e] px-2.5 py-1 text-xs text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#94a3b8]">
+                        <button onClick={() => promoteToReport(finding)} className="rounded-md border border-[#2e2e2e] px-2.5 py-1 text-xs text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#94a3b8]">
                           Draft Report →
                         </button>
                         <button onClick={() => startEdit(finding)} className="rounded-md border border-[#2e2e2e] px-2.5 py-1 text-xs text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#94a3b8]">

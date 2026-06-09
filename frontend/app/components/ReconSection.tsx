@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { ReconItem, AuthFetch } from "../types";
+import { ReconItem } from "../types";
+import { useAppContext } from "../context/AppContext";
 import { Panel, SectionHeader } from "./ui";
 
 const PAGE_SIZE = 100;
@@ -9,11 +10,8 @@ const PAGE_SIZE = 100;
 // Recon and scans are fetched independently (not embedded in the program object)
 // because a real ffuf/httpx run can return thousands of rows — we don't want
 // all of that coming down on every program refresh.
-export default function ReconSection({ programId, authFetch, setMessage }: {
-  programId: string;
-  authFetch: AuthFetch;
-  setMessage: (m: string) => void;
-}) {
+export default function ReconSection({ programId }: { programId: string }) {
+  const { authFetch, setMessage } = useAppContext();
   const [items,        setItems]        = useState<ReconItem[]>([]);
   const [total,        setTotal]        = useState(0);
   const [offset,       setOffset]       = useState(0);

@@ -1,15 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { Program, AuthFetch } from "../types";
+import { Program } from "../types";
+import { useAppContext } from "../context/AppContext";
 import { Panel, PrimaryButton, SectionHeader } from "./ui";
 
-export default function ImportsSection({ program, authFetch, onRefresh, setMessage }: {
-  program: Program;
-  authFetch: AuthFetch;
-  onRefresh: () => Promise<void>;
-  setMessage: (m: string) => void;
-}) {
+export default function ImportsSection({ program }: { program: Program }) {
+  const { authFetch, setMessage, refreshSelectedProgram } = useAppContext();
   const [toolType,   setToolType]   = useState("ffuf");
   const [importFile, setImportFile] = useState<File | null>(null);
   const [loading,    setLoading]    = useState(false);
@@ -24,7 +21,7 @@ export default function ImportsSection({ program, authFetch, onRefresh, setMessa
       const res = await authFetch(`/programs/${program.id}/imports`, { method: "POST", body: formData });
       if (!res.ok) throw new Error();
       setImportFile(null);
-      await onRefresh();
+      await refreshSelectedProgram(program.id);
       setMessage("Import complete.");
     } catch { setMessage("Import failed."); } finally { setLoading(false); }
   }

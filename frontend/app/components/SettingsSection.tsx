@@ -1,13 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { ApiKey, AuthFetch } from "../types";
+import { ApiKey } from "../types";
+import { useAppContext } from "../context/AppContext";
 import { Panel, Input, PrimaryButton, DangerButton, SectionHeader } from "./ui";
 
-export default function SettingsSection({ authFetch, setMessage }: {
-  authFetch: AuthFetch;
-  setMessage: (m: string) => void;
-}) {
+export default function SettingsSection() {
+  const { authFetch, setMessage } = useAppContext();
   const [keys,     setKeys]     = useState<ApiKey[]>([]);
   const [label,    setLabel]    = useState("");
   const [newToken, setNewToken] = useState<string | null>(null);

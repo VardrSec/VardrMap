@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Program, ManualTest, AuthFetch } from "../types";
+import { Program, ManualTest } from "../types";
+import { useAppContext } from "../context/AppContext";
 import { Panel, Input, Textarea, SelectField, PrimaryButton, DangerButton, StatusBadge, SectionHeader } from "./ui";
 
 type ManualFormState = { title: string; hypothesis: string; payload: string; evidence: string; status: string };
@@ -20,12 +21,8 @@ function ManualForm({ value, onChange }: { value: ManualFormState; onChange: (v:
   );
 }
 
-export default function ManualSection({ program, authFetch, onRefresh, setMessage }: {
-  program: Program;
-  authFetch: AuthFetch;
-  onRefresh: () => Promise<void>;
-  setMessage: (m: string) => void;
-}) {
+export default function ManualSection({ program }: { program: Program }) {
+  const { authFetch, setMessage, refreshSelectedProgram } = useAppContext();
   const [manualTests, setManualTests] = useState<ManualTest[]>([]);
   const [form,        setForm]        = useState<ManualFormState>(EMPTY);
   const [editingId,   setEditingId]   = useState<string | null>(null);
@@ -38,7 +35,7 @@ export default function ManualSection({ program, authFetch, onRefresh, setMessag
       const data = await res.json();
       setManualTests(Array.isArray(data?.manual_tests) ? data.manual_tests : []);
     } catch { setMessage("Failed to load manual tests."); }
-  }, [program.id, authFetch, setMessage]);
+  }, [program.id, authFetch, setMessage]); // authFetch and setMessage are stable (context useCallback with [] deps)
 
   useEffect(() => { void loadManualTests(); }, [loadManualTests]);
 
@@ -49,7 +46,7 @@ export default function ManualSection({ program, authFetch, onRefresh, setMessag
       if (!res.ok) throw new Error();
       setForm(EMPTY);
       await loadManualTests();
-      await onRefresh();
+      await refreshSelectedProgram(program.id);
       setMessage("Manual test added.");
     } catch { setMessage("Failed to add manual test."); }
   }
@@ -58,7 +55,7 @@ export default function ManualSection({ program, authFetch, onRefresh, setMessag
     try {
       await authFetch(`/programs/${program.id}/manual-tests/${testId}`, { method: "DELETE" });
       await loadManualTests();
-      await onRefresh();
+      await refreshSelectedProgram(program.id);
       setMessage("Manual test deleted.");
     } catch { setMessage("Failed to delete manual test."); }
   }
@@ -74,7 +71,7 @@ export default function ManualSection({ program, authFetch, onRefresh, setMessag
       if (!res.ok) throw new Error();
       setEditingId(null);
       await loadManualTests();
-      await onRefresh();
+      await refreshSelectedProgram(program.id);
       setMessage("Manual test updated.");
     } catch { setMessage("Failed to update manual test."); }
   }
