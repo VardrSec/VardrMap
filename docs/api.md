@@ -516,3 +516,82 @@ Upload tool output for parsing and storage. Accepts `multipart/form-data`.
 - `400` — unsupported extension or content-type
 - `413` — file exceeds size limit
 - `422` — file content is not valid JSON or JSONL
+
+---
+
+## Scan Jobs
+
+Scan jobs are created by the UI and executed by VardrRunner on the user's machine. Status flow: `pending → running → done | failed`.
+
+A job object looks like:
+```json
+{
+  "id": "<uuid>",
+  "program_id": "<uuid>",
+  "tool_type": "httpx",
+  "target_source": "scope",
+  "config": { "limit": 100 },
+  "status": "pending",
+  "created_at": "2026-06-09T10:00:00",
+  "started_at": null,
+  "completed_at": null,
+  "error_message": ""
+}
+```
+
+### `POST /programs/{program_id}/jobs`
+Queue a new scan job.
+
+**Request body**
+```json
+{
+  "tool_type": "httpx",
+  "target_source": "scope",
+  "config": { "status_code": 200, "limit": 500 }
+}
+```
+- `tool_type`: `"httpx"` or `"nuclei"`
+- `target_source`: `"scope"` or `"recon"`
+- `config` (optional): tool-specific options — `status_code`, `limit` for httpx; `severity`, `templates` for nuclei
+
+**Response:** job object with `status: "pending"`.
+
+**Errors**
+- `400` — invalid `tool_type` or `target_source`
+- `404` — program not found or belongs to another user
+
+### `GET /programs/{program_id}/jobs`
+List all jobs for a program, newest first.
+
+**Response**
+```json
+{ "jobs": [ <job_object>, ... ] }
+```
+
+### `GET /jobs/pending`
+Return all `pending` jobs owned by the authenticated user, oldest first. Used by VardrRunner to poll for work.
+
+**Response**
+```json
+{ "jobs": [ <job_object>, ... ] }
+```
+
+### `PATCH /jobs/{job_id}`
+Update a job's status. Used by VardrRunner to claim (`running`) and complete (`done`/`failed`) jobs.
+
+**Request body**
+```json
+{
+  "status": "running",
+  "error_message": ""
+}
+```
+- `status`: `"pending"`, `"running"`, `"done"`, or `"failed"`
+- `error_message` (optional): set when marking `failed`
+- Setting `status: "running"` stamps `started_at`; setting `"done"` or `"failed"` stamps `completed_at`
+
+**Response:** updated job object.
+
+**Errors**
+- `400` — invalid status value
+- `404` — job not found or belongs to another user

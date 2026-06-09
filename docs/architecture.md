@@ -139,6 +139,17 @@ api_keys
   key_hash (SHA-256 hex, unique)
   label, created_at
 
+scan_jobs
+  id (PK)
+  program_id (FK → programs.id, CASCADE DELETE, indexed)
+  owner_github_id (indexed)
+  tool_type ("httpx"|"nuclei")
+  target_source ("scope"|"recon")
+  config (JSON — tool-specific options: status_code, limit, severity, templates)
+  status ("pending"|"running"|"done"|"failed")
+  created_at, started_at (nullable), completed_at (nullable)
+  error_message
+
 audit_logs
   id (PK)
   github_id (no FK — records survive user deletion)
@@ -151,6 +162,8 @@ audit_logs
 - `Report.finding_id` is a soft reference — no FK constraint. Reports can exist without a linked finding.
 - `AuditLog` has no FK constraints so records are never deleted when users or programs are removed.
 - `api_keys.key_hash` stores the SHA-256 hex digest of the plaintext token. The plaintext is never stored.
+- `scan_jobs.config` is a JSON column with optional tool options. VardrRunner reads this dict when executing the job.
+- `scan_jobs` are scoped to the owning user via `owner_github_id` — a user can only see/update their own jobs.
 
 ---
 

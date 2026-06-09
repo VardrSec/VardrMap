@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, Column, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
 
 from db import Base
@@ -46,6 +46,7 @@ class Program(Base):
     recon_items = relationship("ReconItem", back_populates="program", cascade="all, delete-orphan")
     scan_items = relationship("ScanItem", back_populates="program", cascade="all, delete-orphan")
     import_records = relationship("ImportRecord", back_populates="program", cascade="all, delete-orphan")
+    scan_jobs = relationship("ScanJob", back_populates="program", cascade="all, delete-orphan")
 
 
 class ScopeItem(Base):
@@ -183,6 +184,24 @@ class AuditLog(Base):
     resource_id = Column(String, nullable=False)
     program_id = Column(String, default="")             # context only, no FK
     timestamp = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+
+
+class ScanJob(Base):
+    __tablename__ = "scan_jobs"
+
+    id = Column(String, primary_key=True, default=new_uuid)
+    program_id = Column(String, ForeignKey("programs.id", ondelete="CASCADE"), nullable=False, index=True)
+    owner_github_id = Column(String, nullable=False, index=True)
+    tool_type = Column(String(20), nullable=False)          # "httpx" or "nuclei"
+    target_source = Column(String(20), nullable=False)      # "scope" or "recon"
+    config = Column(JSON, nullable=True)                    # {status_code, limit, severity, templates}
+    status = Column(String(20), default="pending")          # pending | running | done | failed
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+    error_message = Column(Text, default="")
+
+    program = relationship("Program", back_populates="scan_jobs")
 
 
 class ApiKey(Base):

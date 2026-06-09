@@ -13,6 +13,7 @@ import ScanningSection   from "./components/ScanningSection";
 import ManualSection     from "./components/ManualSection";
 import FindingsSection   from "./components/FindingsSection";
 import ReportsSection    from "./components/ReportsSection";
+import JobsSection       from "./components/JobsSection";
 import SettingsSection   from "./components/SettingsSection";
 
 // ---------------------------------------------------------------------------
@@ -29,6 +30,7 @@ const NAV_ITEMS: { section: Section; label: string; icon: string }[] = [
   { section: "manual",    label: "Manual Testing",  icon: "✦" },
   { section: "findings",  label: "Findings",        icon: "⚑" },
   { section: "reports",   label: "Reports",         icon: "◧" },
+  { section: "jobs",      label: "Scan Jobs",       icon: "⬡" },
   { section: "settings",  label: "Settings",        icon: "◆" },
 ];
 
@@ -206,6 +208,7 @@ function AppShell() {
               {activeSection === "manual"    && <ManualSection    program={selectedProgram} />}
               {activeSection === "findings"  && <FindingsSection  program={selectedProgram} />}
               {activeSection === "reports"   && <ReportsSection   program={selectedProgram} />}
+              {activeSection === "jobs"      && <JobsSection      programId={selectedProgram.id} />}
             </>
           )}
         </section>

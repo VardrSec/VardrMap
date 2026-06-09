@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "jose": "^6.2.1",
+    "jspdf": "^4.2.1",
     "next": "16.1.6",
     "next-auth": "^5.0.0-beta.30",
     "react": "19.2.3",

@@ -28,7 +28,13 @@ export type Program = {
   reports_count: number;
 };
 export type ApiKey = { id: string; label: string; created_at: string | null };
-export type Section = "dashboard" | "program" | "scope" | "imports" | "recon" | "scanning" | "manual" | "findings" | "reports" | "settings";
+export type ScanJob = {
+  id: string; program_id: string; tool_type: string; target_source: string;
+  config: Record<string, unknown>; status: string;
+  created_at: string | null; started_at: string | null; completed_at: string | null;
+  error_message: string;
+};
+export type Section = "dashboard" | "program" | "scope" | "imports" | "recon" | "scanning" | "manual" | "findings" | "reports" | "jobs" | "settings";
 export type AppSession = {
   user?: { name?: string | null; email?: string | null; image?: string | null; githubId?: string; username?: string };
   backendToken?: string;

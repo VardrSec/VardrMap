@@ -123,7 +123,7 @@ All 42 tests should pass. There are no frontend tests at this time.
 Migrations use Alembic. The migration chain is:
 
 ```
-0001_baseline  →  0002_add_created_at  →  0003_add_api_keys
+0001_baseline  →  0002_add_created_at  →  0003_add_api_keys  →  0004_add_scan_jobs
 ```
 
 ### Production (Railway)
@@ -165,6 +165,8 @@ Tests use SQLite and rebuild the schema from scratch on every run via `drop_all(
 
 VardrRunner is the local CLI that runs tools on your machine and uploads results to VardrMap. It lives in `runner/` and is installed separately from the backend.
 
+> **Naming:** the CLI command is `vardrrunner`. API keys use the `vmap_` prefix — these are different things.
+
 ### Install
 
 ```bash
@@ -204,7 +206,7 @@ cd runner
 pytest tests -v
 ```
 
-17 tests should pass. Tests mock all subprocess and HTTP calls — no tools or backend required.
+30 tests should pass. Tests mock all subprocess and HTTP calls — no tools or backend required.
 
 ### Prerequisites for `run` commands
 
@@ -212,6 +214,7 @@ VardrRunner invokes tools via PATH. Install the tools you need:
 
 - **httpx** — https://github.com/projectdiscovery/httpx
 - **nuclei** — https://github.com/projectdiscovery/nuclei
+- **subfinder** — https://github.com/projectdiscovery/subfinder (required for `vardrrunner run subfinder`)
 
 ---
 
