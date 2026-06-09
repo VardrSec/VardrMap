@@ -29,6 +29,12 @@ A personal bug bounty workflow tool. Manage target programs, track scope, log fi
 - Generate personal API keys (`vmap_` tokens) for external tool access (e.g. Burp Suite)
 - All write operations logged to an append-only audit log
 
+**Scan Jobs orchestration console** — full job management UI in the browser:
+- Bridge zone — animated link visualization showing live VardrMap ↔ VardrRunner connection status
+- Telemetry zone — running/completed/yield stats and a throughput sparkline
+- Composer zone — tool picker (subfinder, httpx, nuclei) with per-tool config; queues a job with one click
+- Job Board + Terminal — three board views (Stream, Pipeline, Table); selecting a job opens a live log terminal
+
 **VardrRunner** — local CLI companion (`runner/`):
 - Authenticate with `vardrrunner login vardrmap` using a `vmap_` API key
 - `vardrrunner status` — verify config, API connectivity, and local tool availability

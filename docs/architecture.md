@@ -143,9 +143,9 @@ scan_jobs
   id (PK)
   program_id (FK → programs.id, CASCADE DELETE, indexed)
   owner_github_id (indexed)
-  tool_type ("httpx"|"nuclei")
+  tool_type ("httpx"|"nuclei"|"subfinder")
   target_source ("scope"|"recon")
-  config (JSON — tool-specific options: status_code, limit, severity, templates)
+  config (JSON — tool-specific options: status_code/limit for httpx; severity/templates for nuclei; recursive/sources for subfinder)
   status ("pending"|"running"|"done"|"failed")
   created_at, started_at (nullable), completed_at (nullable)
   error_message
@@ -190,6 +190,17 @@ audit_logs
 ```
 
 Each section component fetches its own full data set with a separate request when it mounts or after a mutation. After a mutation, sections call `refreshSelectedProgram()` from `AppContext` to re-fetch the program object and keep the dashboard counts current. Global state (session, programs, active section, prefill data) lives in `AppContext` / `appReducer` — sections call `useAppContext()` rather than receiving props.
+
+### Scan Jobs Orchestration Console
+
+The **Scan Jobs** section (`frontend/app/components/JobsSection.tsx`) is a full orchestration console, rendered as four stacked zones:
+
+1. **Bridge** (`jobs/Bridge.tsx`) — animated link visualization showing VardrMap ↔ VardrRunner connection status; collapses to a slim strip. Collapse state persists to `localStorage`.
+2. **Telemetry** (`jobs/Telemetry.tsx`) — running/completed/yielded stats + throughput sparkline.
+3. **Composer** (`jobs/Composer.tsx`) — tool picker (subfinder/httpx/nuclei) with per-tool config fields; submits new jobs.
+4. **Job Board + Terminal** (`jobs/JobBoard.tsx`, `jobs/Terminal.tsx`) — three switchable board views (Stream, Pipeline, Table); a live terminal showing log output for the selected job.
+
+The `ScanJobUI` type (`frontend/app/types.ts`) extends the API-level `ScanJob` with UI-only fields (`progress`, `yield`, `yieldKind`, `durationMs`, `log[]`). The current implementation uses seed/simulation data; API wiring (real job polling + SSE log stream) is a next step.
 
 ---
 

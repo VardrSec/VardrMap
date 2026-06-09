@@ -100,7 +100,7 @@ cd backend
 pytest tests -v
 ```
 
-All 63 tests should pass. There are no frontend tests at this time.
+All 64 tests should pass. There are no frontend tests at this time.
 
 ### Test coverage areas
 

@@ -550,14 +550,14 @@ Queue a new scan job.
   "config": { "status_code": 200, "limit": 500 }
 }
 ```
-- `tool_type`: `"httpx"` or `"nuclei"`
+- `tool_type`: `"httpx"`, `"nuclei"`, or `"subfinder"`
 - `target_source`: `"scope"` or `"recon"`
-- `config` (optional): tool-specific options — `status_code`, `limit` for httpx; `severity`, `templates` for nuclei
+- `config` (optional): tool-specific options — `status_code`, `limit` for httpx; `severity`, `templates` for nuclei; `recursive`, `sources` for subfinder
 
 **Response:** job object with `status: "pending"`.
 
 **Errors**
-- `400` — invalid `tool_type` or `target_source`
+- `400` — invalid `tool_type` (must be `httpx`, `nuclei`, or `subfinder`) or `target_source`
 - `404` — program not found or belongs to another user
 
 ### `GET /programs/{program_id}/jobs`
