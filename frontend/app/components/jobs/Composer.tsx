@@ -52,9 +52,14 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 const inputCls =
   "w-full rounded-md border border-[#2e2e2e] bg-[#161616] px-2.5 py-2 text-sm text-[#f1f5f9] placeholder-[#3a3a3a] transition focus:outline-none";
 
-export default function Composer({ accent, onQueue, runnerOnline, scopeCount, reconCount, programName }: ComposerProps) {
-  const [toolId, setToolId] = useState("nuclei");
-  const [source, setSource] = useState("recon");
+type ComposerPropsWithTool = ComposerProps & { initialTool?: string };
+
+export default function Composer({ accent, onQueue, runnerOnline, scopeCount, reconCount, programName, initialTool }: ComposerPropsWithTool) {
+  const [toolId, setToolId] = useState(initialTool && initialTool in TOOLS ? initialTool : "nuclei");
+  const [source, setSource] = useState(() => {
+    const t = TOOLS[initialTool && initialTool in TOOLS ? initialTool : "nuclei"];
+    return t.sources[0];
+  });
   const [cfg, setCfg] = useState<Record<string, unknown>>({ severity: "high,critical", templates: "cves,exposures" });
 
   const tool = TOOLS[toolId];

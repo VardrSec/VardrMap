@@ -191,9 +191,27 @@ audit_logs
 
 Each section component fetches its own full data set with a separate request when it mounts or after a mutation. After a mutation, sections call `refreshSelectedProgram()` from `AppContext` to re-fetch the program object and keep the dashboard counts current. Global state (session, programs, active section, prefill data) lives in `AppContext` / `appReducer` — sections call `useAppContext()` rather than receiving props.
 
-### Scan Jobs Orchestration Console
+### Navigation Model
 
-The **Scan Jobs** section (`frontend/app/components/JobsSection.tsx`) is a full orchestration console, rendered as four stacked zones:
+The sidebar exposes **7 top-level sections** mapped to the bug bounty workflow:
+
+| Section | `Section` value | What it shows |
+|---|---|---|
+| Dashboard | `"dashboard"` | Program stats, 6 quick-action buttons, inline program edit form |
+| Scope | `"scope"` | In-scope / out-of-scope asset management |
+| Run | `"run"` | Orchestration console (Jobs tab) + file import (Import tab) |
+| Review | `"review"` | Recon / Scanning / Manual Testing tab switcher |
+| Findings | `"findings"` | Finding log with severity, status, promote-to-report flow |
+| Reports | `"reports"` | Report drafting and PDF export |
+| Settings | `"settings"` | API key management |
+
+`RunSection` and `ReviewSection` are thin tab containers. They render child section components (`JobsSection`, `ReconSection`, etc.) with `hideHeader={true}` to suppress duplicate section headings. The `Section` type union in `frontend/app/types.ts` has exactly these 7 values.
+
+**Deep-link navigation** — the Dashboard quick-action buttons call `navigateToRun(tool)` or `navigate(section)` from `AppContext`. `navigateToRun` dispatches `NAVIGATE_TO_RUN` which sets `state.runPrefill = { tool?, tab? }` and navigates to `"run"`. `RunSection` consumes the prefill on first render, sets the active tab and forwards `defaultTool` to `JobsSection` → `Composer`, then dispatches `RUN_PREFILL_CONSUMED`.
+
+### Run Section — Orchestration Console
+
+`JobsSection` (`frontend/app/components/JobsSection.tsx`) is hosted inside `RunSection`'s Jobs tab and rendered as four stacked zones:
 
 1. **Bridge** (`jobs/Bridge.tsx`) — animated link visualization showing VardrMap ↔ VardrRunner connection status; collapses to a slim strip. Collapse state persists to `localStorage`.
 2. **Telemetry** (`jobs/Telemetry.tsx`) — running/completed/yielded stats + throughput sparkline.

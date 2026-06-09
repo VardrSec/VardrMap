@@ -5,15 +5,11 @@ import { signIn, signOut } from "next-auth/react";
 import { Section } from "./types";
 import { AppProvider, normalizeProgram, useAppContext } from "./context/AppContext";
 import DashboardSection  from "./components/DashboardSection";
-import ProgramSection    from "./components/ProgramSection";
 import ScopeSection      from "./components/ScopeSection";
-import ImportsSection    from "./components/ImportsSection";
-import ReconSection      from "./components/ReconSection";
-import ScanningSection   from "./components/ScanningSection";
-import ManualSection     from "./components/ManualSection";
+import RunSection        from "./components/RunSection";
+import ReviewSection     from "./components/ReviewSection";
 import FindingsSection   from "./components/FindingsSection";
 import ReportsSection    from "./components/ReportsSection";
-import JobsSection       from "./components/JobsSection";
 import SettingsSection   from "./components/SettingsSection";
 
 // ---------------------------------------------------------------------------
@@ -21,17 +17,13 @@ import SettingsSection   from "./components/SettingsSection";
 // ---------------------------------------------------------------------------
 
 const NAV_ITEMS: { section: Section; label: string; icon: string }[] = [
-  { section: "dashboard", label: "Dashboard",      icon: "⬡" },
-  { section: "program",   label: "Program Profile", icon: "◈" },
-  { section: "scope",     label: "Scope",           icon: "◎" },
-  { section: "imports",   label: "Imports",         icon: "↓" },
-  { section: "recon",     label: "Recon",           icon: "⊹" },
-  { section: "scanning",  label: "Scanning",        icon: "◉" },
-  { section: "manual",    label: "Manual Testing",  icon: "✦" },
-  { section: "findings",  label: "Findings",        icon: "⚑" },
-  { section: "reports",   label: "Reports",         icon: "◧" },
-  { section: "jobs",      label: "Scan Jobs",       icon: "▣" },
-  { section: "settings",  label: "Settings",        icon: "◆" },
+  { section: "dashboard", label: "Dashboard", icon: "⬡" },
+  { section: "scope",     label: "Scope",     icon: "◎" },
+  { section: "run",       label: "Run",       icon: "▣" },
+  { section: "review",    label: "Review",    icon: "⊹" },
+  { section: "findings",  label: "Findings",  icon: "⚑" },
+  { section: "reports",   label: "Reports",   icon: "◧" },
+  { section: "settings",  label: "Settings",  icon: "◆" },
 ];
 
 // ---------------------------------------------------------------------------
@@ -200,15 +192,11 @@ function AppShell() {
           ) : (
             <>
               {activeSection === "dashboard" && <DashboardSection program={selectedProgram} />}
-              {activeSection === "program"   && <ProgramSection   program={selectedProgram} />}
               {activeSection === "scope"     && <ScopeSection     program={selectedProgram} />}
-              {activeSection === "imports"   && <ImportsSection   program={selectedProgram} />}
-              {activeSection === "recon"     && <ReconSection     programId={selectedProgram.id} />}
-              {activeSection === "scanning"  && <ScanningSection  programId={selectedProgram.id} />}
-              {activeSection === "manual"    && <ManualSection    program={selectedProgram} />}
+              {activeSection === "run"       && <RunSection       program={selectedProgram} />}
+              {activeSection === "review"    && <ReviewSection    program={selectedProgram} />}
               {activeSection === "findings"  && <FindingsSection  program={selectedProgram} />}
               {activeSection === "reports"   && <ReportsSection   program={selectedProgram} />}
-              {activeSection === "jobs"      && <JobsSection      programId={selectedProgram.id} />}
             </>
           )}
         </section>

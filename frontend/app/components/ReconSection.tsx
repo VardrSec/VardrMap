@@ -10,7 +10,7 @@ const PAGE_SIZE = 100;
 // Recon and scans are fetched independently (not embedded in the program object)
 // because a real ffuf/httpx run can return thousands of rows — we don't want
 // all of that coming down on every program refresh.
-export default function ReconSection({ programId }: { programId: string }) {
+export default function ReconSection({ programId, hideHeader }: { programId: string; hideHeader?: boolean }) {
   const { authFetch, setMessage } = useAppContext();
   const [items,        setItems]        = useState<ReconItem[]>([]);
   const [total,        setTotal]        = useState(0);
@@ -47,7 +47,7 @@ export default function ReconSection({ programId }: { programId: string }) {
 
   return (
     <div className="space-y-7">
-      <SectionHeader title="Recon" description="Review discovered subdomains, endpoints, paths, and technologies." />
+      {!hideHeader && <SectionHeader title="Recon" description="Review discovered subdomains, endpoints, paths, and technologies." />}
 
       <form onSubmit={handleSearch} className="flex gap-2">
         <input

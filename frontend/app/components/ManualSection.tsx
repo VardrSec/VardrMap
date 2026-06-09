@@ -21,7 +21,7 @@ function ManualForm({ value, onChange }: { value: ManualFormState; onChange: (v:
   );
 }
 
-export default function ManualSection({ program }: { program: Program }) {
+export default function ManualSection({ program, hideHeader }: { program: Program; hideHeader?: boolean }) {
   const { authFetch, setMessage, refreshSelectedProgram } = useAppContext();
   const [manualTests, setManualTests] = useState<ManualTest[]>([]);
   const [form,        setForm]        = useState<ManualFormState>(EMPTY);
@@ -78,7 +78,7 @@ export default function ManualSection({ program }: { program: Program }) {
 
   return (
     <div className="space-y-7">
-      <SectionHeader title="Manual Testing" description="Track hypotheses, payloads, exploitation notes, and evidence." />
+      {!hideHeader && <SectionHeader title="Manual Testing" description="Track hypotheses, payloads, exploitation notes, and evidence." />}
       <div className="grid gap-5 xl:grid-cols-2">
         <Panel title="Add Manual Test Note">
           <ManualForm value={form} onChange={setForm} />

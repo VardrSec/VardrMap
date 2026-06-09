@@ -1,7 +1,9 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Program } from "../types";
-import { Panel, KeyValue, SectionHeader } from "./ui";
+import { useAppContext } from "../context/AppContext";
+import { Panel, SectionHeader, Input, Textarea, PrimaryButton, DangerButton } from "./ui";
 
 const SEVERITY_CONFIG = [
   { key: "critical", color: "#f38ba8", label: "Critical" },
@@ -28,7 +30,51 @@ function DashboardCard({ title, value, accent }: { title: string; value: number;
   );
 }
 
+type QuickAction = {
+  label: string;
+  sub: string;
+  onClick: () => void;
+};
+
+function QuickActionButton({ label, sub, onClick }: QuickAction) {
+  return (
+    <button onClick={onClick}
+      className="flex flex-col items-start rounded-xl border border-[#2e2e2e] bg-[#1a1a1a] px-4 py-3.5 text-left transition hover:border-[#3a3a3a] hover:bg-[#222] active:scale-[0.98]">
+      <span className="text-sm font-semibold text-[#f1f5f9]">{label}</span>
+      <span className="mt-0.5 text-[10px] text-[#52525b]">{sub}</span>
+    </button>
+  );
+}
+
 export default function DashboardSection({ program }: { program: Program }) {
+  const { authFetch, setMessage, refreshSelectedProgram, deleteProgram, navigate, navigateToRun } = useAppContext();
+
+  const [form, setForm] = useState({
+    name: program.name, platform: program.platform, program_url: program.program_url,
+    scope_summary: program.scope_summary, severity_guidance: program.severity_guidance,
+    safe_harbor_notes: program.safe_harbor_notes,
+  });
+
+  useEffect(() => {
+    setForm({
+      name: program.name, platform: program.platform, program_url: program.program_url,
+      scope_summary: program.scope_summary, severity_guidance: program.severity_guidance,
+      safe_harbor_notes: program.safe_harbor_notes,
+    });
+  // Intentionally keyed on program.id only — re-running on every field change
+  // would overwrite edits the user is currently typing.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [program.id]);
+
+  async function saveProfile() {
+    try {
+      const res = await authFetch(`/programs/${program.id}`, { method: "PATCH", body: JSON.stringify(form) });
+      if (!res.ok) throw new Error();
+      await refreshSelectedProgram(program.id);
+      setMessage("Program saved.");
+    } catch { setMessage("Failed to save program."); }
+  }
+
   const total      = program.findings_count;
   const bySeverity = program.findings_by_severity;
   const byStatus   = program.findings_by_status;
@@ -36,10 +82,27 @@ export default function DashboardSection({ program }: { program: Program }) {
   const closedPct  = total > 0 ? Math.round((closed / total) * 100) : 0;
   const maxSevCount = Math.max(...SEVERITY_CONFIG.map((s) => bySeverity[s.key] ?? 0), 1);
 
+  const quickActions: QuickAction[] = [
+    { label: "Run Subfinder",     sub: "Discover subdomains",        onClick: () => navigateToRun("subfinder") },
+    { label: "Run HTTPX",         sub: "Probe live hosts",           onClick: () => navigateToRun("httpx")     },
+    { label: "Run Nuclei",        sub: "Scan for vulnerabilities",   onClick: () => navigateToRun("nuclei")    },
+    { label: "Import File",       sub: "Upload tool output",         onClick: () => navigateToRun("import")    },
+    { label: "Add Finding",       sub: "Log a manual finding",       onClick: () => navigate("findings")       },
+    { label: "Create Report",     sub: "Draft a submission report",  onClick: () => navigate("reports")        },
+  ];
+
   return (
     <div className="space-y-7">
-      <SectionHeader title={program.name} description="Select a program, confirm scope, import tool output, review recon, validate findings, and draft a report." />
+      <SectionHeader title={program.name} description="Mission control for this program — launch scans, review data, and track findings." />
 
+      {/* Quick actions */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+        {quickActions.map((a) => (
+          <QuickActionButton key={a.label} {...a} />
+        ))}
+      </div>
+
+      {/* Stats */}
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         <DashboardCard title="In-Scope Assets" value={program.scope?.in?.length ?? 0}    accent="#f59e0b" />
         <DashboardCard title="Recon Entries"   value={program.recon_count}                accent="#89b4fa" />
@@ -49,6 +112,7 @@ export default function DashboardSection({ program }: { program: Program }) {
         <DashboardCard title="Reports"         value={program.reports_count}              accent="#a6e3a1" />
       </div>
 
+      {/* Charts */}
       {total > 0 && (
         <div className="grid gap-5 xl:grid-cols-2">
           <Panel title="Findings by Severity">
@@ -98,14 +162,8 @@ export default function DashboardSection({ program }: { program: Program }) {
         </div>
       )}
 
+      {/* Imports summary + edit form */}
       <div className="grid gap-5 xl:grid-cols-2">
-        <Panel title="Program Snapshot">
-          <KeyValue label="Platform"          value={program.platform || "—"} />
-          <KeyValue label="Program URL"       value={program.program_url || "—"} />
-          <KeyValue label="Scope Summary"     value={program.scope_summary || "—"} />
-          <KeyValue label="Severity Guidance" value={program.severity_guidance || "—"} />
-          <KeyValue label="Safe Harbor"       value={program.safe_harbor_notes || "—"} />
-        </Panel>
         <Panel title="Imports Summary">
           {program.imports.length === 0 ? (
             <p className="text-sm text-[#3a3a3a]">No imports yet.</p>
@@ -119,6 +177,23 @@ export default function DashboardSection({ program }: { program: Program }) {
               ))}
             </div>
           )}
+        </Panel>
+
+        <Panel title="Edit Program">
+          <div className="grid gap-4 md:grid-cols-2">
+            <Input label="Program Name"      value={form.name}              onChange={(v) => setForm({ ...form, name: v })} />
+            <Input label="Platform"          value={form.platform}          onChange={(v) => setForm({ ...form, platform: v })} />
+            <Input label="Program URL"       value={form.program_url}       onChange={(v) => setForm({ ...form, program_url: v })} />
+            <Input label="Severity Guidance" value={form.severity_guidance} onChange={(v) => setForm({ ...form, severity_guidance: v })} />
+          </div>
+          <div className="mt-4 grid gap-4">
+            <Textarea label="Scope Summary"     value={form.scope_summary}     onChange={(v) => setForm({ ...form, scope_summary: v })} />
+            <Textarea label="Safe Harbor Notes" value={form.safe_harbor_notes} onChange={(v) => setForm({ ...form, safe_harbor_notes: v })} />
+          </div>
+          <div className="mt-5 flex gap-3">
+            <PrimaryButton onClick={saveProfile}   label="Save Profile"    />
+            <DangerButton  onClick={deleteProgram}  label="Delete Program" />
+          </div>
         </Panel>
       </div>
     </div>

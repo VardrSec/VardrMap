@@ -9,7 +9,7 @@ const PAGE_SIZE = 100;
 const STATUS_FILTERS = ["new", "reviewed", "false_positive", "promoted", "all"] as const;
 type StatusFilter = typeof STATUS_FILTERS[number];
 
-export default function ScanningSection({ programId }: { programId: string }) {
+export default function ScanningSection({ programId, hideHeader }: { programId: string; hideHeader?: boolean }) {
   const { authFetch, setMessage, promoteScanToFinding } = useAppContext();
   const [items,        setItems]        = useState<ScanItem[]>([]);
   const [total,        setTotal]        = useState(0);
@@ -86,7 +86,7 @@ export default function ScanningSection({ programId }: { programId: string }) {
 
   return (
     <div className="space-y-7">
-      <SectionHeader title="Scanning" description="Review candidate vulnerabilities from imported scan results." />
+      {!hideHeader && <SectionHeader title="Scanning" description="Review candidate vulnerabilities from imported scan results." />}
 
       <div className="flex flex-wrap gap-2">
         {STATUS_FILTERS.map((f) => (

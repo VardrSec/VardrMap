@@ -9,6 +9,7 @@ export type AppState = {
   message: string;
   findingPrefill: FindingFormState | null;
   reportPrefill: ReportFormState | null;
+  runPrefill: { tool?: string; tab?: "import" } | null;
 };
 
 export type AppAction =
@@ -18,6 +19,8 @@ export type AppAction =
   | { type: "PROGRAM_UPDATED"; program: Program }
   | { type: "PROGRAM_DELETED"; id: string }
   | { type: "NAVIGATE"; section: Section }
+  | { type: "NAVIGATE_TO_RUN"; tool?: string; tab?: "import" }
+  | { type: "RUN_PREFILL_CONSUMED" }
   | { type: "PROMOTE_TO_FINDING"; prefill: FindingFormState }
   | { type: "FINDING_PREFILL_CONSUMED" }
   | { type: "PROMOTE_TO_REPORT"; prefill: ReportFormState }
@@ -34,6 +37,7 @@ export const initialState: AppState = {
   message: "",
   findingPrefill: null,
   reportPrefill: null,
+  runPrefill: null,
 };
 
 export function appReducer(state: AppState, action: AppAction): AppState {
@@ -73,6 +77,12 @@ export function appReducer(state: AppState, action: AppAction): AppState {
 
     case "NAVIGATE":
       return { ...state, activeSection: action.section };
+
+    case "NAVIGATE_TO_RUN":
+      return { ...state, activeSection: "run", runPrefill: { tool: action.tool, tab: action.tab } };
+
+    case "RUN_PREFILL_CONSUMED":
+      return { ...state, runPrefill: null };
 
     case "PROMOTE_TO_FINDING":
       return { ...state, findingPrefill: action.prefill, activeSection: "findings" };

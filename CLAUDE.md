@@ -76,6 +76,13 @@ npm run dev
 
 ## Current roadmap
 
+Shipped (v0.10.0):
+- Workflow navigation model: 7-section sidebar (Dashboard, Scope, Run, Review, Findings, Reports, Settings)
+- Dashboard: 6 quick-action buttons + inline program edit form (Program Profile section removed)
+- Run section: orchestration console (Jobs tab) + file import (Import tab); absorbs Scan Jobs + Imports sections
+- Review section: RECON | SCANS | MANUAL tab switcher wrapping existing sub-components
+- Deep-link navigation: `navigateToRun(tool)` pre-selects tool in Composer via runPrefill state
+
 Shipped (v0.9.0):
 - Frontend app state extracted into context/reducer (AppContext + appReducer)
 - PDF report export (jsPDF, client-side)
@@ -87,7 +94,7 @@ Shipped (v0.9.0):
 - Scan Jobs orchestration console — Bridge, Telemetry, Composer, JobBoard (stream/pipeline/table), Terminal with live log streaming
 
 Remaining:
-- Scan Jobs: wire real API (replace mock seed data with `GET /programs/{id}/jobs`; SSE stream for live logs)
+- Run / Jobs: wire real API (replace mock seed data with `GET /programs/{id}/jobs`; SSE stream for live logs)
 - RBAC / multi-user support
 - VardrRunner: extract to separate repo (VardrSec/VardrRunner) when API stabilizes
 - AI-assisted finding triage and report drafting
