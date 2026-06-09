@@ -6,12 +6,13 @@ Personal bug bounty workflow tool. FastAPI backend (Railway) + Next.js 16 fronte
 ## Where things live
 - `backend/` — FastAPI app, SQLAlchemy models, Alembic migrations, tests
 - `backend/routers/` — one file per resource (programs, findings, reports, etc.)
-- `backend/tests/` — pytest suite, 42 tests, uses SQLite
+- `backend/tests/` — pytest suite, 63 tests, uses SQLite
 - `frontend/app/` — Next.js App Router pages and components
-- `frontend/app/components/` — one component per section (FindingsSection, ReportsSection, etc.)
+- `frontend/app/components/` — one component per section (FindingsSection, ReportsSection, JobsSection, etc.)
+- `frontend/app/context/` — AppContext.tsx + appReducer.ts (global state)
 - `runner/` — VardrRunner v1 local CLI; separate venv, installable via `pip install -e ./runner`
 - `runner/vardrrunner/` — Python package: config, api client, subprocess runner, command modules
-- `runner/tests/` — 17 tests; all subprocess and HTTP calls are mocked
+- `runner/tests/` — 30 tests; all subprocess and HTTP calls are mocked
 - `docs/` — architecture, API reference, development setup, security testing record
 - `CHANGELOG.md` — version history, updated with every change
 
@@ -74,9 +75,17 @@ npm run dev
 ```
 
 ## Current roadmap
-- Extract frontend app state into context/reducer
-- Authenticated scanning from the UI (VardrRunner job queue integration)
-- PDF report export
-- RBAC / multi-user support
+
+Shipped (v0.8.0):
+- Frontend app state extracted into context/reducer (AppContext + appReducer)
+- PDF report export (jsPDF, client-side)
+- Scan job queue — UI creates jobs, VardrRunner polls and executes locally
 - VardrRunner: subfinder support for wildcard scope entries
+- VardrRunner: `vardrrunner jobs list` and `vardrrunner jobs run`
+
+Remaining:
+- Harden job queue: mark job failed (not skipped) when tool is missing on runner
+- CI: add runner tests to the GitHub Actions workflow
+- RBAC / multi-user support
 - VardrRunner: extract to separate repo (VardrSec/VardrRunner) when API stabilizes
+- AI-assisted finding triage and report drafting

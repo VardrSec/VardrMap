@@ -25,9 +25,15 @@ A personal bug bounty workflow tool. Manage target programs, track scope, log fi
 - Log manual test cases with hypothesis, payload, evidence, and status
 - Track findings with severity, asset, status, and full write-up fields
 - Draft structured vulnerability reports linked to findings; preview as markdown
-- Export reports as markdown
+- Export reports as PDF or markdown
 - Generate personal API keys (`vmap_` tokens) for external tool access (e.g. Burp Suite)
 - All write operations logged to an append-only audit log
+
+**VardrRunner** — local CLI companion (`runner/`):
+- Authenticate with `vardrrunner login vardrmap` using a `vmap_` API key
+- Run httpx, nuclei, and subfinder locally; results uploaded automatically
+- Queue scan jobs from the UI; VardrRunner polls and executes them with `vardrrunner jobs run`
+- Wildcard scope entries (`*.example.com`) handled via subfinder enumeration
 
 ---
 
@@ -82,8 +88,6 @@ npm run dev
 
 ## Roadmap
 
-- Paginate findings and reports
-- Extract frontend app state into context/reducer
-- Authenticated scanning — trigger nuclei/ffuf from the UI
-- PDF export for vulnerability reports
-- RBAC for potential team/multi-user use
+- RBAC / multi-user support
+- AI-assisted finding triage and report drafting
+- VardrRunner: extract to separate repo (VardrSec/VardrRunner) when API stabilizes
