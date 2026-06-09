@@ -12,6 +12,7 @@ import ScanningSection   from "./components/ScanningSection";
 import ManualSection     from "./components/ManualSection";
 import FindingsSection   from "./components/FindingsSection";
 import ReportsSection    from "./components/ReportsSection";
+import SettingsSection   from "./components/SettingsSection";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -29,6 +30,7 @@ const NAV_ITEMS: { section: Section; label: string; icon: string }[] = [
   { section: "manual",    label: "Manual Testing",  icon: "✦" },
   { section: "findings",  label: "Findings",        icon: "⚑" },
   { section: "reports",   label: "Reports",         icon: "◧" },
+  { section: "settings",  label: "Settings",        icon: "◆" },
 ];
 
 // ---------------------------------------------------------------------------
@@ -357,7 +359,9 @@ export default function Home() {
             </div>
           )}
 
-          {!selectedProgram ? (
+          {activeSection === "settings" ? (
+            <SettingsSection authFetch={authFetch} setMessage={setMessage} />
+          ) : !selectedProgram ? (
             <div className="rounded-2xl border border-dashed border-[#2e2e2e] p-14 text-center">
               <p className="text-sm text-[#3a3a3a]">Create or select a program to begin.</p>
             </div>

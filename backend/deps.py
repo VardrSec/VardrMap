@@ -1,26 +1,54 @@
+import hashlib
 import os
 
-from fastapi import Header, HTTPException
+from fastapi import Depends, Header, HTTPException
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 
-from models import AuditLog, Program
+from db import get_db
+from models import ApiKey, AuditLog, Program, User
 
 BACKEND_JWT_SECRET = os.getenv("BACKEND_JWT_SECRET", "")
 JWT_ALGORITHM = "HS256"
+_API_KEY_PREFIX = "vmap_"
 
 
-# Auth flow: GitHub OAuth is handled entirely by NextAuth on the frontend.
-# After sign-in, NextAuth mints a short-lived JWT (signed with BACKEND_JWT_SECRET)
-# that includes the GitHub user's ID, username, and email. Every request carries
-# that token in the Authorization header, and this function verifies it.
-# The backend never talks to GitHub directly.
-def get_current_user(authorization: str | None = Header(default=None)) -> dict[str, str]:
+# Auth flow: two accepted token types on the Authorization header.
+#
+# 1. Browser JWT — minted by NextAuth after GitHub OAuth, short-lived (1h),
+#    verified against BACKEND_JWT_SECRET with aud/iss checks.
+#
+# 2. Personal API key — opaque token starting with "vmap_", stored as
+#    SHA-256 hash in api_keys table. Used by external tools (e.g. Burp).
+#    The plaintext token is shown once at generation; only the hash is kept.
+def get_current_user(
+    authorization: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> dict[str, str]:
     if not BACKEND_JWT_SECRET:
         raise HTTPException(status_code=500, detail="Server auth not configured")
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Unauthorized")
     token = authorization.split(" ", 1)[1].strip()
+    if token.startswith(_API_KEY_PREFIX):
+        return _resolve_api_key(token, db)
+    return _resolve_jwt(token)
+
+
+def _resolve_api_key(token: str, db: Session) -> dict[str, str]:
+    key_hash = hashlib.sha256(token.encode()).hexdigest()
+    api_key = db.query(ApiKey).filter(ApiKey.key_hash == key_hash).first()
+    if not api_key:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    user = db.query(User).filter(User.github_id == api_key.github_id).first()
+    return {
+        "github_id": api_key.github_id,
+        "username": user.username if user else "",
+        "email":    user.email    if user else "",
+    }
+
+
+def _resolve_jwt(token: str) -> dict[str, str]:
     try:
         payload = jwt.decode(
             token,

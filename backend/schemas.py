@@ -179,3 +179,11 @@ class ScanStatusUpdate(BaseModel):
 class BulkScanStatusUpdate(BaseModel):
     ids: list[str] = Field(min_length=1, max_length=500)
     status: ScanStatus
+
+
+class ApiKeyCreate(BaseModel):
+    label: Optional[str] = Field(default="", max_length=100)
+
+    @field_validator("label", mode="before")
+    @classmethod
+    def sanitize_label(cls, v): return sanitize_identifier(v) if v else ""

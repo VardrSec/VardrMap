@@ -22,6 +22,7 @@ class User(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     programs = relationship("Program", back_populates="owner", cascade="all, delete-orphan")
+    api_keys = relationship("ApiKey", back_populates="user", cascade="all, delete-orphan")
 
 
 class Program(Base):
@@ -182,3 +183,16 @@ class AuditLog(Base):
     resource_id = Column(String, nullable=False)
     program_id = Column(String, default="")             # context only, no FK
     timestamp = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+
+
+class ApiKey(Base):
+    __tablename__ = "api_keys"
+
+    id = Column(String, primary_key=True, default=new_uuid)
+    github_id = Column(String, ForeignKey("users.github_id"), nullable=False, index=True)
+    # SHA-256 hex of the plaintext token — 64 chars. Raw token is never stored.
+    key_hash = Column(String(64), nullable=False, unique=True)
+    label = Column(String(100), default="")
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    user = relationship("User", back_populates="api_keys")

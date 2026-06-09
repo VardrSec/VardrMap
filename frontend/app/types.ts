@@ -27,7 +27,8 @@ export type Program = {
   findings_by_status: Record<string, number>;
   reports_count: number;
 };
-export type Section = "dashboard" | "program" | "scope" | "imports" | "recon" | "scanning" | "manual" | "findings" | "reports";
+export type ApiKey = { id: string; label: string; created_at: string | null };
+export type Section = "dashboard" | "program" | "scope" | "imports" | "recon" | "scanning" | "manual" | "findings" | "reports" | "settings";
 export type AppSession = {
   user?: { name?: string | null; email?: string | null; image?: string | null; githubId?: string; username?: string };
   backendToken?: string;

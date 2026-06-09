@@ -9,7 +9,7 @@ from slowapi.util import get_remote_address
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from db import Base, engine
-from routers import findings, imports, manual_tests, programs, recon, reports, scans, scope
+from routers import apikeys, findings, imports, manual_tests, programs, recon, reports, scans, scope
 
 Base.metadata.create_all(bind=engine)
 
@@ -68,6 +68,7 @@ app.add_middleware(
 # Routers
 # -----------------------------------------------------------------------------
 
+app.include_router(apikeys.router)
 app.include_router(programs.router)
 app.include_router(scope.router)
 app.include_router(recon.router)
