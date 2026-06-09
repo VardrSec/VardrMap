@@ -1,36 +1,70 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# VardrMap — Frontend
 
-## Getting Started
+Next.js 16 (App Router, TypeScript) frontend for VardrMap. Deployed on Vercel.
 
-First, run the development server:
+---
+
+## Setup
 
 ```bash
+npm install
+cp .env.example .env.local
+# fill in .env.local values — see docs/development.md for descriptions
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+App runs at `http://localhost:3000`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+---
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Environment Variables
 
-## Learn More
+See [../docs/development.md](../docs/development.md#environment-variables) for full descriptions. Required values in `.env.local`:
 
-To learn more about Next.js, take a look at the following resources:
+```
+NEXTAUTH_URL
+AUTH_SECRET
+AUTH_GITHUB_ID
+AUTH_GITHUB_SECRET
+BACKEND_JWT_SECRET
+NEXT_PUBLIC_API_URL
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+---
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Key Files
 
-## Deploy on Vercel
+| Path | Purpose |
+|---|---|
+| `app/page.tsx` | Root client component — program list, nav, section routing, auth state |
+| `app/types.ts` | Shared TypeScript types for all data shapes |
+| `app/components/ui.tsx` | Shared primitives — `Panel`, `Input`, `PrimaryButton`, `DangerButton`, `SectionHeader` |
+| `app/components/DashboardSection.tsx` | Per-program summary cards using aggregate stats |
+| `app/components/FindingsSection.tsx` | Findings list, create/edit/delete, self-fetches |
+| `app/components/ReportsSection.tsx` | Reports list, markdown preview, export, self-fetches |
+| `app/components/ManualSection.tsx` | Manual test log, self-fetches |
+| `app/components/ScanningSection.tsx` | Scan review, status updates, bulk actions, pagination |
+| `app/components/ReconSection.tsx` | Recon browser with client-side search |
+| `app/components/ScopeSection.tsx` | In/out scope management |
+| `app/components/ImportsSection.tsx` | File upload for ffuf, httpx, nuclei output |
+| `app/components/SettingsSection.tsx` | API key management — generate, copy, revoke |
+| `proxy.ts` | Next.js middleware — rewrites `/api/backend/*` to `NEXT_PUBLIC_API_URL/*` |
+| `app/api/auth/[...nextauth]/route.ts` | Auth.js v5 route handler — GitHub OAuth + JWT minting |
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+---
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Auth Pattern
+
+The frontend uses Auth.js v5 for the GitHub OAuth session. After login, `app/api/auth/[...nextauth]/route.ts` mints a short-lived HS256 JWT signed with `BACKEND_JWT_SECRET`. This JWT is attached to every backend request by the `authFetch` helper in `page.tsx`.
+
+`proxy.ts` (Next.js middleware) rewrites all requests from `/api/backend/*` to the backend URL. This means the browser never sends requests directly to the Railway backend — CORS and the backend URL are not exposed to the client.
+
+---
+
+## Scripts
+
+```bash
+npm run dev       # development server (Turbopack)
+npm run build     # production build + TypeScript check
+npm run lint      # ESLint
+```
