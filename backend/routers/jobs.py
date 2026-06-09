@@ -13,9 +13,9 @@ router = APIRouter(tags=["jobs"])
 
 
 class JobCreate(BaseModel):
-    tool_type: str              # "httpx" or "nuclei"
+    tool_type: str              # "httpx", "nuclei", or "subfinder"
     target_source: str          # "scope" or "recon"
-    config: Optional[dict] = None  # {status_code, limit, severity, templates}
+    config: Optional[dict] = None  # {status_code, limit, severity, templates, recursive, sources}
 
 
 class JobStatusUpdate(BaseModel):
@@ -46,8 +46,8 @@ def create_job(
     db: Session = Depends(get_db),
 ):
     get_program_or_404(program_id, current_user, db)
-    if body.tool_type not in ("httpx", "nuclei"):
-        raise HTTPException(status_code=400, detail="tool_type must be httpx or nuclei")
+    if body.tool_type not in ("httpx", "nuclei", "subfinder"):
+        raise HTTPException(status_code=400, detail="tool_type must be httpx, nuclei, or subfinder")
     if body.target_source not in ("scope", "recon"):
         raise HTTPException(status_code=400, detail="target_source must be scope or recon")
 

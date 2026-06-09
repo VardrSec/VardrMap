@@ -192,9 +192,9 @@ class ScanJob(Base):
     id = Column(String, primary_key=True, default=new_uuid)
     program_id = Column(String, ForeignKey("programs.id", ondelete="CASCADE"), nullable=False, index=True)
     owner_github_id = Column(String, nullable=False, index=True)
-    tool_type = Column(String(20), nullable=False)          # "httpx" or "nuclei"
+    tool_type = Column(String(20), nullable=False)          # "httpx", "nuclei", or "subfinder"
     target_source = Column(String(20), nullable=False)      # "scope" or "recon"
-    config = Column(JSON, nullable=True)                    # {status_code, limit, severity, templates}
+    config = Column(JSON, nullable=True)                    # tool-specific options
     status = Column(String(20), default="pending")          # pending | running | done | failed
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     started_at = Column(DateTime, nullable=True)

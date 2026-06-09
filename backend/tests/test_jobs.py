@@ -48,6 +48,13 @@ class TestCreateJob:
         assert res.status_code == 200
         assert res.json()["config"]["severity"] == "high"
 
+    def test_subfinder_tool_accepted(self, client, program_id, auth_headers):
+        res = _create_job(client, program_id, auth_headers,
+                          tool_type="subfinder", target_source="scope",
+                          config={"recursive": True, "sources": "crtsh"})
+        assert res.status_code == 200
+        assert res.json()["tool_type"] == "subfinder"
+
     def test_invalid_tool_type(self, client, program_id, auth_headers):
         res = _create_job(client, program_id, auth_headers, tool_type="nmap")
         assert res.status_code == 400
