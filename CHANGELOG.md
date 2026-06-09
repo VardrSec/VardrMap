@@ -17,6 +17,9 @@ All notable changes to VardrMap. Versions are tagged by milestone — this proje
 - **13 new VardrRunner tests** covering subfinder arg construction, wildcard extraction, API client methods, and job queue execution
 - **Context/reducer extraction** — app-wide state moved into `AppContext.tsx` + `appReducer.ts`; all section components now call `useAppContext()` instead of receiving `authFetch`/`setMessage`/`onRefresh` as props
 
+### Changed
+- VardrRunner: missing tool now marks the job `failed` with an error message instead of silently skipping it; job stays visible in the UI as failed rather than stuck as pending
+
 ### Security
 - `scan_jobs` BOLA protection: `owner_github_id` checked on every job endpoint; wrong-user returns `404`, not `403`
 - `subfinder` added to VardrRunner allowlist — only executes via the approved tool list, never via shell string

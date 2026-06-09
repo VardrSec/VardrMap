@@ -82,10 +82,10 @@ Shipped (v0.8.0):
 - Scan job queue — UI creates jobs, VardrRunner polls and executes locally
 - VardrRunner: subfinder support for wildcard scope entries
 - VardrRunner: `vardrrunner jobs list` and `vardrrunner jobs run`
+- VardrRunner: missing tool marks job failed instead of silently skipping
+- CI: runner tests added to GitHub Actions workflow
 
 Remaining:
-- Harden job queue: mark job failed (not skipped) when tool is missing on runner
-- CI: add runner tests to the GitHub Actions workflow
 - RBAC / multi-user support
 - VardrRunner: extract to separate repo (VardrSec/VardrRunner) when API stabilizes
 - AI-assisted finding triage and report drafting
