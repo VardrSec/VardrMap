@@ -4,6 +4,18 @@ All notable changes to VardrMap. Versions are tagged by milestone — this proje
 
 ---
 
+## v0.5.0 — Migration hygiene (2026-06-09)
+
+### Changed
+- `Base.metadata.create_all()` is now guarded to only run when `ENV=development` or `ENV=test` — it no longer runs in production
+- Alembic is now the sole schema authority for production; Railway runs `alembic upgrade head` before starting uvicorn on every deploy
+
+### Added
+- `backend/start.sh` — production startup script: runs `alembic upgrade head` then starts uvicorn on `$PORT`
+- `backend/railway.json` — Railway deployment config pointing to `start.sh` with `ON_FAILURE` restart policy
+
+---
+
 ## v0.4.0 — API keys and performance (2026-06-08)
 
 ### Added

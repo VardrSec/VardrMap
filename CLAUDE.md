@@ -56,6 +56,8 @@ cd backend
 uvicorn main:app --reload
 ```
 
+Note: `create_all` only runs in development/test. In production, Railway runs `bash start.sh` which calls `alembic upgrade head` before uvicorn. Never remove this guard.
+
 Frontend:
 ```
 cd frontend

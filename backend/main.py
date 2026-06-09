@@ -11,9 +11,13 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from db import Base, engine
 from routers import apikeys, findings, imports, manual_tests, programs, recon, reports, scans, scope
 
-Base.metadata.create_all(bind=engine)
-
 ENV = os.getenv("ENV") or os.getenv("RAILWAY_ENVIRONMENT_NAME", "development")
+
+# In production, schema migrations are handled by Alembic (start.sh runs
+# `alembic upgrade head` before uvicorn). create_all is kept for local dev
+# and isolated SQLite tests only — it must never run in production.
+if ENV in ("development", "test"):
+    Base.metadata.create_all(bind=engine)
 
 ALLOWED_ORIGINS = [
     origin.strip()

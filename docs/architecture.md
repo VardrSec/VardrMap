@@ -23,6 +23,19 @@ Railway (PostgreSQL)
 
 ---
 
+## Deployment and Schema Management
+
+The backend is deployed on Railway. On every deploy, Railway runs `bash start.sh`, which:
+
+1. Runs `alembic upgrade head` — applies any pending migrations against the production PostgreSQL database
+2. Starts `uvicorn main:app` on the Railway-provided `$PORT`
+
+`Base.metadata.create_all()` is guarded to only run when `ENV=development` or `ENV=test`. It never runs in production. Alembic is the sole schema authority for production and staging.
+
+Local development still uses `create_all` for convenience — no migration step needed to start the server. Tests rebuild the SQLite schema from scratch on every run.
+
+---
+
 ## Authentication Flow
 
 There are two accepted token types. Both arrive on the `Authorization: Bearer <token>` header.

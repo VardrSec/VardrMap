@@ -126,32 +126,38 @@ Migrations use Alembic. The migration chain is:
 0001_baseline  →  0002_add_created_at  →  0003_add_api_keys
 ```
 
-**Fresh deployment:** `main.py` calls `Base.metadata.create_all()` on startup, which creates all tables from the current model definitions. For Alembic to track this correctly, stamp the baseline:
-```bash
-alembic stamp head
-```
+### Production (Railway)
 
-**Existing deployment (pre-Alembic):** Same — stamp the baseline without running migrations:
-```bash
-alembic stamp head
-```
+Railway runs `bash start.sh` on every deploy. That script runs `alembic upgrade head` before starting uvicorn, so migrations are applied automatically on each deploy. `create_all` does not run in production — Alembic is the only schema authority.
 
-**Apply pending migrations:**
-```bash
-alembic upgrade head
-```
+### Local development
 
-**Create a new migration after changing `models.py`:**
+`main.py` calls `Base.metadata.create_all()` when `ENV=development` (the default locally). This keeps the local dev loop fast — you don't need to run migrations just to start the server. When you add a new model or column, generate a migration so production can receive it:
+
 ```bash
 alembic revision --autogenerate -m "short description"
 ```
 
 Review the generated file in `migrations/versions/` before applying — autogenerate can miss some changes (e.g. column type changes, custom constraints).
 
+**Apply pending migrations locally:**
+```bash
+alembic upgrade head
+```
+
+**Stamp an existing database without running migrations** (use this when setting up Alembic on a database that already has the schema):
+```bash
+alembic stamp head
+```
+
 **Check current revision:**
 ```bash
 alembic current
 ```
+
+### Test database
+
+Tests use SQLite and rebuild the schema from scratch on every run via `drop_all() + create_all()` in `conftest.py`. Alembic migrations do not run in tests — the SQLite schema always reflects the current model definitions.
 
 ---
 
