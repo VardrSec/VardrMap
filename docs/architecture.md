@@ -189,7 +189,7 @@ audit_logs
 }
 ```
 
-Each section component (FindingsSection, ReportsSection, ManualSection) fetches its own full data set with a separate request when it mounts or after a mutation. The `onRefresh` callback from the parent re-fetches the program to keep the dashboard counts current.
+Each section component fetches its own full data set with a separate request when it mounts or after a mutation. After a mutation, sections call `refreshSelectedProgram()` from `AppContext` to re-fetch the program object and keep the dashboard counts current. Global state (session, programs, active section, prefill data) lives in `AppContext` / `appReducer` — sections call `useAppContext()` rather than receiving props.
 
 ---
 
@@ -238,9 +238,9 @@ VardrMap frontend (Vercel)
 ```
 
 **Key design constraints:**
-- Tool execution uses an allowlist (`ALLOWED_TOOLS` in `runner.py`) — only `httpx` and `nuclei` in v1
+- Tool execution uses an allowlist (`ALLOWED_TOOLS` in `runner.py`) — `httpx`, `nuclei`, and `subfinder`
 - `subprocess.run` is always called with an argument list, never `shell=True`
-- Wildcard scope entries (`*.example.com`) are skipped with a message; they require a discovery step first
+- Wildcard scope entries (`*.example.com`) are skipped by `run httpx/nuclei`; use `vardrrunner run subfinder --program <id>` to enumerate subdomains first, then re-run against recon results
 - Config at `~/.vardrmap/config.json` stores the `vmap_` API key in plaintext — documented clearly and file permissions restricted on Unix
 - Raw outputs are always saved locally before upload; if upload fails, the data is not lost
 
@@ -252,3 +252,29 @@ VardrMap frontend (Vercel)
 | `--from-recon` | Live recon items from `GET /programs/{id}/recon` with optional `--limit` and `--status-code` filters |
 | `--target <url>` | Single inline target |
 | `--targets <file>` | Local plaintext file, one target per line |
+
+### Job Queue Flow
+
+The UI can queue jobs that VardrRunner picks up and executes. This decouples scan scheduling (done in the browser) from scan execution (done on the user's machine).
+
+```
+Browser (VardrMap UI)
+  │  POST /programs/{id}/jobs  { tool_type, target_source, config }
+  ▼
+Railway (FastAPI) — stores ScanJob row, status = "pending"
+
+User's machine
+  │  vardrrunner jobs run
+  ▼
+runner/
+  │  1. GET /jobs/pending  — fetch pending jobs for this user
+  │  2. PATCH /jobs/{id}   — status = "running"  (claim the job)
+  │  3. resolve targets (same logic as manual run commands)
+  │  4. execute tool locally via subprocess
+  │  5. upload results via POST /programs/{id}/imports
+  │  6. PATCH /jobs/{id}   — status = "done" | "failed"
+  ▼
+VardrMap backend — results stored; job status visible in Jobs section
+```
+
+If the required tool is not on PATH, the job is immediately marked `failed` with an error message — it does not stay stuck as `pending`.

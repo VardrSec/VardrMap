@@ -100,7 +100,7 @@ cd backend
 pytest tests -v
 ```
 
-All 42 tests should pass. There are no frontend tests at this time.
+All 63 tests should pass. There are no frontend tests at this time.
 
 ### Test coverage areas
 
@@ -108,13 +108,11 @@ All 42 tests should pass. There are no frontend tests at this time.
 |---|---|
 | `tests/test_programs.py` | Program CRUD, ownership isolation (BOLA) |
 | `tests/test_findings.py` | Finding CRUD, cross-program access denial |
-| `tests/test_reports.py` | Report CRUD, cross-program access denial |
-| `tests/test_manual_tests.py` | Manual test CRUD |
-| `tests/test_scope.py` | Scope item add/delete |
-| `tests/test_imports.py` | File upload parsing, extension/size validation |
-| `tests/test_recon.py` | Recon list and clear |
-| `tests/test_scans.py` | Scan list, status update, bulk update, pagination |
+| `tests/test_imports.py` | File upload parsing, extension/size validation, BOLA |
+| `tests/test_jobs.py` | Scan job CRUD, BOLA isolation, status transitions |
 | `tests/test_apikeys.py` | Key generation, API key auth at `/me`, revocation, BOLA isolation, max-key limit |
+| `tests/test_auth.py` | JWT validation — missing, expired, wrong audience, garbage token |
+| `tests/test_sanitization.py` | XSS/injection rejection and stripping across input fields |
 
 ---
 
