@@ -58,7 +58,7 @@ type AppContextValue = {
   setMessage: (msg: string) => void;
   selectProgram: (id: string) => void;
   navigate: (section: Section) => void;
-  navigateToDashboard: (toolOrAction?: string) => void;
+  navigateToRun: (toolOrAction?: string) => void;
   refreshSelectedProgram: (programId?: string) => Promise<void>;
   loadPrograms: () => Promise<void>;
   deleteProgram: () => Promise<void>;
@@ -112,11 +112,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     dispatch({ type: "NAVIGATE", section });
   }, []);
 
-  const navigateToDashboard = useCallback((toolOrAction?: string) => {
+  const navigateToRun = useCallback((toolOrAction?: string) => {
     if (toolOrAction === "import") {
-      dispatch({ type: "NAVIGATE_TO_DASHBOARD", tab: "import" });
+      dispatch({ type: "NAVIGATE_TO_RUN", tab: "import" });
     } else {
-      dispatch({ type: "NAVIGATE_TO_DASHBOARD", tool: toolOrAction });
+      dispatch({ type: "NAVIGATE_TO_RUN", tool: toolOrAction });
     }
   }, []);
 
@@ -220,7 +220,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setMessage,
     selectProgram,
     navigate,
-    navigateToDashboard,
+    navigateToRun,
     refreshSelectedProgram,
     loadPrograms,
     deleteProgram,

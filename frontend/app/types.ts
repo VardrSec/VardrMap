@@ -78,7 +78,7 @@ export type ScanJobUI = {
   log: LogLine[];
   _full?: LogLine[];
 };
-export type Section = "dashboard" | "scope" | "overview" | "review" | "findings" | "reports" | "settings";
+export type Section = "dashboard" | "scope" | "run" | "review" | "findings" | "reports" | "settings";
 export type AppSession = {
   user?: { name?: string | null; email?: string | null; image?: string | null; githubId?: string; username?: string };
   backendToken?: string;

@@ -19,8 +19,8 @@ export type AppAction =
   | { type: "PROGRAM_UPDATED"; program: Program }
   | { type: "PROGRAM_DELETED"; id: string }
   | { type: "NAVIGATE"; section: Section }
-  | { type: "NAVIGATE_TO_DASHBOARD"; tool?: string; tab?: "import" }
-  | { type: "DASHBOARD_PREFILL_CONSUMED" }
+  | { type: "NAVIGATE_TO_RUN"; tool?: string; tab?: "import" }
+  | { type: "RUN_PREFILL_CONSUMED" }
   | { type: "PROMOTE_TO_FINDING"; prefill: FindingFormState }
   | { type: "FINDING_PREFILL_CONSUMED" }
   | { type: "PROMOTE_TO_REPORT"; prefill: ReportFormState }
@@ -78,10 +78,10 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     case "NAVIGATE":
       return { ...state, activeSection: action.section };
 
-    case "NAVIGATE_TO_DASHBOARD":
-      return { ...state, activeSection: "dashboard", runPrefill: { tool: action.tool, tab: action.tab } };
+    case "NAVIGATE_TO_RUN":
+      return { ...state, activeSection: "run", runPrefill: { tool: action.tool, tab: action.tab } };
 
-    case "DASHBOARD_PREFILL_CONSUMED":
+    case "RUN_PREFILL_CONSUMED":
       return { ...state, runPrefill: null };
 
     case "PROMOTE_TO_FINDING":

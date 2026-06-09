@@ -6,7 +6,7 @@ import { Section } from "./types";
 import { AppProvider, normalizeProgram, useAppContext } from "./context/AppContext";
 import DashboardSection  from "./components/DashboardSection";
 import ScopeSection      from "./components/ScopeSection";
-import OverviewSection   from "./components/OverviewSection";
+import RunSection        from "./components/RunSection";
 import ReviewSection     from "./components/ReviewSection";
 import FindingsSection   from "./components/FindingsSection";
 import ReportsSection    from "./components/ReportsSection";
@@ -17,11 +17,11 @@ import SettingsSection   from "./components/SettingsSection";
 // ---------------------------------------------------------------------------
 
 const NAV_ITEMS: { section: Section; label: string; icon: string }[] = [
-  { section: "dashboard", label: "Dashboard", icon: "▣" },
+  { section: "dashboard", label: "Dashboard", icon: "⬡" },
   { section: "scope",     label: "Scope",     icon: "◎" },
+  { section: "run",       label: "Run",       icon: "▣" },
   { section: "review",    label: "Review",    icon: "⊹" },
   { section: "findings",  label: "Findings",  icon: "⚑" },
-  { section: "overview",  label: "Overview",  icon: "⬡" },
   { section: "reports",   label: "Reports",   icon: "◧" },
   { section: "settings",  label: "Settings",  icon: "◆" },
 ];
@@ -193,9 +193,9 @@ function AppShell() {
             <>
               {activeSection === "dashboard" && <DashboardSection program={selectedProgram} />}
               {activeSection === "scope"     && <ScopeSection     program={selectedProgram} />}
+              {activeSection === "run"       && <RunSection       program={selectedProgram} />}
               {activeSection === "review"    && <ReviewSection    program={selectedProgram} />}
               {activeSection === "findings"  && <FindingsSection  program={selectedProgram} />}
-              {activeSection === "overview"  && <OverviewSection  program={selectedProgram} />}
               {activeSection === "reports"   && <ReportsSection   program={selectedProgram} />}
             </>
           )}
