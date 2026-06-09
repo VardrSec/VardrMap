@@ -31,6 +31,7 @@ A personal bug bounty workflow tool. Manage target programs, track scope, log fi
 
 **VardrRunner** — local CLI companion (`runner/`):
 - Authenticate with `vardrrunner login vardrmap` using a `vmap_` API key
+- `vardrrunner status` — verify config, API connectivity, and local tool availability
 - Run httpx, nuclei, and subfinder locally; results uploaded automatically
 - Queue scan jobs from the UI; VardrRunner polls and executes them with `vardrrunner jobs run`
 - Wildcard scope entries (`*.example.com`) handled via subfinder enumeration

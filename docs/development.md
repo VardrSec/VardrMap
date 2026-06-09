@@ -192,6 +192,14 @@ vardrrunner login vardrmap
 
 Config is saved to `~/.vardrmap/config.json`. The file stores the API key in plaintext — restrict access with `chmod 600 ~/.vardrmap/config.json` on Unix.
 
+After logging in, run `vardrrunner status` to verify the setup:
+
+```bash
+vardrrunner status
+```
+
+This checks that the config file is present, the API key is valid, the backend is reachable, and that httpx/nuclei/subfinder are installed on PATH.
+
 ### Run tests
 
 ```bash
@@ -204,7 +212,7 @@ cd runner
 pytest tests -v
 ```
 
-30 tests should pass. Tests mock all subprocess and HTTP calls — no tools or backend required.
+40 tests should pass. Tests mock all subprocess and HTTP calls — no tools or backend required.
 
 ### Prerequisites for `run` commands
 

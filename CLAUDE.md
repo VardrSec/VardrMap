@@ -12,7 +12,7 @@ Personal bug bounty workflow tool. FastAPI backend (Railway) + Next.js 16 fronte
 - `frontend/app/context/` — AppContext.tsx + appReducer.ts (global state)
 - `runner/` — VardrRunner v1 local CLI; separate venv, installable via `pip install -e ./runner`
 - `runner/vardrrunner/` — Python package: config, api client, subprocess runner, command modules
-- `runner/tests/` — 30 tests; all subprocess and HTTP calls are mocked
+- `runner/tests/` — 40 tests; all subprocess and HTTP calls are mocked
 - `docs/` — architecture, API reference, development setup, security testing record
 - `CHANGELOG.md` — version history, updated with every change
 
