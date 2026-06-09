@@ -1,6 +1,21 @@
 # Architecture
 
-## Overview
+## Product Family
+
+VardrMap is part of the VardrSec product family. Each product is a separate deployable unit that integrates with the others via the VardrMap API and `vmap_` API keys.
+
+| Product | Purpose | Status |
+|---|---|---|
+| VardrMap | Web app — stores programs, scope, findings, reports, recon, scans | Active |
+| VardrRunner | Local CLI runner — runs tools on the user's machine, uploads results | v1 — `runner/` in this repo |
+| VardrVault | Secrets management for VardrSec products | Planned |
+| VardrScanner | Purpose-built scanning engine | Planned |
+
+VardrRunner currently lives in `runner/` and will be extracted to a separate repo (`VardrSec/VardrRunner`) when it matures.
+
+---
+
+## VardrMap Overview
 
 VardrMap is a two-service application. The frontend is a Next.js app deployed on Vercel. The backend is a FastAPI app deployed on Railway, backed by a Railway-hosted PostgreSQL database. They communicate over HTTPS; the frontend proxies all `/api/backend/*` requests to the backend URL so the browser never talks to the backend directly.
 
@@ -176,3 +191,51 @@ Validation order:
 4. Content is parsed as JSON array or JSONL (one object per line)
 5. Items are passed to the tool-specific parser (`parse_ffuf`, `parse_httpx`, `parse_nuclei`)
 6. An `ImportRecord` is written with `filename = "redacted"` — original filenames often leak local paths and have no value post-import
+
+---
+
+## VardrRunner Architecture
+
+VardrRunner is a local CLI that runs offensive tools on the user's machine and uploads results to VardrMap. Scan traffic always comes from the user's IP — tools never run on Railway.
+
+```
+User's machine
+  │
+  │  vardrrunner run nuclei --program <id> --from-recon
+  ▼
+runner/ (Python CLI)
+  │  1. fetch recon targets from VardrMap API
+  │     GET /programs/{id}/recon?limit=100&status_code=200
+  │
+  │  2. show dry-run preview, ask for confirmation
+  │
+  │  3. run tool locally via subprocess (arg list, no shell=True)
+  │     nuclei -l targets.txt -json-export output.jsonl
+  │
+  │  4. save raw output to ~/.vardrmap/runs/<timestamp>/
+  │
+  │  5. upload via existing import endpoint
+  │     POST /programs/{id}/imports  (multipart, tool_type=nuclei)
+  ▼
+VardrMap backend (Railway)
+  │  parse, store, deduplicate → ScanItem rows
+  ▼
+VardrMap frontend (Vercel)
+  │  display in Scanning section review queue
+```
+
+**Key design constraints:**
+- Tool execution uses an allowlist (`ALLOWED_TOOLS` in `runner.py`) — only `httpx` and `nuclei` in v1
+- `subprocess.run` is always called with an argument list, never `shell=True`
+- Wildcard scope entries (`*.example.com`) are skipped with a message; they require a discovery step first
+- Config at `~/.vardrmap/config.json` stores the `vmap_` API key in plaintext — documented clearly and file permissions restricted on Unix
+- Raw outputs are always saved locally before upload; if upload fails, the data is not lost
+
+**Target sources for `run` commands:**
+
+| Flag | Source |
+|---|---|
+| `--scope` | In-scope items from `GET /programs/{id}` (wildcards skipped) |
+| `--from-recon` | Live recon items from `GET /programs/{id}/recon` with optional `--limit` and `--status-code` filters |
+| `--target <url>` | Single inline target |
+| `--targets <file>` | Local plaintext file, one target per line |

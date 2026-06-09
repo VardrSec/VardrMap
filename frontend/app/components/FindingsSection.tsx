@@ -35,18 +35,37 @@ export default function FindingsSection({ program, authFetch, onRefresh, setMess
   onPromoteToReport: (finding: Finding) => void;
 }) {
   const [findings,  setFindings]  = useState<Finding[]>([]);
+  const [total,     setTotal]     = useState(0);
+  const [offset,    setOffset]    = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [form,      setForm]      = useState<FindingFormState>(EMPTY);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm,  setEditForm]  = useState<FindingFormState>(EMPTY);
 
+  const PAGE = 50;
+
   const loadFindings = useCallback(async () => {
     try {
-      const res = await authFetch(`/programs/${program.id}/findings`);
+      const res = await authFetch(`/programs/${program.id}/findings?limit=${PAGE}&offset=0`);
       if (!res.ok) throw new Error();
       const data = await res.json();
       setFindings(Array.isArray(data?.findings) ? data.findings : []);
+      setTotal(data?.total ?? 0);
+      setOffset(0);
     } catch { setMessage("Failed to load findings."); }
   }, [program.id, authFetch, setMessage]);
+
+  async function loadMore() {
+    const next = offset + PAGE;
+    setLoadingMore(true);
+    try {
+      const res = await authFetch(`/programs/${program.id}/findings?limit=${PAGE}&offset=${next}`);
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      setFindings((prev) => [...prev, ...(Array.isArray(data?.findings) ? data.findings : [])]);
+      setOffset(next);
+    } catch { setMessage("Failed to load more findings."); } finally { setLoadingMore(false); }
+  }
 
   useEffect(() => { void loadFindings(); }, [loadFindings]);
 
@@ -107,7 +126,7 @@ export default function FindingsSection({ program, authFetch, onRefresh, setMess
             <PrimaryButton onClick={addFinding} label="Save Finding" />
           </div>
         </Panel>
-        <Panel title="Finding Tracker">
+        <Panel title={`Finding Tracker${total > 0 ? ` (${total})` : ""}`}>
           {findings.length === 0 ? (
             <p className="text-sm text-[#3a3a3a]">No findings yet.</p>
           ) : (
@@ -152,6 +171,12 @@ export default function FindingsSection({ program, authFetch, onRefresh, setMess
                     {finding.summary && <p className="mt-3 text-sm text-[#6b7280]">{finding.summary}</p>}
                   </div>
                 )
+              )}
+              {findings.length < total && (
+                <button onClick={loadMore} disabled={loadingMore}
+                  className="w-full rounded-md border border-[#2e2e2e] px-4 py-2 text-xs text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#94a3b8] disabled:opacity-50">
+                  {loadingMore ? "Loading…" : `Load more (${total - findings.length} remaining)`}
+                </button>
               )}
             </div>
           )}

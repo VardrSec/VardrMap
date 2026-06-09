@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from db import get_db
@@ -13,17 +13,16 @@ router = APIRouter()
 @router.get("/programs/{program_id}/findings")
 def get_findings(
     program_id: str,
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
     current_user: dict[str, str] = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     get_program_or_404(program_id, current_user, db)
-    findings = (
-        db.query(Finding)
-        .filter(Finding.program_id == program_id)
-        .order_by(Finding.created_at.desc())
-        .all()
-    )
-    return {"findings": [serialize_finding(f) for f in findings]}
+    query = db.query(Finding).filter(Finding.program_id == program_id)
+    total = query.count()
+    findings = query.order_by(Finding.created_at.desc()).offset(offset).limit(limit).all()
+    return {"findings": [serialize_finding(f) for f in findings], "total": total, "offset": offset, "limit": limit}
 
 
 @router.post("/programs/{program_id}/findings")

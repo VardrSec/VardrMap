@@ -59,20 +59,39 @@ export default function ReportsSection({ program, authFetch, onRefresh, setMessa
   prefill?: ReportFormState | null;
   onPrefillConsumed?: () => void;
 }) {
-  const [reports,   setReports]   = useState<Report[]>([]);
-  const [findings,  setFindings]  = useState<Finding[]>([]);
-  const [form,      setForm]      = useState<ReportFormState>(EMPTY);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editForm,  setEditForm]  = useState<ReportFormState>(EMPTY);
+  const [reports,     setReports]     = useState<Report[]>([]);
+  const [total,       setTotal]       = useState(0);
+  const [offset,      setOffset]      = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [findings,    setFindings]    = useState<Finding[]>([]);
+  const [form,        setForm]        = useState<ReportFormState>(EMPTY);
+  const [editingId,   setEditingId]   = useState<string | null>(null);
+  const [editForm,    setEditForm]    = useState<ReportFormState>(EMPTY);
+
+  const PAGE = 50;
 
   const loadReports = useCallback(async () => {
     try {
-      const res = await authFetch(`/programs/${program.id}/reports`);
+      const res = await authFetch(`/programs/${program.id}/reports?limit=${PAGE}&offset=0`);
       if (!res.ok) throw new Error();
       const data = await res.json();
       setReports(Array.isArray(data?.reports) ? data.reports : []);
+      setTotal(data?.total ?? 0);
+      setOffset(0);
     } catch { setMessage("Failed to load reports."); }
   }, [program.id, authFetch, setMessage]);
+
+  async function loadMore() {
+    const next = offset + PAGE;
+    setLoadingMore(true);
+    try {
+      const res = await authFetch(`/programs/${program.id}/reports?limit=${PAGE}&offset=${next}`);
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      setReports((prev) => [...prev, ...(Array.isArray(data?.reports) ? data.reports : [])]);
+      setOffset(next);
+    } catch { setMessage("Failed to load more reports."); } finally { setLoadingMore(false); }
+  }
 
   const loadFindings = useCallback(async () => {
     try {
@@ -198,6 +217,7 @@ export default function ReportsSection({ program, authFetch, onRefresh, setMessa
           </div>
 
           <div className="mt-5 space-y-2">
+            {total > 0 && <p className="text-[10px] font-semibold uppercase tracking-widest text-[#52525b]">Saved Reports ({total})</p>}
             {reports.map((report) =>
               editingId === report.id ? (
                 <div key={report.id} className="rounded-xl border border-[#f59e0b]/30 bg-[#161616] p-4 space-y-3">
@@ -227,6 +247,12 @@ export default function ReportsSection({ program, authFetch, onRefresh, setMessa
                   </div>
                 </div>
               )
+            )}
+            {reports.length < total && (
+              <button onClick={loadMore} disabled={loadingMore}
+                className="w-full rounded-md border border-[#2e2e2e] px-4 py-2 text-xs text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#94a3b8] disabled:opacity-50">
+                {loadingMore ? "Loading…" : `Load more (${total - reports.length} remaining)`}
+              </button>
             )}
           </div>
         </Panel>

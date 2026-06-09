@@ -12,6 +12,11 @@ test_vardrmap.db
 htmlcov/
 .coverage
 
+# Build artifacts
+*.egg-info/
+dist/
+build/
+
 # OS
 .DS_Store
 Thumbs.db

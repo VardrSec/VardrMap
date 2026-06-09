@@ -213,25 +213,21 @@ Remove a scope item. `scope_type` must be `in` or `out`.
 ## Findings
 
 ### `GET /programs/{program_id}/findings`
-List all findings for a program, ordered by `created_at` descending.
+List findings for a program, ordered by `created_at` descending.
+
+**Query parameters**
+| Parameter | Default | Constraints | Description |
+|---|---|---|---|
+| `limit` | 50 | 1–200 | Max items to return |
+| `offset` | 0 | ≥0 | Number of items to skip |
 
 **Response**
 ```json
 {
-  "findings": [
-    {
-      "id": "<uuid>",
-      "title": "Stored XSS in profile bio",
-      "severity": "high",
-      "asset": "app.acme.com",
-      "status": "triaged",
-      "summary": "...",
-      "steps": "...",
-      "impact": "...",
-      "remediation": "...",
-      "created_at": "2026-06-05T09:00:00"
-    }
-  ]
+  "findings": [ { "id": "<uuid>", "title": "...", "severity": "high", "asset": "app.acme.com", "status": "triaged", "summary": "...", "steps": "...", "impact": "...", "remediation": "...", "created_at": "2026-06-05T09:00:00" } ],
+  "total": 42,
+  "offset": 0,
+  "limit": 50
 }
 ```
 
@@ -273,26 +269,21 @@ Delete a finding.
 ## Reports
 
 ### `GET /programs/{program_id}/reports`
-List all reports for a program, ordered by `created_at` descending.
+List reports for a program, ordered by `created_at` descending.
+
+**Query parameters**
+| Parameter | Default | Constraints | Description |
+|---|---|---|---|
+| `limit` | 50 | 1–200 | Max items to return |
+| `offset` | 0 | ≥0 | Number of items to skip |
 
 **Response**
 ```json
 {
-  "reports": [
-    {
-      "id": "<uuid>",
-      "finding_id": "<uuid or empty string>",
-      "title": "Stored XSS in profile bio",
-      "summary": "...",
-      "steps": "...",
-      "impact": "...",
-      "remediation": "...",
-      "cwe": "CWE-79",
-      "cvss": "7.5",
-      "status": "draft",
-      "created_at": "2026-06-05T09:00:00"
-    }
-  ]
+  "reports": [ { "id": "<uuid>", "finding_id": "<uuid or empty>", "title": "...", "summary": "...", "steps": "...", "impact": "...", "remediation": "...", "cwe": "CWE-79", "cvss": "7.5", "status": "draft", "created_at": "2026-06-05T09:00:00" } ],
+  "total": 10,
+  "offset": 0,
+  "limit": 50
 }
 ```
 
@@ -388,7 +379,15 @@ Delete a manual test.
 ## Recon
 
 ### `GET /programs/{program_id}/recon`
-List all recon items for a program. Items come from ffuf or httpx imports.
+List recon items for a program, with optional filters. Items come from ffuf or httpx imports.
+
+**Query parameters**
+| Parameter | Default | Constraints | Description |
+|---|---|---|---|
+| `limit` | 100 | 1–500 | Max items to return |
+| `offset` | 0 | ≥0 | Number of items to skip |
+| `search` | (none) | — | Full-text filter across URL, host, path, title |
+| `status_code` | (none) | — | Filter by HTTP status code (e.g. `200`) |
 
 **Response**
 ```json

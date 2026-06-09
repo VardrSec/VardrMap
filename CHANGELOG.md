@@ -4,6 +4,43 @@ All notable changes to VardrMap. Versions are tagged by milestone — this proje
 
 ---
 
+## v0.7.0 — VardrRunner v1 (2026-06-09)
+
+### Added
+- `runner/` — VardrRunner v1 local CLI, packaged as `vardrrunner` (installable via `pip install -e ./runner`)
+- `vardrrunner login vardrmap` — authenticate with a VardrMap instance using a `vmap_` API key; verifies credentials before saving; warns that the config file stores the key in plaintext
+- `vardrrunner whoami` — show the identity tied to the configured key
+- `vardrrunner programs` — list all programs with finding and scan counts
+- `vardrrunner scope <program_id>` — show in-scope and out-of-scope items
+- `vardrrunner import nuclei/httpx/ffuf --program --file` — upload a tool output file directly without running the tool
+- `vardrrunner run httpx --program --scope|--from-recon|--target|--targets` — run httpx locally and upload results
+- `vardrrunner run nuclei --program --scope|--from-recon|--target|--targets --severity --templates` — run nuclei locally and upload results
+- Dry-run confirmation prompt before every `run` command; bypass with `--yes` for automation
+- `--from-recon` filters: `--limit` (default 100) and `--status-code`
+- Wildcard scope entries (`*.example.com`) are skipped with a clear message instead of being passed to tools
+- Raw tool output saved to `~/.vardrmap/runs/<timestamp>/` before upload; preserved if upload fails
+- Config stored at `~/.vardrmap/config.json`; file permissions restricted to owner on Unix
+- 17 tests covering config roundtrip, wildcard detection, target resolution, and subprocess arg-list safety
+
+### Security
+- Tool execution uses an allowlist (`httpx`, `nuclei`) — no arbitrary shell commands can be run
+- `subprocess.run` is called with an argument list, never `shell=True`
+- API key never printed after login
+
+---
+
+## v0.6.0 — Pagination (2026-06-09)
+
+### Added
+- Pagination on findings, reports, and manual tests endpoints (`limit`, `offset`, `total` in response)
+- `status_code` filter on recon endpoint (used by VardrRunner `--from-recon --status-code 200`)
+- Load-more button in FindingsSection and ReportsSection with remaining count display
+
+### Changed
+- Default page size: 50 for findings/reports/manual-tests (max 200); 100 for recon/scans (max 500)
+
+---
+
 ## v0.5.0 — Migration hygiene (2026-06-09)
 
 ### Changed

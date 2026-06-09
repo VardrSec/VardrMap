@@ -18,6 +18,7 @@ def get_recon(
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     search: Optional[str] = None,
+    status_code: Optional[int] = None,
     current_user: dict[str, str] = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -31,6 +32,8 @@ def get_recon(
             ReconItem.path.ilike(term),
             ReconItem.title.ilike(term),
         ))
+    if status_code is not None:
+        query = query.filter(ReconItem.status_code == status_code)
     total = query.count()
     items = query.order_by(ReconItem.id).offset(offset).limit(limit).all()
     return {"recon": [serialize_recon_item(r) for r in items], "total": total, "offset": offset, "limit": limit}

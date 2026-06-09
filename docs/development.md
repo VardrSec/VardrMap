@@ -161,6 +161,60 @@ Tests use SQLite and rebuild the schema from scratch on every run via `drop_all(
 
 ---
 
+## VardrRunner Setup
+
+VardrRunner is the local CLI that runs tools on your machine and uploads results to VardrMap. It lives in `runner/` and is installed separately from the backend.
+
+### Install
+
+```bash
+cd runner
+python -m venv venv
+
+# Windows
+.\venv\Scripts\Activate.ps1
+
+# macOS / Linux
+source venv/bin/activate
+
+pip install -e .
+```
+
+After install, the `vardrrunner` command is available in the activated venv.
+
+### Authenticate
+
+```bash
+vardrrunner login vardrmap
+# Enter your VardrMap URL (e.g. https://your-railway-app.up.railway.app)
+# Enter a vmap_ API key from Settings → API Keys
+```
+
+Config is saved to `~/.vardrmap/config.json`. The file stores the API key in plaintext — restrict access with `chmod 600 ~/.vardrmap/config.json` on Unix.
+
+### Run tests
+
+```bash
+cd runner
+
+# Windows
+.\venv\Scripts\pytest.exe tests -v
+
+# macOS / Linux
+pytest tests -v
+```
+
+17 tests should pass. Tests mock all subprocess and HTTP calls — no tools or backend required.
+
+### Prerequisites for `run` commands
+
+VardrRunner invokes tools via PATH. Install the tools you need:
+
+- **httpx** — https://github.com/projectdiscovery/httpx
+- **nuclei** — https://github.com/projectdiscovery/nuclei
+
+---
+
 ## Adding a New Feature
 
 When adding a router, model change, or notable behavior change, update these files:

@@ -9,6 +9,9 @@ Personal bug bounty workflow tool. FastAPI backend (Railway) + Next.js 16 fronte
 - `backend/tests/` — pytest suite, 42 tests, uses SQLite
 - `frontend/app/` — Next.js App Router pages and components
 - `frontend/app/components/` — one component per section (FindingsSection, ReportsSection, etc.)
+- `runner/` — VardrRunner v1 local CLI; separate venv, installable via `pip install -e ./runner`
+- `runner/vardrrunner/` — Python package: config, api client, subprocess runner, command modules
+- `runner/tests/` — 17 tests; all subprocess and HTTP calls are mocked
 - `docs/` — architecture, API reference, development setup, security testing record
 - `CHANGELOG.md` — version history, updated with every change
 
@@ -48,6 +51,12 @@ npm run lint
 npm run build
 ```
 
+Runner changes:
+```
+cd runner
+.\venv\Scripts\pytest.exe tests -v
+```
+
 ## Running locally
 
 Backend:
@@ -65,8 +74,9 @@ npm run dev
 ```
 
 ## Current roadmap
-- Paginate findings and reports
 - Extract frontend app state into context/reducer
-- Authenticated scanning from the UI
+- Authenticated scanning from the UI (VardrRunner job queue integration)
 - PDF report export
 - RBAC / multi-user support
+- VardrRunner: subfinder support for wildcard scope entries
+- VardrRunner: extract to separate repo (VardrSec/VardrRunner) when API stabilizes
