@@ -34,6 +34,50 @@ export type ScanJob = {
   created_at: string | null; started_at: string | null; completed_at: string | null;
   error_message: string;
 };
+
+export type LogLine = {
+  kind: "sys" | "info" | "out" | "ok" | "warn" | "err" | "hit";
+  text: string;
+  sev?: string;
+};
+
+export type ConfigField = {
+  key: string;
+  label: string;
+  type: "toggle" | "text" | "number";
+  default?: boolean;
+  placeholder?: string;
+};
+
+export type ToolDef = {
+  id: string;
+  label: string;
+  glyph: string;
+  blurb: string;
+  yields: string;
+  yieldsTo: string;
+  sources: string[];
+  config: ConfigField[];
+};
+
+export type ScanJobUI = {
+  id: string;
+  tool: string;
+  source: string;
+  config: Record<string, unknown>;
+  status: "pending" | "running" | "done" | "failed";
+  targets: number;
+  progress: number;
+  yield: number;
+  yieldKind: string;
+  queuedAt: string;
+  startedAt: string | null;
+  endedAt: string | null;
+  durationMs: number | null;
+  error?: string;
+  log: LogLine[];
+  _full?: LogLine[];
+};
 export type Section = "dashboard" | "program" | "scope" | "imports" | "recon" | "scanning" | "manual" | "findings" | "reports" | "jobs" | "settings";
 export type AppSession = {
   user?: { name?: string | null; email?: string | null; image?: string | null; githubId?: string; username?: string };

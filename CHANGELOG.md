@@ -4,6 +4,27 @@ All notable changes to VardrMap. Versions are tagged by milestone — this proje
 
 ---
 
+## v0.9.0 — Scan Jobs orchestration console (2026-06-09)
+
+### Changed
+- **Scan Jobs section redesigned** as a full orchestration console with four zones:
+  - **Execution Link (Bridge)** — animated wire visualization showing VardrMap ↔ VardrRunner connection status; collapsible strip mode; auto-run toggle; runner connect/disconnect
+  - **Telemetry** — four stat tiles (running, completed, results yielded, avg runtime + throughput sparkline)
+  - **Composer** — tool picker (subfinder / httpx / nuclei) with per-tool config fields, target source selector with live counts, summary line, and Queue Job button
+  - **Job Board + Terminal** — three switchable board views (Stream, Pipeline, Table); selecting a job opens a live terminal showing streamed log output; re-queue and cancel actions
+- Jobs animate through their lifecycle (pending → running → done/failed) in the browser via a 800ms simulation engine matching the real VardrRunner execution model
+- Seed data provides a realistic spread of jobs across all lifecycle states on first load
+- Components extracted to `frontend/app/components/jobs/` (Bridge, Telemetry, Composer, JobBoard, Terminal, mockData)
+
+### Added
+- `ScanJobUI`, `LogLine`, `ToolDef`, `ConfigField` TypeScript types in `frontend/app/types.ts`
+- CSS keyframe animations `wireFlow` and `packetRun` for the Bridge link wire
+
+### Fixed
+- Backend `POST /programs/{id}/jobs` now accepts `tool_type: "subfinder"` — the validation check previously only allowed `httpx` and `nuclei`, which would reject any subfinder job queued from the Composer
+
+---
+
 ## v0.8.0 — PDF export, scan job queue, and subfinder (2026-06-09)
 
 ### Added

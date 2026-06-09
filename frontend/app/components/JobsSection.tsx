@@ -1,236 +1,287 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { ScanJob } from "../types";
+import { useEffect, useRef, useState } from "react";
+import type { ScanJobUI } from "../types";
 import { useAppContext } from "../context/AppContext";
-import { Panel, SelectField, PrimaryButton, SectionHeader } from "./ui";
+import { initJobs, nextId, computeYield, logFor, RUNNER } from "./jobs/mockData";
+import Bridge from "./jobs/Bridge";
+import Telemetry from "./jobs/Telemetry";
+import Composer from "./jobs/Composer";
+import JobBoard from "./jobs/JobBoard";
+import Terminal from "./jobs/Terminal";
 
-type JobForm = {
-  tool_type: string;
-  target_source: string;
-  config: {
-    status_code: string;
-    limit: string;
-    severity: string;
-    templates: string;
-  };
-};
+const ACCENT = "#f59e0b";
+const LS = "vardrmap:jobs:prefs";
 
-const EMPTY_FORM: JobForm = {
-  tool_type: "httpx",
-  target_source: "scope",
-  config: { status_code: "", limit: "", severity: "", templates: "" },
-};
+type Prefs = { view: "stream" | "pipeline" | "table"; collapsed: boolean; showTerminal: boolean };
 
-const STATUS_COLORS: Record<string, string> = {
-  pending:  "text-[#94a3b8] border-[#3a3a3a]",
-  running:  "text-[#f59e0b] border-[#f59e0b]/40",
-  done:     "text-[#a6e3a1] border-[#a6e3a1]/30",
-  failed:   "text-[#f87171] border-[#f87171]/30",
-};
+function loadPrefs(): Prefs {
+  if (typeof window === "undefined") return { view: "stream", collapsed: false, showTerminal: true };
+  try {
+    const stored = localStorage.getItem(LS);
+    if (stored) return { view: "stream", collapsed: false, showTerminal: true, ...JSON.parse(stored) };
+  } catch { /* ignore */ }
+  return { view: "stream", collapsed: false, showTerminal: true };
+}
 
-function JobStatusChip({ status }: { status: string }) {
-  const cls = STATUS_COLORS[status] ?? "text-[#52525b] border-[#2e2e2e]";
+type Toast = { text: string; id: number };
+
+function ToastBanner({ msg, accent }: { msg: Toast | null; accent: string }) {
+  if (!msg) return null;
+  const err = /fail|offline|error/i.test(msg.text);
   return (
-    <span className={`rounded border px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest ${cls}`}>
-      {status}
-    </span>
+    <div className="mb-5 flex items-center gap-2.5 rounded-lg border px-4 py-3 text-sm"
+      style={err
+        ? { borderColor: "#7f1d1d", backgroundColor: "rgba(127,29,29,0.18)", color: "#fca5a5" }
+        : { borderColor: `${accent}33`, backgroundColor: `${accent}0d`, color: accent }}>
+      <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full"
+        style={{ backgroundColor: err ? "#f87171" : accent }} />
+      {msg.text}
+    </div>
   );
 }
 
-function fmtDate(iso: string | null) {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" });
-}
-
 export default function JobsSection({ programId }: { programId: string }) {
-  const { authFetch, setMessage } = useAppContext();
-  const [jobs,    setJobs]    = useState<ScanJob[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [form,    setForm]    = useState<JobForm>(EMPTY_FORM);
-  const [submitting, setSubmitting] = useState(false);
+  void programId; // TODO: replace mock data with GET /programs/{id}/jobs + SSE stream
 
-  const loadJobs = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await authFetch(`/programs/${programId}/jobs`);
-      if (!res.ok) throw new Error();
-      const data = await res.json();
-      setJobs(Array.isArray(data?.jobs) ? data.jobs : []);
-    } catch { setMessage("Failed to load jobs."); } finally { setLoading(false); }
-  }, [programId, authFetch, setMessage]);
+  const { selectedProgram } = useAppContext();
+  const scopeCount  = selectedProgram?.scope.in.length  ?? 14;
+  const reconCount  = selectedProgram?.recon_count      ?? 142;
+  const programName = selectedProgram?.name             ?? "Active Program";
 
-  useEffect(() => { void loadJobs(); }, [loadJobs]);
-
-  async function createJob() {
-    setSubmitting(true);
-    try {
-      const config: Record<string, unknown> = {};
-      if (form.config.status_code) config.status_code = Number(form.config.status_code);
-      if (form.config.limit)       config.limit       = Number(form.config.limit);
-      if (form.config.severity)    config.severity    = form.config.severity;
-      if (form.config.templates)   config.templates   = form.config.templates.split(",").map((s) => s.trim()).filter(Boolean);
-
-      const res = await authFetch(`/programs/${programId}/jobs`, {
-        method: "POST",
-        body: JSON.stringify({
-          tool_type:     form.tool_type,
-          target_source: form.target_source,
-          config,
-        }),
-      });
-      if (!res.ok) throw new Error();
-      setForm(EMPTY_FORM);
-      await loadJobs();
-      setMessage("Job queued. Run `vardrrunner jobs run` to execute.");
-    } catch { setMessage("Failed to queue job."); } finally { setSubmitting(false); }
+  // Persisted UI prefs
+  const [prefs, setPrefs] = useState<Prefs>(loadPrefs);
+  function pref<K extends keyof Prefs>(key: K, val: Prefs[K]) {
+    setPrefs((p) => {
+      const next = { ...p, [key]: val };
+      try { localStorage.setItem(LS, JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
   }
 
+  const [jobs,          setJobs]          = useState<ScanJobUI[]>(initJobs);
+  const [runnerOnline,  setRunnerOnline]  = useState(true);
+  const [autoRun,       setAutoRun]       = useState(false);
+  const [lastPoll,      setLastPoll]      = useState(() => new Date().toISOString());
+  const [activeId,      setActiveId]      = useState<string | null>("job_095");
+  const [pulseKey,      setPulseKey]      = useState(0);
+  const [toast,         setToast]         = useState<Toast | null>(null);
+
+  function flash(text: string) { setToast({ text, id: Date.now() }); }
+  useEffect(() => {
+    if (!toast) return;
+    const id = setTimeout(() => setToast(null), 3200);
+    return () => clearTimeout(id);
+  }, [toast]);
+
+  // refs so the interval closure reads fresh values without re-subscribing
+  const onlineRef = useRef(runnerOnline);
+  const autoRef   = useRef(autoRun);
+  const runReqRef = useRef(false);
+  const tickN     = useRef(0);
+
+  useEffect(() => { onlineRef.current = runnerOnline; }, [runnerOnline]);
+  useEffect(() => { autoRef.current   = autoRun; },     [autoRun]);
+
+  // Simulation engine — advances running jobs, claims pending when allowed
+  useEffect(() => {
+    const iv = setInterval(() => {
+      tickN.current++;
+      const online = onlineRef.current;
+
+      if (online && tickN.current % 3 === 0) {
+        setLastPoll(new Date().toISOString());
+        setPulseKey((k) => k + 1);
+      }
+
+      setJobs((prev) => {
+        let next = prev.map((j) => ({ ...j }));
+        const runningCount = () => next.filter((j) => j.status === "running").length;
+
+        // advance running jobs
+        next = next.map((j) => {
+          if (j.status !== "running" || !online) return j;
+          const inc = 6 + Math.random() * 10;
+          const p = Math.min(100, Math.round(j.progress + inc));
+          const full = j._full ?? [];
+          const shown = Math.max(1, Math.floor((p / 100) * full.length));
+          const log = full.slice(0, shown);
+          if (p >= 100) {
+            const dur = j.startedAt
+              ? Date.now() - new Date(j.startedAt).getTime()
+              : 90000;
+            return { ...j, status: "done", progress: 100, log: full, endedAt: new Date().toISOString(), durationMs: dur };
+          }
+          return { ...j, progress: p, log };
+        });
+
+        // claim pending jobs when allowed and capacity available
+        const allowClaim = online && (autoRef.current || runReqRef.current);
+        if (allowClaim) {
+          while (runningCount() < RUNNER.concurrency) {
+            const pending = next
+              .map((j, i) => ({ j, i }))
+              .filter((x) => x.j.status === "pending")
+              .sort((a, b) => new Date(a.j.queuedAt).getTime() - new Date(b.j.queuedAt).getTime());
+            if (!pending[0]) { runReqRef.current = false; break; }
+            const { j, i } = pending[0];
+            const y = computeYield(j.tool, j.targets);
+            const claimed: ScanJobUI = {
+              ...j, yield: y, status: "running", progress: 4,
+              startedAt: new Date().toISOString(),
+            };
+            claimed._full = logFor(claimed);
+            claimed.log = claimed._full.slice(0, 1);
+            next[i] = claimed;
+          }
+        }
+
+        return next;
+      });
+    }, 800);
+    return () => clearInterval(iv);
+  }, []);
+
+  const sorted       = [...jobs].sort((a, b) => new Date(b.queuedAt).getTime() - new Date(a.queuedAt).getTime());
+  const activeJob    = jobs.find((j) => j.id === activeId) ?? null;
   const pendingCount = jobs.filter((j) => j.status === "pending").length;
   const runningCount = jobs.filter((j) => j.status === "running").length;
+  const busy         = runningCount > 0;
+
+  function queueJob(spec: { tool: string; source: string; config: Record<string, unknown>; targets: number; yieldKind: string }) {
+    const job: ScanJobUI = {
+      id: nextId(), tool: spec.tool, source: spec.source, config: spec.config,
+      status: "pending", targets: spec.targets, progress: 0, yield: 0,
+      yieldKind: spec.yieldKind, queuedAt: new Date().toISOString(),
+      startedAt: null, endedAt: null, durationMs: null, log: [], _full: [],
+    };
+    setJobs((p) => [job, ...p]);
+    setActiveId(job.id);
+    flash(autoRef.current && onlineRef.current
+      ? "Job queued — runner will claim it shortly."
+      : "Job queued. Run `vardrrunner jobs run` to execute.");
+  }
+
+  function runPending() {
+    if (!runnerOnline) { flash("Runner offline — connect VardrRunner first."); return; }
+    runReqRef.current = true;
+    flash(`Dispatching ${pendingCount} pending job${pendingCount > 1 ? "s" : ""} to ${RUNNER.host}…`);
+  }
+
+  function toggleRunner() {
+    setRunnerOnline((v) => {
+      const nv = !v;
+      flash(nv ? `VardrRunner reconnected · ${RUNNER.user}@${RUNNER.host}` : "VardrRunner disconnected — queue will hold.");
+      return nv;
+    });
+  }
+
+  function retry(id: string) {
+    setJobs((p) => p.map((j) => j.id === id
+      ? { ...j, status: "pending", progress: 0, yield: 0, log: [], _full: [], error: undefined, startedAt: null, endedAt: null, durationMs: null, queuedAt: new Date().toISOString() }
+      : j));
+    flash("Job re-queued.");
+  }
+
+  function cancel(id: string) {
+    setJobs((p) => p.map((j) => j.id === id
+      ? { ...j, status: "failed", error: "cancelled by operator", log: [...j.log, { kind: "err" as const, text: "✗ cancelled by operator" }] }
+      : j));
+    flash("Job cancelled.");
+  }
 
   return (
-    <div className="space-y-7">
-      <SectionHeader
-        title="Scan Jobs"
-        description="Queue scan jobs for VardrRunner to execute on your machine."
+    <div className="space-y-5">
+      {/* Section header */}
+      <div className="flex flex-wrap items-end justify-between gap-4 border-b border-[#2e2e2e] pb-5">
+        <div>
+          <div className="flex items-center gap-2.5">
+            <h2 className="text-2xl font-bold tracking-tight text-[#f1f5f9]">Scan Jobs</h2>
+            <span className="rounded border border-[#2e2e2e] px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest text-[#52525b]">
+              orchestration
+            </span>
+          </div>
+          <p className="mt-1.5 text-sm text-[#52525b]">
+            Dispatch recon &amp; scan jobs to VardrRunner on your machine — results stream back into VardrMap.
+          </p>
+        </div>
+        {/* View switch */}
+        <div className="flex rounded-lg border border-[#2e2e2e] bg-[#1a1a1a] p-0.5">
+          {(["stream", "pipeline", "table"] as const).map((v) => (
+            <button key={v} onClick={() => pref("view", v)}
+              className="rounded-md px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider transition"
+              style={prefs.view === v ? { backgroundColor: "#2e2e2e", color: "#f1f5f9" } : { color: "#52525b" }}>
+              {v}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <ToastBanner msg={toast} accent={ACCENT} />
+
+      {/* Bridge */}
+      <Bridge
+        accent={ACCENT}
+        runnerOnline={runnerOnline}
+        autoRun={autoRun}
+        lastPoll={lastPoll}
+        queueDepth={pendingCount}
+        runningCount={runningCount}
+        busy={busy}
+        pulseKey={pulseKey}
+        collapsed={prefs.collapsed}
+        onToggleRunner={toggleRunner}
+        onToggleAuto={() => setAutoRun((v) => !v)}
+        onToggleCollapse={() => pref("collapsed", !prefs.collapsed)}
       />
 
-      <div className="grid gap-5 xl:grid-cols-2">
-        <Panel title="New Scan Job">
-          <div className="grid gap-3">
-            <SelectField
-              label="Tool"
-              value={form.tool_type}
-              onChange={(v) => setForm({ ...form, tool_type: v })}
-              options={["httpx", "nuclei"]}
+      {/* Telemetry */}
+      <Telemetry jobs={jobs} accent={ACCENT} />
+
+      {/* Composer + board + terminal */}
+      <div className="grid gap-5 xl:grid-cols-[320px_1fr]">
+        <div>
+          <Composer
+            accent={ACCENT}
+            onQueue={queueJob}
+            runnerOnline={runnerOnline}
+            scopeCount={scopeCount}
+            reconCount={reconCount}
+            programName={programName}
+          />
+        </div>
+        <div className="space-y-5">
+          <JobBoard
+            jobs={sorted}
+            accent={ACCENT}
+            view={prefs.view}
+            activeId={activeId}
+            onSelect={(id) => { setActiveId(id); pref("showTerminal", true); }}
+            onRunPending={runPending}
+            pendingCount={pendingCount}
+            runnerOnline={runnerOnline}
+            autoRun={autoRun}
+          />
+
+          {prefs.showTerminal ? (
+            <Terminal
+              job={activeJob}
+              accent={ACCENT}
+              onClose={() => pref("showTerminal", false)}
+              onRetry={retry}
+              onCancel={cancel}
             />
-            <SelectField
-              label="Target Source"
-              value={form.target_source}
-              onChange={(v) => setForm({ ...form, target_source: v })}
-              options={["scope", "recon"]}
-            />
-
-            {form.tool_type === "httpx" && (
-              <div className="grid gap-3 md:grid-cols-2">
-                <div>
-                  <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-widest text-[#52525b]">
-                    Status Code Filter
-                  </label>
-                  <input
-                    type="number"
-                    placeholder="e.g. 200"
-                    value={form.config.status_code}
-                    onChange={(e) => setForm({ ...form, config: { ...form.config, status_code: e.target.value } })}
-                    className="w-full rounded-md border border-[#2e2e2e] bg-[#161616] px-2.5 py-2 text-sm text-[#f1f5f9] transition focus:border-[#f59e0b] focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-widest text-[#52525b]">
-                    Limit
-                  </label>
-                  <input
-                    type="number"
-                    placeholder="e.g. 500"
-                    value={form.config.limit}
-                    onChange={(e) => setForm({ ...form, config: { ...form.config, limit: e.target.value } })}
-                    className="w-full rounded-md border border-[#2e2e2e] bg-[#161616] px-2.5 py-2 text-sm text-[#f1f5f9] transition focus:border-[#f59e0b] focus:outline-none"
-                  />
-                </div>
-              </div>
-            )}
-
-            {form.tool_type === "nuclei" && (
-              <div className="grid gap-3 md:grid-cols-2">
-                <div>
-                  <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-widest text-[#52525b]">
-                    Severity Filter
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. high,critical"
-                    value={form.config.severity}
-                    onChange={(e) => setForm({ ...form, config: { ...form.config, severity: e.target.value } })}
-                    className="w-full rounded-md border border-[#2e2e2e] bg-[#161616] px-2.5 py-2 text-sm text-[#f1f5f9] transition focus:border-[#f59e0b] focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-widest text-[#52525b]">
-                    Templates (comma-sep)
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. cves,exposures"
-                    value={form.config.templates}
-                    onChange={(e) => setForm({ ...form, config: { ...form.config, templates: e.target.value } })}
-                    className="w-full rounded-md border border-[#2e2e2e] bg-[#161616] px-2.5 py-2 text-sm text-[#f1f5f9] transition focus:border-[#f59e0b] focus:outline-none"
-                  />
-                </div>
-              </div>
-            )}
-
-            <div className="rounded-lg border border-[#2e2e2e] bg-[#0d0d0d] px-3 py-2.5 text-xs text-[#52525b]">
-              Run <span className="font-mono text-[#94a3b8]">vardrrunner jobs run</span> to pick up pending jobs.
-            </div>
-
-            <PrimaryButton onClick={createJob} label={submitting ? "Queuing…" : "Queue Job"} />
-          </div>
-        </Panel>
-
-        <Panel title={`Job Queue${jobs.length > 0 ? ` (${jobs.length})` : ""}`}>
-          {pendingCount > 0 && (
-            <p className="mb-3 text-xs text-[#f59e0b]">
-              {pendingCount} pending — run <span className="font-mono">vardrrunner jobs run</span> to execute
-              {runningCount > 0 && `, ${runningCount} running`}
-            </p>
-          )}
-
-          {loading ? (
-            <p className="text-sm text-[#3a3a3a]">Loading…</p>
-          ) : jobs.length === 0 ? (
-            <p className="text-sm text-[#3a3a3a]">No jobs yet.</p>
           ) : (
-            <div className="space-y-2">
-              {jobs.map((job) => (
-                <div key={job.id} className="rounded-xl border border-[#2e2e2e] bg-[#161616] px-4 py-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-sm font-semibold text-[#f1f5f9]">
-                          {job.tool_type}
-                        </span>
-                        <span className="text-[#3a3a3a]">·</span>
-                        <span className="text-xs text-[#52525b]">{job.target_source}</span>
-                      </div>
-                      <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                        <JobStatusChip status={job.status} />
-                        <span className="font-mono text-[10px] text-[#3a3a3a]">{fmtDate(job.created_at)}</span>
-                        {job.status === "done" && job.completed_at && (
-                          <span className="font-mono text-[10px] text-[#a6e3a1]">done {fmtDate(job.completed_at)}</span>
-                        )}
-                      </div>
-                      {job.error_message && (
-                        <p className="mt-1.5 font-mono text-xs text-[#f87171]">{job.error_message}</p>
-                      )}
-                      {Object.keys(job.config).length > 0 && (
-                        <p className="mt-1 font-mono text-[10px] text-[#3a3a3a]">
-                          {Object.entries(job.config).map(([k, v]) => `${k}=${Array.isArray(v) ? v.join(",") : v}`).join("  ")}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
-              <button
-                onClick={loadJobs}
-                className="w-full rounded-md border border-[#2e2e2e] px-4 py-2 text-xs text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#94a3b8]"
-              >
-                Refresh
-              </button>
-            </div>
+            <button
+              onClick={() => pref("showTerminal", true)}
+              className="flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-[#2e2e2e] py-3 font-mono text-[11px] text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#94a3b8]">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                <polyline points="4 17 10 11 4 5" /><line x1="12" y1="19" x2="20" y2="19" />
+              </svg>
+              show terminal
+            </button>
           )}
-        </Panel>
+        </div>
       </div>
     </div>
   );

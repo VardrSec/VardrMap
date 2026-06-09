@@ -30,7 +30,7 @@ const NAV_ITEMS: { section: Section; label: string; icon: string }[] = [
   { section: "manual",    label: "Manual Testing",  icon: "✦" },
   { section: "findings",  label: "Findings",        icon: "⚑" },
   { section: "reports",   label: "Reports",         icon: "◧" },
-  { section: "jobs",      label: "Scan Jobs",       icon: "⬡" },
+  { section: "jobs",      label: "Scan Jobs",       icon: "▣" },
   { section: "settings",  label: "Settings",        icon: "◆" },
 ];
 

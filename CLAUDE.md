@@ -76,7 +76,7 @@ npm run dev
 
 ## Current roadmap
 
-Shipped (v0.8.0):
+Shipped (v0.9.0):
 - Frontend app state extracted into context/reducer (AppContext + appReducer)
 - PDF report export (jsPDF, client-side)
 - Scan job queue — UI creates jobs, VardrRunner polls and executes locally
@@ -84,8 +84,10 @@ Shipped (v0.8.0):
 - VardrRunner: `vardrrunner jobs list` and `vardrrunner jobs run`
 - VardrRunner: missing tool marks job failed instead of silently skipping
 - CI: runner tests added to GitHub Actions workflow
+- Scan Jobs orchestration console — Bridge, Telemetry, Composer, JobBoard (stream/pipeline/table), Terminal with live log streaming
 
 Remaining:
+- Scan Jobs: wire real API (replace mock seed data with `GET /programs/{id}/jobs`; SSE stream for live logs)
 - RBAC / multi-user support
 - VardrRunner: extract to separate repo (VardrSec/VardrRunner) when API stabilizes
 - AI-assisted finding triage and report drafting

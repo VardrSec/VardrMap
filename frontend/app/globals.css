@@ -24,3 +24,32 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+@keyframes wireFlow {
+  from { background-position-x: 0px; }
+  to   { background-position-x: 14px; }
+}
+
+@keyframes packetRun {
+  0%   { left: -5%;  opacity: 0; }
+  10%  { opacity: 1; }
+  90%  { opacity: 1; }
+  100% { left: 105%; opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wire-flow-anim,
+  .packet-run-anim {
+    animation: none !important;
+  }
+}
+
+/* Custom scrollbar — jobs console + terminal */
+.jobs-scroll::-webkit-scrollbar { width: 10px; }
+.jobs-scroll::-webkit-scrollbar-track { background: transparent; }
+.jobs-scroll::-webkit-scrollbar-thumb {
+  background: #2e2e2e;
+  border: 2px solid #161616;
+  border-radius: 9999px;
+}
+.jobs-scroll::-webkit-scrollbar-thumb:hover { background: #3a3a3a; }
