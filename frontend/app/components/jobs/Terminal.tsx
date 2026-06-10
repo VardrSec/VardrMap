@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import type { ScanJobUI, LogLine } from "../../types";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { JobEvent, ScanJobUI, LogLine } from "../../types";
+import { useAppContext } from "../../context/AppContext";
 import { TOOLS, fmtClock, fmtDur } from "./mockData";
 
 const LINE_COLOR: Record<string, string> = {
@@ -24,7 +25,19 @@ const PREFIX: Record<string, string> = {
   sys: "›", hit: "✶", err: "✗", ok: "✓",
 };
 
-function LogLine({ line }: { line: LogLine }) {
+function eventToLogLine(e: JobEvent): LogLine {
+  switch (e.kind) {
+    case "started":          return { kind: "sys",  text: e.text || "runner claimed job" };
+    case "targets_resolved": return { kind: "info", text: e.text };
+    case "running":          return { kind: "info", text: e.text };
+    case "uploaded":         return { kind: "ok",   text: e.text };
+    case "done":             return { kind: "ok",   text: e.text || "job complete" };
+    case "failed":           return { kind: "err",  text: e.text };
+    default:                 return { kind: "out",  text: e.text };
+  }
+}
+
+function LogLineRow({ line }: { line: LogLine }) {
   const color = line.kind === "hit"
     ? (SEV_COLOR[line.sev ?? ""] || "#fab387")
     : LINE_COLOR[line.kind] || "#52525b";
@@ -45,6 +58,8 @@ function ToolGlyph({ tool, color }: { tool: string; color: string }) {
   );
 }
 
+const POLL_MS = 3000;
+
 type TerminalProps = {
   job: ScanJobUI | null;
   accent: string;
@@ -54,14 +69,48 @@ type TerminalProps = {
 };
 
 export default function Terminal({ job, accent, onClose, onRetry, onCancel }: TerminalProps) {
+  const { authFetch } = useAppContext();
+  // Cache tagged with jobId — stale cache from a previous job never renders
+  const [eventsCache, setEventsCache] = useState<{ jobId: string; events: JobEvent[] } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const lines = job?.log ?? [];
+
+  const jobId     = job?.id     ?? null;
+  const jobStatus = job?.status ?? null;
+
+  const fetchEvents = useCallback(async () => {
+    if (!jobId) return;
+    try {
+      const res = await authFetch(`/jobs/${jobId}/events`);
+      if (res.ok) {
+        const data = await res.json() as { events?: JobEvent[] };
+        setEventsCache({ jobId, events: data.events ?? [] });
+      }
+    } catch { /* ignore */ }
+  }, [jobId, authFetch]);
+
+  useEffect(() => {
+    // Use timers so fetchEvents (which calls setState) is never called
+    // synchronously in the effect body — avoids react-hooks/set-state-in-effect
+    const initTid = setTimeout(() => { void fetchEvents(); }, 0);
+    const isActive = jobId && (jobStatus === "pending" || jobStatus === "running");
+    const pollTid  = isActive ? setInterval(() => { void fetchEvents(); }, POLL_MS) : undefined;
+    return () => {
+      clearTimeout(initTid);
+      if (pollTid !== undefined) clearInterval(pollTid);
+    };
+  }, [jobId, jobStatus, fetchEvents]);
+
+  // Only use cached events when they belong to the currently selected job
+  const events = eventsCache?.jobId === jobId ? eventsCache.events : [];
+  const lines: LogLine[] = events.length > 0
+    ? events.map(eventToLogLine)
+    : (job?.log ?? []);
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [lines.length, job?.id]);
+  }, [lines.length, jobId]);
 
   if (!job) {
     return (
@@ -136,7 +185,7 @@ export default function Terminal({ job, accent, onClose, onRetry, onCancel }: Te
             waiting for runner to claim job…
           </div>
         ) : (
-          lines.map((l, i) => <LogLine key={i} line={l} />)
+          lines.map((l, i) => <LogLineRow key={i} line={l} />)
         )}
         {job.status === "running" && lines.length > 0 && (
           <div className="mt-0.5 flex items-center gap-1">

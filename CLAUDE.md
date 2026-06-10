@@ -76,6 +76,11 @@ npm run dev
 
 ## Current roadmap
 
+Shipped (v0.13.0):
+- Job events — `job_events` table + migration 0006; `POST /jobs/{id}/events` (VardrRunner posts lifecycle events); `GET /jobs/{id}/events` (Terminal polls)
+- VardrRunner posts started/targets_resolved/running/uploaded/done/failed events via `_emit()` helper
+- Terminal polls events at 3 s while job is pending/running; maps event kinds to colored log lines; stops on terminal state
+
 Shipped (v0.12.0):
 - VardrRunner real heartbeat — `POST /runner/heartbeat` + `GET /runner/status`; Bridge shows real hostname, version, OS, and per-tool availability with version chips
 - `vardrrunner heartbeat` explicit command; auto-heartbeat at start of `vardrrunner jobs run`
@@ -104,7 +109,7 @@ Shipped (v0.9.0):
 - Scan Jobs orchestration console — Bridge, Telemetry, Composer, JobBoard (stream/pipeline/table), Terminal with live log streaming
 
 Remaining:
-- Job events / real logs — `job_events` table, `POST /jobs/{id}/events` for VardrRunner, `GET /jobs/{id}/events` for frontend Terminal to poll (polling first, SSE later)
+- Atomic job claim — `POST /jobs/{id}/claim` only updates where `status = 'pending'`, returns 409 if already claimed
 - Nmap / service discovery — `vardrrunner run nmap --from-recon --top-ports 100`, safe profiles only, store as services table
 - RBAC / multi-user support
 - Opportunities / Target Radar — new programs or changed scopes

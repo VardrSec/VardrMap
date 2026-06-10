@@ -7,9 +7,14 @@ from sqlalchemy.orm import Session
 
 from db import get_db
 from deps import get_current_user, get_program_or_404, log_action
-from models import ScanJob
+from models import JobEvent, ScanJob
 
 router = APIRouter(tags=["jobs"])
+
+
+class EventCreate(BaseModel):
+    kind: str
+    text: str = ""
 
 
 class JobCreate(BaseModel):
@@ -134,3 +139,65 @@ def update_job(
     db.commit()
     db.refresh(job)
     return serialize_job(job)
+
+
+def serialize_event(e: JobEvent) -> dict:
+    return {
+        "id":             e.id,
+        "job_id":         e.job_id,
+        "kind":           e.kind,
+        "text":           e.text,
+        "created_at":     e.created_at.isoformat() if e.created_at else None,
+    }
+
+
+@router.post("/jobs/{job_id}/events", status_code=201)
+def create_job_event(
+    job_id: str,
+    body: EventCreate,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """VardrRunner posts lifecycle events here while executing a job."""
+    job = (
+        db.query(ScanJob)
+        .filter(ScanJob.id == job_id, ScanJob.owner_github_id == current_user["github_id"])
+        .first()
+    )
+    if not job:
+        raise HTTPException(status_code=404)
+
+    event = JobEvent(
+        job_id=job_id,
+        owner_github_id=current_user["github_id"],
+        kind=body.kind,
+        text=body.text,
+    )
+    db.add(event)
+    db.commit()
+    db.refresh(event)
+    return serialize_event(event)
+
+
+@router.get("/jobs/{job_id}/events")
+def get_job_events(
+    job_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Frontend polls this to stream job lifecycle events into the Terminal."""
+    job = (
+        db.query(ScanJob)
+        .filter(ScanJob.id == job_id, ScanJob.owner_github_id == current_user["github_id"])
+        .first()
+    )
+    if not job:
+        raise HTTPException(status_code=404)
+
+    events = (
+        db.query(JobEvent)
+        .filter(JobEvent.job_id == job_id)
+        .order_by(JobEvent.created_at.asc())
+        .all()
+    )
+    return {"events": [serialize_event(e) for e in events]}

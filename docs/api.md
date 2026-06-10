@@ -647,3 +647,70 @@ Frontend polls this to check connectivity and display runner details in the Brid
 ```json
 { "online": false, "last_seen": null, "hostname": null, "version": null, "os": null, "tools": {} }
 ```
+
+---
+
+## Job Events
+
+VardrRunner posts lifecycle events as it executes a job. The frontend Terminal polls these to display real-time progress without an SSE connection.
+
+### `POST /jobs/{job_id}/events`
+VardrRunner posts a lifecycle event for a job it owns.
+
+**Path params**
+- `job_id` — UUID of the scan job
+
+**Request body**
+```json
+{ "kind": "started", "text": "runner claimed job · 4 targets from scope" }
+```
+
+**Event kinds**
+
+| `kind` | When posted |
+|---|---|
+| `started` | Runner claims the job and begins execution |
+| `targets_resolved` | Target list has been built (text: count and source) |
+| `running` | Tool subprocess has been launched (text: tool + target count) |
+| `uploaded` | Results uploaded successfully (text: count of imported items) |
+| `done` | Job completed successfully |
+| `failed` | Job failed (text: error message) |
+| `log` | Generic log line (reserved for future use) |
+
+**Response** `201`
+```json
+{
+  "id":         "uuid",
+  "job_id":     "uuid",
+  "kind":       "started",
+  "text":       "runner claimed job · 4 targets from scope",
+  "created_at": "2026-06-10T12:34:56.789012"
+}
+```
+
+**Errors**
+- `401` — not authenticated
+- `404` — job not found or belongs to another user
+
+### `GET /jobs/{job_id}/events`
+Frontend polls this to stream job lifecycle events into the Terminal. Returns all events in chronological order.
+
+**Path params**
+- `job_id` — UUID of the scan job
+
+**Response**
+```json
+{
+  "events": [
+    { "id": "uuid", "job_id": "uuid", "kind": "started",          "text": "runner claimed job · 4 targets from scope", "created_at": "…" },
+    { "id": "uuid", "job_id": "uuid", "kind": "targets_resolved", "text": "4 targets from scope",                     "created_at": "…" },
+    { "id": "uuid", "job_id": "uuid", "kind": "running",          "text": "running httpx against 4 target(s)",        "created_at": "…" },
+    { "id": "uuid", "job_id": "uuid", "kind": "uploaded",         "text": "imported 12 result(s)",                    "created_at": "…" },
+    { "id": "uuid", "job_id": "uuid", "kind": "done",             "text": "",                                         "created_at": "…" }
+  ]
+}
+```
+
+**Errors**
+- `401` — not authenticated
+- `404` — job not found or belongs to another user

@@ -100,7 +100,7 @@ cd backend
 pytest tests -v
 ```
 
-All 71 tests should pass. There are no frontend tests at this time.
+All 84 tests should pass. There are no frontend tests at this time.
 
 ### Test coverage areas
 
@@ -110,6 +110,7 @@ All 71 tests should pass. There are no frontend tests at this time.
 | `tests/test_findings.py` | Finding CRUD, cross-program access denial |
 | `tests/test_imports.py` | File upload parsing, extension/size validation, BOLA |
 | `tests/test_jobs.py` | Scan job CRUD, BOLA isolation, status transitions |
+| `tests/test_job_events.py` | Job event creation, ordering, cascade delete, BOLA isolation |
 | `tests/test_runner_heartbeat.py` | Runner heartbeat upsert, status derivation (online/offline), BOLA isolation |
 | `tests/test_apikeys.py` | Key generation, API key auth at `/me`, revocation, BOLA isolation, max-key limit |
 | `tests/test_auth.py` | JWT validation — missing, expired, wrong audience, garbage token |
@@ -122,7 +123,7 @@ All 71 tests should pass. There are no frontend tests at this time.
 Migrations use Alembic. The migration chain is:
 
 ```
-0001_baseline  →  0002_add_created_at  →  0003_add_api_keys  →  0004_add_scan_jobs  →  0005_add_runner_heartbeats
+0001_baseline  →  0002_add_created_at  →  0003_add_api_keys  →  0004_add_scan_jobs  →  0005_add_runner_heartbeats  →  0006_add_job_events
 ```
 
 ### Production (Railway)
@@ -221,7 +222,7 @@ cd runner
 pytest tests -v
 ```
 
-51 tests should pass. Tests mock all subprocess and HTTP calls — no tools or backend required.
+58 tests should pass. Tests mock all subprocess and HTTP calls — no tools or backend required.
 
 ### Prerequisites for `run` commands
 

@@ -202,6 +202,7 @@ class ScanJob(Base):
     error_message = Column(Text, default="")
 
     program = relationship("Program", back_populates="scan_jobs")
+    events = relationship("JobEvent", back_populates="job", cascade="all, delete-orphan", order_by="JobEvent.created_at")
 
 
 class RunnerHeartbeat(Base):
@@ -215,6 +216,19 @@ class RunnerHeartbeat(Base):
     os_info = Column(String(200), default="")
     tools = Column(JSON, nullable=False, default=dict)  # {"httpx": {"ok": true, "version": "v1.6.9"}}
     last_seen = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+
+
+class JobEvent(Base):
+    __tablename__ = "job_events"
+
+    id = Column(String, primary_key=True, default=new_uuid)
+    job_id = Column(String, ForeignKey("scan_jobs.id", ondelete="CASCADE"), nullable=False, index=True)
+    owner_github_id = Column(String, nullable=False, index=True)
+    kind = Column(String(50), nullable=False)  # started | targets_resolved | running | uploaded | done | failed | log
+    text = Column(Text, nullable=False, default="")
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    job = relationship("ScanJob", back_populates="events")
 
 
 class ApiKey(Base):

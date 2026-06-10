@@ -78,6 +78,14 @@ export type ScanJobUI = {
   log: LogLine[];
   _full?: LogLine[];
 };
+export type JobEvent = {
+  id: string;
+  job_id: string;
+  kind: string;
+  text: string;
+  created_at: string;
+};
+
 export type RunnerStatus = {
   online: boolean;
   last_seen: string | null;

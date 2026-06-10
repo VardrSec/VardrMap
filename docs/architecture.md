@@ -157,6 +157,14 @@ runner_heartbeats
   tools (JSON — {"httpx": {"ok": true, "version": "v1.6.9"}, ...})
   last_seen (UTC datetime — frontend derives online = last_seen < 5 min ago)
 
+job_events
+  id (PK)
+  job_id (FK → scan_jobs.id, CASCADE DELETE, indexed)
+  owner_github_id (indexed)
+  kind ("started"|"targets_resolved"|"running"|"uploaded"|"done"|"failed"|"log")
+  text (detail message — target count, result count, error text, etc.)
+  created_at (UTC datetime)
+
 audit_logs
   id (PK)
   github_id (no FK — records survive user deletion)
@@ -172,6 +180,7 @@ audit_logs
 - `scan_jobs.config` is a JSON column with optional tool options. VardrRunner reads this dict when executing the job.
 - `scan_jobs` are scoped to the owning user via `owner_github_id` — a user can only see/update their own jobs.
 - `runner_heartbeats` is a single-row-per-user upsert table. VardrRunner calls `POST /runner/heartbeat` at the start of `jobs run` (and via `vardrrunner heartbeat`). The frontend polls `GET /runner/status` which derives `online: true` if `last_seen` is within 5 minutes.
+- `job_events` are appended by VardrRunner via `POST /jobs/{id}/events` at each lifecycle stage. The frontend Terminal polls `GET /jobs/{id}/events` (3 s interval while job is pending/running, stops on terminal state). Events cascade-delete with their parent job.
 
 ---
 
@@ -305,11 +314,16 @@ User's machine
   ▼
 runner/
   │  1. GET /jobs/pending  — fetch pending jobs for this user
-  │  2. PATCH /jobs/{id}   — status = "running"  (claim the job)
-  │  3. resolve targets (same logic as manual run commands)
-  │  4. execute tool locally via subprocess
-  │  5. upload results via POST /programs/{id}/imports
-  │  6. PATCH /jobs/{id}   — status = "done" | "failed"
+  │  2. PATCH /jobs/{id}            — status = "running"  (claim the job)
+  │  3. POST  /jobs/{id}/events     — kind = "started"
+  │  4. resolve targets (same logic as manual run commands)
+  │  5. POST  /jobs/{id}/events     — kind = "targets_resolved"
+  │  6. execute tool locally via subprocess
+  │  7. POST  /jobs/{id}/events     — kind = "running"
+  │  8. upload results via POST /programs/{id}/imports
+  │  9. POST  /jobs/{id}/events     — kind = "uploaded"
+  │ 10. PATCH /jobs/{id}            — status = "done" | "failed"
+  │ 11. POST  /jobs/{id}/events     — kind = "done" | "failed"
   ▼
 VardrMap backend — results stored; job status visible in Jobs section
 ```
