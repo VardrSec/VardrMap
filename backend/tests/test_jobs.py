@@ -177,3 +177,98 @@ class TestUpdateJob:
     def test_nonexistent_job_404(self, client, auth_headers):
         res = client.patch("/jobs/does-not-exist", json={"status": "running"}, headers=auth_headers)
         assert res.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# POST /jobs/{id}/logs
+# ---------------------------------------------------------------------------
+
+class TestAppendLogs:
+    def _job_id(self, client, program_id, headers):
+        return _create_job(client, program_id, headers).json()["id"]
+
+    def test_append_success(self, client, program_id, auth_headers):
+        jid = self._job_id(client, program_id, auth_headers)
+        res = client.post(
+            f"/jobs/{jid}/logs",
+            json={"lines": [{"kind": "out", "text": "hello"}, {"kind": "sys", "text": "done"}]},
+            headers=auth_headers,
+        )
+        assert res.status_code == 200
+        assert res.json()["ok"] is True
+
+    def test_append_invalid_kind_coerced(self, client, program_id, auth_headers):
+        jid = self._job_id(client, program_id, auth_headers)
+        res = client.post(
+            f"/jobs/{jid}/logs",
+            json={"lines": [{"kind": "bogus", "text": "line"}]},
+            headers=auth_headers,
+        )
+        assert res.status_code == 200  # coerced to "out", not rejected
+
+    def test_append_unauthorized(self, client, program_id, auth_headers):
+        jid = self._job_id(client, program_id, auth_headers)
+        res = client.post(f"/jobs/{jid}/logs", json={"lines": []})
+        assert res.status_code == 401
+
+    def test_append_wrong_user_404(self, client, program_id, auth_headers, other_headers):
+        jid = self._job_id(client, program_id, auth_headers)
+        res = client.post(
+            f"/jobs/{jid}/logs",
+            json={"lines": [{"kind": "out", "text": "x"}]},
+            headers=other_headers,
+        )
+        assert res.status_code == 404
+
+    def test_append_nonexistent_job_404(self, client, auth_headers):
+        res = client.post(
+            "/jobs/does-not-exist/logs",
+            json={"lines": [{"kind": "out", "text": "x"}]},
+            headers=auth_headers,
+        )
+        assert res.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# GET /jobs/{id}/logs/stream
+# ---------------------------------------------------------------------------
+
+class TestStreamLogs:
+    def test_stream_returns_sse_for_finished_job(self, client, program_id, auth_headers):
+        """Finished job: stream returns existing logs then closes."""
+        jid = _create_job(client, program_id, auth_headers).json()["id"]
+        client.post(
+            f"/jobs/{jid}/logs",
+            json={"lines": [{"kind": "sys", "text": "started"}, {"kind": "out", "text": "result"}]},
+            headers=auth_headers,
+        )
+        client.patch(f"/jobs/{jid}", json={"status": "done"}, headers=auth_headers)
+
+        # Use stream=True to avoid buffering the response body
+        with client.stream("GET", f"/jobs/{jid}/logs/stream", headers=auth_headers) as res:
+            assert res.status_code == 200
+            assert "text/event-stream" in res.headers.get("content-type", "")
+            # Read enough to get the first data line
+            raw = ""
+            for chunk in res.iter_text():
+                raw += chunk
+                if "event: done" in raw:
+                    break
+        assert 'started' in raw
+        assert 'result' in raw
+
+    def test_stream_unauthorized(self, client, program_id, auth_headers):
+        jid = _create_job(client, program_id, auth_headers).json()["id"]
+        client.patch(f"/jobs/{jid}", json={"status": "done"}, headers=auth_headers)
+        res = client.get(f"/jobs/{jid}/logs/stream")
+        assert res.status_code == 401
+
+    def test_stream_wrong_user_404(self, client, program_id, auth_headers, other_headers):
+        jid = _create_job(client, program_id, auth_headers).json()["id"]
+        client.patch(f"/jobs/{jid}", json={"status": "done"}, headers=auth_headers)
+        res = client.get(f"/jobs/{jid}/logs/stream", headers=other_headers)
+        assert res.status_code == 404
+
+    def test_stream_nonexistent_404(self, client, auth_headers):
+        res = client.get("/jobs/does-not-exist/logs/stream", headers=auth_headers)
+        assert res.status_code == 404

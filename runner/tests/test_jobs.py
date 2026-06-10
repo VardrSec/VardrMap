@@ -13,6 +13,10 @@ from vardrrunner import runner
 from vardrrunner.commands import jobs as jobs_cmd
 from vardrrunner.commands.run import run_subfinder, _is_wildcard
 
+# Sentinel iterator returned by mocked streaming runner functions
+_EMPTY_ITER = iter([])
+_SAMPLE_LINES = iter([("out", "https://example.com"), ("sys", "done")])
+
 
 # ---------------------------------------------------------------------------
 # runner.run_subfinder — subprocess args
@@ -87,6 +91,63 @@ def test_run_subfinder_command_no_wildcards_exits():
 
 
 # ---------------------------------------------------------------------------
+# runner streaming functions — subprocess args
+# ---------------------------------------------------------------------------
+
+def test_run_httpx_streaming_cmd(tmp_path):
+    output = tmp_path / "out.jsonl"
+    proc_mock = MagicMock()
+    proc_mock.stdout = iter(["https://example.com [200]\n"])
+    proc_mock.returncode = 0
+    proc_mock.__enter__ = lambda s: s
+    proc_mock.__exit__ = MagicMock(return_value=False)
+
+    with patch("subprocess.Popen", return_value=proc_mock) as mock_popen:
+        lines = list(runner.run_httpx_streaming(["example.com"], output))
+        args = mock_popen.call_args[0][0]
+    assert args[0] == "httpx"
+    assert "-l" in args
+    assert "-json" in args
+    assert "-o" in args
+    assert str(output) in args
+    assert "-silent" not in args          # streaming variant removes -silent
+    assert lines == [("out", "https://example.com [200]")]
+
+
+def test_run_nuclei_streaming_severity(tmp_path):
+    output = tmp_path / "out.jsonl"
+    proc_mock = MagicMock()
+    proc_mock.stdout = iter([])
+    proc_mock.returncode = 0
+    proc_mock.__enter__ = lambda s: s
+    proc_mock.__exit__ = MagicMock(return_value=False)
+
+    with patch("subprocess.Popen", return_value=proc_mock) as mock_popen:
+        list(runner.run_nuclei_streaming(["https://example.com"], output, severity="high"))
+        args = mock_popen.call_args[0][0]
+    assert args[0] == "nuclei"
+    assert "-severity" in args
+    assert "high" in args
+
+
+def test_run_subfinder_streaming_cmd(tmp_path):
+    output = tmp_path / "out.txt"
+    proc_mock = MagicMock()
+    proc_mock.stdout = iter(["sub.example.com\n"])
+    proc_mock.returncode = 0
+    proc_mock.__enter__ = lambda s: s
+    proc_mock.__exit__ = MagicMock(return_value=False)
+
+    with patch("subprocess.Popen", return_value=proc_mock) as mock_popen:
+        lines = list(runner.run_subfinder_streaming(["example.com"], output))
+        args = mock_popen.call_args[0][0]
+    assert args[0] == "subfinder"
+    assert "-dL" in args
+    assert "-o" in args
+    assert lines == [("out", "sub.example.com")]
+
+
+# ---------------------------------------------------------------------------
 # api.VardrMapClient — new methods
 # ---------------------------------------------------------------------------
 
@@ -121,6 +182,15 @@ def test_client_complete_job_failed_with_error():
     with patch.object(client, "patch", return_value={"status": "failed"}) as mock_patch:
         client.complete_job("job-123", "failed", error="timeout")
     mock_patch.assert_called_once_with("/jobs/job-123", json={"status": "failed", "error_message": "timeout"})
+
+
+def test_client_post_logs():
+    from vardrrunner.api import VardrMapClient
+    client = VardrMapClient("http://api", "key")
+    lines = [{"kind": "out", "text": "found something"}]
+    with patch.object(client, "post", return_value={"ok": True}) as mock_post:
+        client.post_logs("job-123", lines)
+    mock_post.assert_called_once_with("/jobs/job-123/logs", json={"lines": lines})
 
 
 # ---------------------------------------------------------------------------
@@ -172,11 +242,44 @@ def test_run_jobs_executes_httpx_job(tmp_path):
          patch("vardrrunner.commands.jobs.api.VardrMapClient", return_value=client), \
          patch("vardrrunner.commands.jobs.runner.tool_available", return_value=True), \
          patch("vardrrunner.commands.jobs._make_run_dir", return_value=tmp_path), \
-         patch("vardrrunner.commands.jobs.runner.run_httpx", return_value=0):
+         patch("vardrrunner.commands.jobs.runner.run_httpx_streaming", return_value=iter([("out", "https://example.com")])):
         jobs_cmd.run_jobs(yes=True)
 
     client.claim_job.assert_called_once_with("job-001")
     client.complete_job.assert_called_once_with("job-001", "done")
+
+
+def test_run_jobs_executes_subfinder_job(tmp_path):
+    """Subfinder jobs extract wildcard domains from scope and upload as httpx recon."""
+    output_file = tmp_path / "subfinder.txt"
+    output_file.write_text("sub1.example.com\nsub2.example.com\n")
+
+    job = {
+        "id": "job-sf", "program_id": "prog-1",
+        "tool_type": "subfinder", "target_source": "scope",
+        "config": {},
+    }
+
+    client = MagicMock()
+    client.pending_jobs.return_value = [job]
+    client.scope.return_value = {
+        "in": [{"value": "*.example.com", "kind": "domain"}, {"value": "plain.io", "kind": "domain"}],
+        "out": [],
+    }
+    client.import_file.return_value = {"import_record": {"imported_count": 2}}
+
+    with patch("vardrrunner.commands.jobs.config.require_auth", return_value=("http://api", "key")), \
+         patch("vardrrunner.commands.jobs.api.VardrMapClient", return_value=client), \
+         patch("vardrrunner.commands.jobs.runner.tool_available", return_value=True), \
+         patch("vardrrunner.commands.jobs._make_run_dir", return_value=tmp_path), \
+         patch("vardrrunner.commands.jobs.runner.run_subfinder_streaming", return_value=iter([("out", "sub1.example.com")])):
+        jobs_cmd.run_jobs(yes=True)
+
+    client.claim_job.assert_called_once_with("job-sf")
+    client.complete_job.assert_called_once_with("job-sf", "done")
+    # Should import as "httpx" type (recon targets)
+    import_call_args = client.import_file.call_args
+    assert import_call_args[0][1] == "httpx"
 
 
 def test_run_jobs_no_jobs_exits():

@@ -1,13 +1,16 @@
+import json
+import time
 from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from db import get_db
+from db import SessionLocal, get_db
 from deps import get_current_user, get_program_or_404, log_action
-from models import ScanJob
+from models import JobLog, ScanJob
 
 router = APIRouter(tags=["jobs"])
 
@@ -21,6 +24,18 @@ class JobCreate(BaseModel):
 class JobStatusUpdate(BaseModel):
     status: str                          # "running" | "done" | "failed"
     error_message: Optional[str] = None
+
+
+class LogLineIn(BaseModel):
+    kind: str = "out"   # sys|info|out|ok|warn|err|hit
+    text: str
+
+
+class LogBatch(BaseModel):
+    lines: list[LogLineIn]
+
+
+_VALID_KINDS = {"sys", "info", "out", "ok", "warn", "err", "hit"}
 
 
 def serialize_job(j: ScanJob) -> dict:
@@ -134,3 +149,86 @@ def update_job(
     db.commit()
     db.refresh(job)
     return serialize_job(job)
+
+
+@router.post("/jobs/{job_id}/logs")
+def append_logs(
+    job_id: str,
+    body: LogBatch,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Append log lines to a job. Called by VardrRunner as the tool produces output."""
+    job = (
+        db.query(ScanJob)
+        .filter(ScanJob.id == job_id, ScanJob.owner_github_id == current_user["github_id"])
+        .first()
+    )
+    if not job:
+        raise HTTPException(status_code=404)
+
+    for line in body.lines:
+        kind = line.kind if line.kind in _VALID_KINDS else "out"
+        db.add(JobLog(job_id=job_id, kind=kind, text=line.text[:4096]))
+    db.commit()
+    return {"ok": True}
+
+
+@router.get("/jobs/{job_id}/logs/stream")
+def stream_job_logs(
+    job_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """SSE endpoint: streams log lines as they're written by VardrRunner.
+    Polls every second; closes ~2 s after the job reaches done/failed."""
+    job = (
+        db.query(ScanJob)
+        .filter(ScanJob.id == job_id, ScanJob.owner_github_id == current_user["github_id"])
+        .first()
+    )
+    if not job:
+        raise HTTPException(status_code=404)
+
+    def event_stream():
+        stream_db = SessionLocal()
+        try:
+            cursor = 0       # last job_log.id seen
+            drain_polls = 0  # idle polls after job terminal state
+            MAX_DRAIN = 2
+
+            while True:
+                stream_db.expire_all()
+                new_logs = (
+                    stream_db.query(JobLog)
+                    .filter(JobLog.job_id == job_id, JobLog.id > cursor)
+                    .order_by(JobLog.id)
+                    .all()
+                )
+                for log in new_logs:
+                    cursor = log.id
+                    yield f"data: {json.dumps({'kind': log.kind, 'text': log.text})}\n\n"
+
+                if new_logs:
+                    drain_polls = 0
+                else:
+                    job_now = stream_db.query(ScanJob).filter(ScanJob.id == job_id).first()
+                    if job_now and job_now.status in ("done", "failed"):
+                        drain_polls += 1
+                        if drain_polls >= MAX_DRAIN:
+                            yield "event: done\ndata: {}\n\n"
+                            break
+
+                time.sleep(1)
+        finally:
+            stream_db.close()
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )

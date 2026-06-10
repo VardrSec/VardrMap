@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ScanJob, ScanJobUI } from "../types";
+import type { LogLine, ScanJob, ScanJobUI } from "../types";
 import { useAppContext } from "../context/AppContext";
 import { TOOLS } from "./jobs/mockData";
 import Bridge from "./jobs/Bridge";
@@ -43,12 +43,15 @@ function ToastBanner({ msg, accent }: { msg: Toast | null; accent: string }) {
   );
 }
 
-function mapToUI(job: ScanJob): ScanJobUI {
+function mapToUI(job: ScanJob, existingLogs?: LogLine[]): ScanJobUI {
   const started    = job.started_at   ? new Date(job.started_at).getTime()   : null;
   const ended      = job.completed_at ? new Date(job.completed_at).getTime() : null;
   const durationMs = started && ended ? ended - started : null;
   const progress   = job.status === "done" ? 100 : job.status === "running" ? 50 : 0;
   const toolDef    = TOOLS[job.tool_type];
+  const log = existingLogs?.length
+    ? existingLogs
+    : (job.error_message ? [{ kind: "err" as const, text: job.error_message }] : []);
   return {
     id:        job.id,
     tool:      job.tool_type,
@@ -64,7 +67,7 @@ function mapToUI(job: ScanJob): ScanJobUI {
     endedAt:   job.completed_at,
     durationMs,
     error:     job.error_message || undefined,
-    log:       job.error_message ? [{ kind: "err" as const, text: job.error_message }] : [],
+    log,
     _full:     [],
   };
 }
@@ -95,6 +98,12 @@ export default function JobsSection({
   const [pulseKey,     setPulseKey]     = useState(0);
   const [toast,        setToast]        = useState<Toast | null>(null);
 
+  // SSE-accumulated logs keyed by job ID; separate from polling state so they
+  // survive job-list refreshes. Stored in a ref to avoid triggering re-renders
+  // and to be accessible inside async closures without stale closure issues.
+  const jobLogsRef   = useRef<Record<string, LogLine[]>>({});
+  const sseAbortRef  = useRef<AbortController | null>(null);
+
   function flash(text: string) { setToast({ text, id: Date.now() }); }
   useEffect(() => {
     if (!toast) return;
@@ -111,7 +120,7 @@ export default function JobsSection({
       if (!res.ok) return;
       const data = await res.json();
       const mapped: ScanJobUI[] = Array.isArray(data?.jobs)
-        ? data.jobs.map((j: ScanJob) => mapToUI(j))
+        ? data.jobs.map((j: ScanJob) => mapToUI(j, jobLogsRef.current[j.id]))
         : [];
       setJobs(mapped);
       setLastPoll(new Date().toISOString());
@@ -140,6 +149,74 @@ export default function JobsSection({
     scheduleNext();
     return () => clearTimeout(timerId);
   }, [loadJobs]);
+
+  // SSE log streaming: open a fetch-based SSE stream for the selected job when
+  // it is pending or running. Accumulated lines survive polling refreshes via
+  // jobLogsRef. On "event: done", trigger a final poll so status flips to done.
+  useEffect(() => {
+    sseAbortRef.current?.abort();
+    sseAbortRef.current = null;
+
+    if (loading || !activeId) return;
+    const job = jobsRef.current.find((j) => j.id === activeId);
+    if (!job || job.status === "done" || job.status === "failed") return;
+
+    const ac = new AbortController();
+    sseAbortRef.current = ac;
+    const { signal } = ac;
+    const jobId = activeId;
+
+    async function stream() {
+      try {
+        const res = await authFetch(`/jobs/${jobId}/logs/stream`, { signal });
+        if (!res.ok || !res.body) return;
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buf = "";
+        let pendingEvent = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buf += decoder.decode(value, { stream: true });
+
+          let nl: number;
+          while ((nl = buf.indexOf("\n")) !== -1) {
+            const raw = buf.slice(0, nl);
+            buf = buf.slice(nl + 1);
+
+            if (raw.startsWith("event: ")) {
+              pendingEvent = raw.slice(7).trim();
+            } else if (raw.startsWith("data: ")) {
+              if (pendingEvent === "done") {
+                void loadJobs();
+                return;
+              }
+              try {
+                const line = JSON.parse(raw.slice(6)) as LogLine;
+                const prev = jobLogsRef.current[jobId] ?? [];
+                jobLogsRef.current[jobId] = [...prev, line];
+                setJobs((p) =>
+                  p.map((j) =>
+                    j.id === jobId ? { ...j, log: jobLogsRef.current[jobId] } : j,
+                  ),
+                );
+              } catch { /* ignore malformed SSE data */ }
+              pendingEvent = "";
+            } else if (raw === "") {
+              pendingEvent = "";
+            }
+          }
+        }
+      } catch (e) {
+        if ((e as Error)?.name !== "AbortError") console.warn("SSE stream error", e);
+      }
+    }
+
+    void stream();
+    return () => { ac.abort(); };
+  }, [activeId, loading, authFetch, loadJobs]);
 
   async function queueJob(spec: {
     tool: string; source: string; config: Record<string, unknown>; targets: number; yieldKind: string;

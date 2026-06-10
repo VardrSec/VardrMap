@@ -150,6 +150,13 @@ scan_jobs
   created_at, started_at (nullable), completed_at (nullable)
   error_message
 
+job_logs
+  id (Integer PK, autoincrement — ordering cursor for SSE)
+  job_id (FK → scan_jobs.id, CASCADE DELETE, indexed)
+  kind ("sys"|"info"|"out"|"ok"|"warn"|"err"|"hit")
+  text (up to 4096 chars)
+  created_at
+
 audit_logs
   id (PK)
   github_id (no FK — records survive user deletion)
@@ -164,6 +171,7 @@ audit_logs
 - `api_keys.key_hash` stores the SHA-256 hex digest of the plaintext token. The plaintext is never stored.
 - `scan_jobs.config` is a JSON column with optional tool options. VardrRunner reads this dict when executing the job.
 - `scan_jobs` are scoped to the owning user via `owner_github_id` — a user can only see/update their own jobs.
+- `job_logs` stores per-line output captured from the tool's stdout/stderr. The integer `id` acts as a monotonic cursor for the SSE polling loop.
 
 ---
 
@@ -218,7 +226,7 @@ The sidebar exposes **7 top-level sections** mapped to the bug bounty workflow:
 3. **Composer** (`jobs/Composer.tsx`) — tool picker (subfinder/httpx/nuclei) with per-tool config fields; submits new jobs.
 4. **Job Board + Terminal** (`jobs/JobBoard.tsx`, `jobs/Terminal.tsx`) — three switchable board views (Stream, Pipeline, Table); a live terminal showing log output for the selected job.
 
-The `ScanJobUI` type (`frontend/app/types.ts`) extends the API-level `ScanJob` with UI-only fields (`progress`, `yield`, `yieldKind`, `durationMs`, `log[]`). The current implementation uses seed/simulation data; API wiring (real job polling + SSE log stream) is a next step.
+The `ScanJobUI` type (`frontend/app/types.ts`) extends the API-level `ScanJob` with UI-only fields (`progress`, `yield`, `yieldKind`, `durationMs`, `log[]`). Job polling and SSE log streaming are fully wired: the frontend opens a fetch-based SSE connection to `GET /jobs/{id}/logs/stream` for selected pending/running jobs, accumulating `LogLine` objects in `jobLogsRef` and pushing them into the Terminal component in real time.
 
 ---
 

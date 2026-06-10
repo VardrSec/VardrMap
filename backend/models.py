@@ -204,6 +204,16 @@ class ScanJob(Base):
     program = relationship("Program", back_populates="scan_jobs")
 
 
+class JobLog(Base):
+    __tablename__ = "job_logs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    job_id = Column(String, ForeignKey("scan_jobs.id", ondelete="CASCADE"), nullable=False, index=True)
+    kind = Column(String(10), nullable=False, default="out")   # sys|info|out|ok|warn|err|hit
+    text = Column(Text, nullable=False)
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+
+
 class ApiKey(Base):
     __tablename__ = "api_keys"
 

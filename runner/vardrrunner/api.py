@@ -72,6 +72,10 @@ class VardrMapClient:
             payload["error_message"] = error
         return self.patch(f"/jobs/{job_id}", json=payload)
 
+    def post_logs(self, job_id: str, lines: list[dict]) -> None:
+        """Append log lines to a job. Non-fatal — caller should swallow exceptions."""
+        self.post(f"/jobs/{job_id}/logs", json={"lines": lines})
+
     def patch(self, path: str, json: Optional[dict] = None) -> Any:
         r = self.session.patch(self._url(path), json=json, timeout=30)
         r.raise_for_status()

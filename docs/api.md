@@ -595,3 +595,45 @@ Update a job's status. Used by VardrRunner to claim (`running`) and complete (`d
 **Errors**
 - `400` — invalid status value
 - `404` — job not found or belongs to another user
+
+### `POST /jobs/{job_id}/logs`
+Append log lines to a job. Called by VardrRunner as the tool produces output.
+
+**Request body**
+```json
+{
+  "lines": [
+    { "kind": "sys", "text": "Starting httpx on 12 target(s)…" },
+    { "kind": "out", "text": "https://example.com [200]" },
+    { "kind": "warn", "text": "process exited with code 1" }
+  ]
+}
+```
+- `kind`: one of `sys`, `info`, `out`, `ok`, `warn`, `err`, `hit`. Unknown values are coerced to `out`.
+- `text`: up to 4096 characters per line.
+
+**Response:** `{"ok": true}`
+
+**Errors**
+- `404` — job not found or belongs to another user
+
+### `GET /jobs/{job_id}/logs/stream`
+Server-Sent Events stream of log lines for a job. Connect while the job is `pending` or `running` to receive live output; connect to a completed job to replay all stored log lines.
+
+**Response:** `Content-Type: text/event-stream`
+
+Each log line is emitted as an SSE `data` event:
+```
+data: {"kind": "out", "text": "https://example.com [200]"}
+
+data: {"kind": "sys", "text": "Done. Imported 3 result(s)."}
+
+event: done
+data: {}
+
+```
+
+The stream closes ~2 s after the job reaches `done` or `failed` with no new lines pending. The frontend should call `loadJobs()` on receipt of `event: done` to refresh the job status.
+
+**Errors**
+- `404` — job not found or belongs to another user

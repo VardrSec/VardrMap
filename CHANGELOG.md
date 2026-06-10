@@ -4,6 +4,22 @@ All notable changes to VardrMap. Versions are tagged by milestone — this proje
 
 ---
 
+## v0.12.0 — SSE log streaming for Scan Jobs (2026-06-10)
+
+### Added
+- **Backend `JobLog` model** (`job_logs` table) — stores per-line output captured from tool stdout/stderr; integer PK acts as monotonic SSE cursor; CASCADE-deleted with the parent job.
+- **`POST /jobs/{id}/logs`** — VardrRunner appends log lines in batches during tool execution. Accepts `{"lines": [{"kind": "out"|"sys"|…, "text": "…"}]}`. Unknown `kind` values are coerced to `"out"`. Lines are capped at 4096 chars.
+- **`GET /jobs/{id}/logs/stream`** — SSE endpoint. Polls the DB every second; sends all buffered log lines then closes ~2 s after the job reaches `done` or `failed`. Secured by the same owner-scoped auth as all job endpoints.
+- **Alembic migration `0005_add_job_logs`** — creates `job_logs` table with a FK cascade on `scan_jobs.id`.
+- **Frontend SSE integration in `JobsSection`** — when a pending or running job is selected, a fetch-based SSE connection (using `authFetch` so the Authorization header is included) streams log lines into the Terminal in real time. Accumulated lines are stored in `jobLogsRef` and survive polling refreshes. On `event: done`, triggers a final `loadJobs()` to flip the status.
+- **VardrRunner log streaming** — `runner.py` adds `run_httpx_streaming`, `run_nuclei_streaming`, `run_subfinder_streaming` using `subprocess.Popen` (stdout captured line by line). `commands/jobs.py` drains these iterators via `_stream_and_log`, flushing batches to `POST /jobs/{id}/logs` every 2 seconds, and emits `sys`-kind lines for lifecycle events (started, upload, done/failed).
+- **VardrRunner subfinder job support** — `run_jobs` now handles `tool_type: "subfinder"` jobs, extracting wildcard domains from scope and importing discovered hosts as httpx recon targets (same logic as `vardrrunner run subfinder`).
+
+### Changed
+- `mapToUI` in `JobsSection` accepts an optional `existingLogs` argument; `loadJobs` passes `jobLogsRef.current[id]` so SSE-accumulated lines are not lost on poll refresh.
+
+---
+
 ## v0.11.0 — Scan Jobs real API integration (2026-06-09)
 
 ### Changed

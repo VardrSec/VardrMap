@@ -6,7 +6,7 @@ import shutil
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import Optional
+from typing import Iterator, Optional
 
 # Allowlist maps subcommand names to their executable names.
 # Add new tools here only — never allow arbitrary executables.
@@ -75,6 +75,81 @@ def run_nuclei(
     result = subprocess.run(cmd, check=False)
     Path(targets_file).unlink(missing_ok=True)
     return result.returncode
+
+
+def _run_streaming(cmd: list[str], targets_file: str) -> Iterator[tuple[str, str]]:
+    """Execute cmd and yield (kind, text) log line pairs. Cleans up targets_file when done."""
+    try:
+        with subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+        ) as proc:
+            assert proc.stdout is not None
+            for raw in proc.stdout:
+                line = raw.rstrip()
+                if line:
+                    yield ("out", line)
+            proc.wait()
+            if proc.returncode != 0:
+                yield ("warn", f"process exited with code {proc.returncode}")
+    finally:
+        Path(targets_file).unlink(missing_ok=True)
+
+
+def run_httpx_streaming(targets: list[str], output_path: Path) -> Iterator[tuple[str, str]]:
+    """Run httpx, yielding (kind, text) log lines as they're produced."""
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as tmp:
+        tmp.write("\n".join(targets))
+        targets_file = tmp.name
+
+    cmd = [
+        ALLOWED_TOOLS["httpx"],
+        "-l", targets_file,
+        "-json",
+        "-o", str(output_path),
+    ]
+    yield from _run_streaming(cmd, targets_file)
+
+
+def run_nuclei_streaming(
+    targets: list[str],
+    output_path: Path,
+    severity: Optional[str] = None,
+    templates: Optional[str] = None,
+) -> Iterator[tuple[str, str]]:
+    """Run nuclei, yielding (kind, text) log lines as they're produced."""
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as tmp:
+        tmp.write("\n".join(targets))
+        targets_file = tmp.name
+
+    cmd = [
+        ALLOWED_TOOLS["nuclei"],
+        "-l", targets_file,
+        "-json-export", str(output_path),
+    ]
+    if severity:
+        cmd += ["-severity", severity]
+    if templates:
+        cmd += ["-t", templates]
+
+    yield from _run_streaming(cmd, targets_file)
+
+
+def run_subfinder_streaming(domains: list[str], output_path: Path) -> Iterator[tuple[str, str]]:
+    """Run subfinder, yielding (kind, text) log lines as they're produced."""
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as tmp:
+        tmp.write("\n".join(domains))
+        domains_file = tmp.name
+
+    cmd = [
+        ALLOWED_TOOLS["subfinder"],
+        "-dL", domains_file,
+        "-o",  str(output_path),
+    ]
+    yield from _run_streaming(cmd, domains_file)
 
 
 def run_subfinder(domains: list[str], output_path: Path) -> int:
