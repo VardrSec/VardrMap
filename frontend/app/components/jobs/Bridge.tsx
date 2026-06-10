@@ -1,19 +1,6 @@
 "use client";
 
-import { RUNNER, fmtAgo } from "./mockData";
-
-type RunnerTool = { id: string; version: string; ok: boolean };
-
-function ToolChip({ tool }: { tool: RunnerTool }) {
-  return (
-    <div className="flex items-center gap-1.5 rounded-md border border-[#2e2e2e] bg-[#161616] px-2 py-1">
-      <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full"
-        style={{ backgroundColor: tool.ok ? "#a6e3a1" : "#f87171" }} />
-      <span className="font-mono text-[11px] text-[#cbd5e1]">{tool.id}</span>
-      <span className="font-mono text-[10px] text-[#52525b]">{tool.version}</span>
-    </div>
-  );
-}
+import { fmtAgo } from "./mockData";
 
 function LinkWire({ online, accent, busy, pulseKey }: {
   online: boolean; accent: string; busy: boolean; pulseKey: number;
@@ -95,7 +82,7 @@ function BridgeStrip({ accent, runnerOnline, autoRun, queueDepth, runningCount, 
       </span>
       <span className="flex items-center gap-1.5">
         <span className="font-mono text-xs" style={{ color: runnerOnline ? "#a6e3a1" : "#52525b" }}>▣</span>
-        <span className="hidden font-mono text-[11px] text-[#94a3b8] sm:inline">{RUNNER.user}@{RUNNER.host}</span>
+        <span className="hidden font-mono text-[11px] text-[#94a3b8] sm:inline">VardrRunner</span>
       </span>
       <span className="font-mono text-[10px] uppercase tracking-widest" style={{ color: linkColor }}>
         {runnerOnline ? (busy ? "streaming" : "linked") : "offline"}
@@ -197,24 +184,19 @@ export default function Bridge({
         {/* Runner node */}
         <Node
           label="VardrRunner"
-          sub={`${RUNNER.user}@${RUNNER.host} · ${RUNNER.version}`}
+          sub="local machine"
           glyph="▣"
           glyphColor={runnerOnline ? "#a6e3a1" : "#52525b"}
           active={runnerOnline}
         >
           {runnerOnline ? (
-            <>
-              <div className="mt-3 flex flex-wrap gap-1.5">
-                {RUNNER.tools.map((t) => <ToolChip key={t.id} tool={t} />)}
-              </div>
-              <div className="mt-2.5 flex items-center justify-between font-mono text-[10px] text-[#52525b]">
-                <span>{RUNNER.os}</span>
-                <span className="flex items-center gap-1.5">
-                  <span className="h-1 w-1 animate-pulse rounded-full bg-[#a6e3a1]" />
-                  poll {fmtAgo(lastPoll)}
-                </span>
-              </div>
-            </>
+            <div className="mt-3 flex items-center justify-between font-mono text-[10px] text-[#52525b]">
+              <span>$ vardrrunner jobs run</span>
+              <span className="flex items-center gap-1.5">
+                <span className="h-1 w-1 animate-pulse rounded-full bg-[#a6e3a1]" />
+                polled {fmtAgo(lastPoll)}
+              </span>
+            </div>
           ) : (
             <div className="mt-3 rounded-lg border border-dashed border-[#2e2e2e] bg-[#1a1a1a] px-3 py-3 text-center">
               <p className="font-mono text-[11px] text-[#52525b]">runner offline</p>

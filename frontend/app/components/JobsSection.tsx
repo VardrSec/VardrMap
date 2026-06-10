@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import type { ScanJobUI } from "../types";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { ScanJob, ScanJobUI } from "../types";
 import { useAppContext } from "../context/AppContext";
-import { initJobs, nextId, computeYield, logFor, RUNNER } from "./jobs/mockData";
+import { TOOLS } from "./jobs/mockData";
 import Bridge from "./jobs/Bridge";
 import Telemetry from "./jobs/Telemetry";
 import Composer from "./jobs/Composer";
@@ -12,6 +12,8 @@ import Terminal from "./jobs/Terminal";
 
 const ACCENT = "#f59e0b";
 const LS = "vardrmap:jobs:prefs";
+const POLL_ACTIVE_MS = 5000;
+const POLL_IDLE_MS   = 30000;
 
 type Prefs = { view: "stream" | "pipeline" | "table"; collapsed: boolean; showTerminal: boolean };
 
@@ -41,15 +43,40 @@ function ToastBanner({ msg, accent }: { msg: Toast | null; accent: string }) {
   );
 }
 
-export default function JobsSection({ programId, defaultTool, hideHeader }: { programId: string; defaultTool?: string; hideHeader?: boolean }) {
-  void programId; // TODO: replace mock data with GET /programs/{id}/jobs + SSE stream
+function mapToUI(job: ScanJob): ScanJobUI {
+  const started    = job.started_at   ? new Date(job.started_at).getTime()   : null;
+  const ended      = job.completed_at ? new Date(job.completed_at).getTime() : null;
+  const durationMs = started && ended ? ended - started : null;
+  const progress   = job.status === "done" ? 100 : job.status === "running" ? 50 : 0;
+  const toolDef    = TOOLS[job.tool_type];
+  return {
+    id:        job.id,
+    tool:      job.tool_type,
+    source:    job.target_source,
+    config:    job.config,
+    status:    job.status as ScanJobUI["status"],
+    targets:   0,
+    progress,
+    yield:     0,
+    yieldKind: toolDef?.yields ?? job.tool_type,
+    queuedAt:  job.created_at   ?? new Date().toISOString(),
+    startedAt: job.started_at,
+    endedAt:   job.completed_at,
+    durationMs,
+    error:     job.error_message || undefined,
+    log:       job.error_message ? [{ kind: "err" as const, text: job.error_message }] : [],
+    _full:     [],
+  };
+}
 
-  const { selectedProgram } = useAppContext();
-  const scopeCount  = selectedProgram?.scope.in.length  ?? 14;
-  const reconCount  = selectedProgram?.recon_count      ?? 142;
-  const programName = selectedProgram?.name             ?? "Active Program";
+export default function JobsSection({
+  programId, defaultTool, hideHeader,
+}: { programId: string; defaultTool?: string; hideHeader?: boolean }) {
+  const { authFetch, selectedProgram } = useAppContext();
+  const scopeCount  = selectedProgram?.scope.in.length ?? 0;
+  const reconCount  = selectedProgram?.recon_count     ?? 0;
+  const programName = selectedProgram?.name            ?? "Active Program";
 
-  // Persisted UI prefs
   const [prefs, setPrefs] = useState<Prefs>(loadPrefs);
   function pref<K extends keyof Prefs>(key: K, val: Prefs[K]) {
     setPrefs((p) => {
@@ -59,13 +86,14 @@ export default function JobsSection({ programId, defaultTool, hideHeader }: { pr
     });
   }
 
-  const [jobs,          setJobs]          = useState<ScanJobUI[]>(initJobs);
-  const [runnerOnline,  setRunnerOnline]  = useState(true);
-  const [autoRun,       setAutoRun]       = useState(false);
-  const [lastPoll,      setLastPoll]      = useState(() => new Date().toISOString());
-  const [activeId,      setActiveId]      = useState<string | null>("job_095");
-  const [pulseKey,      setPulseKey]      = useState(0);
-  const [toast,         setToast]         = useState<Toast | null>(null);
+  const [jobs,         setJobs]         = useState<ScanJobUI[]>([]);
+  const [loading,      setLoading]      = useState(true);
+  const [runnerOnline, setRunnerOnline] = useState(false);
+  const [autoRun,      setAutoRun]      = useState(false);
+  const [lastPoll,     setLastPoll]     = useState(() => new Date().toISOString());
+  const [activeId,     setActiveId]     = useState<string | null>(null);
+  const [pulseKey,     setPulseKey]     = useState(0);
+  const [toast,        setToast]        = useState<Toast | null>(null);
 
   function flash(text: string) { setToast({ text, id: Date.now() }); }
   useEffect(() => {
@@ -74,73 +102,104 @@ export default function JobsSection({ programId, defaultTool, hideHeader }: { pr
     return () => clearTimeout(id);
   }, [toast]);
 
-  // refs so the interval closure reads fresh values without re-subscribing
-  const onlineRef = useRef(runnerOnline);
-  const autoRef   = useRef(autoRun);
-  const runReqRef = useRef(false);
-  const tickN     = useRef(0);
+  const jobsRef = useRef<ScanJobUI[]>([]);
+  useEffect(() => { jobsRef.current = jobs; }, [jobs]);
 
-  useEffect(() => { onlineRef.current = runnerOnline; }, [runnerOnline]);
-  useEffect(() => { autoRef.current   = autoRun; },     [autoRun]);
+  const loadJobs = useCallback(async () => {
+    try {
+      const res = await authFetch(`/programs/${programId}/jobs`);
+      if (!res.ok) return;
+      const data = await res.json();
+      const mapped: ScanJobUI[] = Array.isArray(data?.jobs)
+        ? data.jobs.map((j: ScanJob) => mapToUI(j))
+        : [];
+      setJobs(mapped);
+      setLastPoll(new Date().toISOString());
+      setPulseKey((k) => k + 1);
+    } catch { /* auth errors surfaced by authFetch */ } finally {
+      setLoading(false);
+    }
+  }, [authFetch, programId]);
 
-  // Simulation engine — advances running jobs, claims pending when allowed
+  // Initial load
   useEffect(() => {
-    const iv = setInterval(() => {
-      tickN.current++;
-      const online = onlineRef.current;
+    void loadJobs();
+  }, [loadJobs]);
 
-      if (online && tickN.current % 3 === 0) {
-        setLastPoll(new Date().toISOString());
-        setPulseKey((k) => k + 1);
-      }
+  // Adaptive polling: 5s while any jobs are active, 30s when idle
+  useEffect(() => {
+    const hasActive = () =>
+      jobsRef.current.some((j) => j.status === "pending" || j.status === "running");
+    let timerId: ReturnType<typeof setTimeout>;
+    function scheduleNext() {
+      timerId = setTimeout(() => {
+        void loadJobs();
+        scheduleNext();
+      }, hasActive() ? POLL_ACTIVE_MS : POLL_IDLE_MS);
+    }
+    scheduleNext();
+    return () => clearTimeout(timerId);
+  }, [loadJobs]);
 
-      setJobs((prev) => {
-        let next = prev.map((j) => ({ ...j }));
-        const runningCount = () => next.filter((j) => j.status === "running").length;
-
-        // advance running jobs
-        next = next.map((j) => {
-          if (j.status !== "running" || !online) return j;
-          const inc = 6 + Math.random() * 10;
-          const p = Math.min(100, Math.round(j.progress + inc));
-          const full = j._full ?? [];
-          const shown = Math.max(1, Math.floor((p / 100) * full.length));
-          const log = full.slice(0, shown);
-          if (p >= 100) {
-            const dur = j.startedAt
-              ? Date.now() - new Date(j.startedAt).getTime()
-              : 90000;
-            return { ...j, status: "done", progress: 100, log: full, endedAt: new Date().toISOString(), durationMs: dur };
-          }
-          return { ...j, progress: p, log };
-        });
-
-        // claim pending jobs when allowed and capacity available
-        const allowClaim = online && (autoRef.current || runReqRef.current);
-        if (allowClaim) {
-          while (runningCount() < RUNNER.concurrency) {
-            const pending = next
-              .map((j, i) => ({ j, i }))
-              .filter((x) => x.j.status === "pending")
-              .sort((a, b) => new Date(a.j.queuedAt).getTime() - new Date(b.j.queuedAt).getTime());
-            if (!pending[0]) { runReqRef.current = false; break; }
-            const { j, i } = pending[0];
-            const y = computeYield(j.tool, j.targets);
-            const claimed: ScanJobUI = {
-              ...j, yield: y, status: "running", progress: 4,
-              startedAt: new Date().toISOString(),
-            };
-            claimed._full = logFor(claimed);
-            claimed.log = claimed._full.slice(0, 1);
-            next[i] = claimed;
-          }
-        }
-
-        return next;
+  async function queueJob(spec: {
+    tool: string; source: string; config: Record<string, unknown>; targets: number; yieldKind: string;
+  }) {
+    try {
+      const res = await authFetch(`/programs/${programId}/jobs`, {
+        method: "POST",
+        body: JSON.stringify({
+          tool_type:     spec.tool,
+          target_source: spec.source,
+          config:        spec.config,
+        }),
       });
-    }, 800);
-    return () => clearInterval(iv);
-  }, []);
+      if (!res.ok) { flash("Failed to queue job."); return; }
+      const created: ScanJob = await res.json();
+      const ui = mapToUI(created);
+      setJobs((p) => [ui, ...p]);
+      setActiveId(ui.id);
+      flash("Job queued. Run `vardrrunner jobs run` to execute.");
+    } catch { flash("Failed to queue job."); }
+  }
+
+  async function cancel(id: string) {
+    try {
+      const res = await authFetch(`/jobs/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: "failed", error_message: "cancelled by operator" }),
+      });
+      if (!res.ok) { flash("Failed to cancel job."); return; }
+      const updated: ScanJob = await res.json();
+      setJobs((p) => p.map((j) => (j.id === id ? mapToUI(updated) : j)));
+      flash("Job cancelled.");
+    } catch { flash("Failed to cancel job."); }
+  }
+
+  async function retry(id: string) {
+    const original = jobsRef.current.find((j) => j.id === id);
+    if (!original) return;
+    try {
+      const res = await authFetch(`/programs/${programId}/jobs`, {
+        method: "POST",
+        body: JSON.stringify({
+          tool_type:     original.tool,
+          target_source: original.source,
+          config:        original.config,
+        }),
+      });
+      if (!res.ok) { flash("Failed to re-queue job."); return; }
+      const created: ScanJob = await res.json();
+      const ui = mapToUI(created);
+      setJobs((p) => [ui, ...p]);
+      setActiveId(ui.id);
+      flash("Job re-queued.");
+    } catch { flash("Failed to re-queue job."); }
+  }
+
+  function runPending() {
+    if (pendingCount === 0) { flash("No pending jobs."); return; }
+    flash(`${pendingCount} job${pendingCount > 1 ? "s" : ""} pending — run \`vardrrunner jobs run\` to execute.`);
+  }
 
   const sorted       = [...jobs].sort((a, b) => new Date(b.queuedAt).getTime() - new Date(a.queuedAt).getTime());
   const activeJob    = jobs.find((j) => j.id === activeId) ?? null;
@@ -148,51 +207,20 @@ export default function JobsSection({ programId, defaultTool, hideHeader }: { pr
   const runningCount = jobs.filter((j) => j.status === "running").length;
   const busy         = runningCount > 0;
 
-  function queueJob(spec: { tool: string; source: string; config: Record<string, unknown>; targets: number; yieldKind: string }) {
-    const job: ScanJobUI = {
-      id: nextId(), tool: spec.tool, source: spec.source, config: spec.config,
-      status: "pending", targets: spec.targets, progress: 0, yield: 0,
-      yieldKind: spec.yieldKind, queuedAt: new Date().toISOString(),
-      startedAt: null, endedAt: null, durationMs: null, log: [], _full: [],
-    };
-    setJobs((p) => [job, ...p]);
-    setActiveId(job.id);
-    flash(autoRef.current && onlineRef.current
-      ? "Job queued — runner will claim it shortly."
-      : "Job queued. Run `vardrrunner jobs run` to execute.");
-  }
-
-  function runPending() {
-    if (!runnerOnline) { flash("Runner offline — connect VardrRunner first."); return; }
-    runReqRef.current = true;
-    flash(`Dispatching ${pendingCount} pending job${pendingCount > 1 ? "s" : ""} to ${RUNNER.host}…`);
-  }
-
-  function toggleRunner() {
-    setRunnerOnline((v) => {
-      const nv = !v;
-      flash(nv ? `VardrRunner reconnected · ${RUNNER.user}@${RUNNER.host}` : "VardrRunner disconnected — queue will hold.");
-      return nv;
-    });
-  }
-
-  function retry(id: string) {
-    setJobs((p) => p.map((j) => j.id === id
-      ? { ...j, status: "pending", progress: 0, yield: 0, log: [], _full: [], error: undefined, startedAt: null, endedAt: null, durationMs: null, queuedAt: new Date().toISOString() }
-      : j));
-    flash("Job re-queued.");
-  }
-
-  function cancel(id: string) {
-    setJobs((p) => p.map((j) => j.id === id
-      ? { ...j, status: "failed", error: "cancelled by operator", log: [...j.log, { kind: "err" as const, text: "✗ cancelled by operator" }] }
-      : j));
-    flash("Job cancelled.");
-  }
+  const viewSwitcher = (
+    <div className="flex rounded-lg border border-[#2e2e2e] bg-[#1a1a1a] p-0.5">
+      {(["stream", "pipeline", "table"] as const).map((v) => (
+        <button key={v} onClick={() => pref("view", v)}
+          className="rounded-md px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider transition"
+          style={prefs.view === v ? { backgroundColor: "#2e2e2e", color: "#f1f5f9" } : { color: "#52525b" }}>
+          {v}
+        </button>
+      ))}
+    </div>
+  );
 
   return (
     <div className="space-y-5">
-      {/* Section header — suppressed when embedded in RunSection */}
       {!hideHeader && (
         <div className="flex flex-wrap items-end justify-between gap-4 border-b border-[#2e2e2e] pb-5">
           <div>
@@ -206,36 +234,13 @@ export default function JobsSection({ programId, defaultTool, hideHeader }: { pr
               Dispatch recon &amp; scan jobs to VardrRunner on your machine — results stream back into VardrMap.
             </p>
           </div>
-          {/* View switch */}
-          <div className="flex rounded-lg border border-[#2e2e2e] bg-[#1a1a1a] p-0.5">
-            {(["stream", "pipeline", "table"] as const).map((v) => (
-              <button key={v} onClick={() => pref("view", v)}
-                className="rounded-md px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider transition"
-                style={prefs.view === v ? { backgroundColor: "#2e2e2e", color: "#f1f5f9" } : { color: "#52525b" }}>
-                {v}
-              </button>
-            ))}
-          </div>
+          {viewSwitcher}
         </div>
       )}
-      {/* View switch — shown standalone when embedded */}
-      {hideHeader && (
-        <div className="flex justify-end">
-          <div className="flex rounded-lg border border-[#2e2e2e] bg-[#1a1a1a] p-0.5">
-            {(["stream", "pipeline", "table"] as const).map((v) => (
-              <button key={v} onClick={() => pref("view", v)}
-                className="rounded-md px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider transition"
-                style={prefs.view === v ? { backgroundColor: "#2e2e2e", color: "#f1f5f9" } : { color: "#52525b" }}>
-                {v}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+      {hideHeader && <div className="flex justify-end">{viewSwitcher}</div>}
 
       <ToastBanner msg={toast} accent={ACCENT} />
 
-      {/* Bridge */}
       <Bridge
         accent={ACCENT}
         runnerOnline={runnerOnline}
@@ -246,41 +251,45 @@ export default function JobsSection({ programId, defaultTool, hideHeader }: { pr
         busy={busy}
         pulseKey={pulseKey}
         collapsed={prefs.collapsed}
-        onToggleRunner={toggleRunner}
+        onToggleRunner={() => setRunnerOnline((v) => !v)}
         onToggleAuto={() => setAutoRun((v) => !v)}
         onToggleCollapse={() => pref("collapsed", !prefs.collapsed)}
       />
 
-      {/* Telemetry */}
       <Telemetry jobs={jobs} accent={ACCENT} />
 
-      {/* Composer + board + terminal */}
       <div className="grid gap-5 xl:grid-cols-[320px_1fr]">
-        <div>
-          <Composer
-            accent={ACCENT}
-            onQueue={queueJob}
-            runnerOnline={runnerOnline}
-            scopeCount={scopeCount}
-            reconCount={reconCount}
-            programName={programName}
-            initialTool={defaultTool}
-          />
-        </div>
-        <div className="space-y-5">
-          <JobBoard
-            jobs={sorted}
-            accent={ACCENT}
-            view={prefs.view}
-            activeId={activeId}
-            onSelect={(id) => { setActiveId(id); pref("showTerminal", true); }}
-            onRunPending={runPending}
-            pendingCount={pendingCount}
-            runnerOnline={runnerOnline}
-            autoRun={autoRun}
-          />
+        <Composer
+          accent={ACCENT}
+          onQueue={queueJob}
+          runnerOnline={runnerOnline}
+          scopeCount={scopeCount}
+          reconCount={reconCount}
+          programName={programName}
+          initialTool={defaultTool}
+        />
 
-          {prefs.showTerminal ? (
+        <div className="space-y-5">
+          {loading ? (
+            <div className="flex min-h-[160px] items-center gap-2 rounded-2xl border border-[#2e2e2e] bg-[#1a1a1a] px-6 font-mono text-sm text-[#52525b]">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full" style={{ backgroundColor: ACCENT }} />
+              loading jobs…
+            </div>
+          ) : (
+            <JobBoard
+              jobs={sorted}
+              accent={ACCENT}
+              view={prefs.view}
+              activeId={activeId}
+              onSelect={(id) => { setActiveId(id); pref("showTerminal", true); }}
+              onRunPending={runPending}
+              pendingCount={pendingCount}
+              runnerOnline={runnerOnline}
+              autoRun={autoRun}
+            />
+          )}
+
+          {!loading && (prefs.showTerminal ? (
             <Terminal
               job={activeJob}
               accent={ACCENT}
@@ -297,7 +306,7 @@ export default function JobsSection({ programId, defaultTool, hideHeader }: { pr
               </svg>
               show terminal
             </button>
-          )}
+          ))}
         </div>
       </div>
     </div>
