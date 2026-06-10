@@ -100,7 +100,7 @@ cd backend
 pytest tests -v
 ```
 
-All 64 tests should pass. There are no frontend tests at this time.
+All 71 tests should pass. There are no frontend tests at this time.
 
 ### Test coverage areas
 
@@ -110,6 +110,7 @@ All 64 tests should pass. There are no frontend tests at this time.
 | `tests/test_findings.py` | Finding CRUD, cross-program access denial |
 | `tests/test_imports.py` | File upload parsing, extension/size validation, BOLA |
 | `tests/test_jobs.py` | Scan job CRUD, BOLA isolation, status transitions |
+| `tests/test_runner_heartbeat.py` | Runner heartbeat upsert, status derivation (online/offline), BOLA isolation |
 | `tests/test_apikeys.py` | Key generation, API key auth at `/me`, revocation, BOLA isolation, max-key limit |
 | `tests/test_auth.py` | JWT validation — missing, expired, wrong audience, garbage token |
 | `tests/test_sanitization.py` | XSS/injection rejection and stripping across input fields |
@@ -121,7 +122,7 @@ All 64 tests should pass. There are no frontend tests at this time.
 Migrations use Alembic. The migration chain is:
 
 ```
-0001_baseline  →  0002_add_created_at  →  0003_add_api_keys  →  0004_add_scan_jobs
+0001_baseline  →  0002_add_created_at  →  0003_add_api_keys  →  0004_add_scan_jobs  →  0005_add_runner_heartbeats
 ```
 
 ### Production (Railway)
@@ -200,6 +201,14 @@ vardrrunner status
 
 This checks that the config file is present, the API key is valid, the backend is reachable, and that httpx/nuclei/subfinder are installed on PATH.
 
+Send a heartbeat to mark the runner as online in the Bridge:
+
+```bash
+vardrrunner heartbeat
+```
+
+This reports your hostname, OS, runner version, and per-tool availability to VardrMap. The Bridge in the Jobs section shows the runner as online (green) for 5 minutes after the last heartbeat. Running `vardrrunner jobs run` sends a heartbeat automatically before processing any jobs.
+
 ### Run tests
 
 ```bash
@@ -212,15 +221,25 @@ cd runner
 pytest tests -v
 ```
 
-40 tests should pass. Tests mock all subprocess and HTTP calls — no tools or backend required.
+51 tests should pass. Tests mock all subprocess and HTTP calls — no tools or backend required.
 
 ### Prerequisites for `run` commands
 
-VardrRunner invokes tools via PATH. Install the tools you need:
+VardrRunner invokes tools via PATH. Install them with Go (requires Go 1.21+):
+
+```bash
+go install -v github.com/projectdiscovery/httpx/cmd/httpx@latest
+go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest
+go install -v github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest
+```
+
+Or download pre-built binaries from the GitHub releases pages:
 
 - **httpx** — https://github.com/projectdiscovery/httpx
 - **nuclei** — https://github.com/projectdiscovery/nuclei
 - **subfinder** — https://github.com/projectdiscovery/subfinder (required for `vardrrunner run subfinder`)
+
+After installing, run `vardrrunner heartbeat` to verify that VardrMap can see which tools are available.
 
 ---
 

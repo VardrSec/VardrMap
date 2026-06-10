@@ -221,12 +221,12 @@ The sidebar exposes **7 top-level sections** mapped to the bug bounty workflow:
 
 `JobsSection` (`frontend/app/components/JobsSection.tsx`) is hosted inside `RunSection`'s Jobs tab and rendered as four stacked zones:
 
-1. **Bridge** (`jobs/Bridge.tsx`) — animated link visualization showing VardrMap ↔ VardrRunner connection status; collapses to a slim strip. Collapse state persists to `localStorage`.
-2. **Telemetry** (`jobs/Telemetry.tsx`) — running/completed/yielded stats + throughput sparkline.
+1. **Bridge** (`jobs/Bridge.tsx`) — animated link visualization showing VardrMap ↔ VardrRunner connection; runner node shows real hostname, OS, version, and per-tool availability chips from the latest heartbeat; collapses to a slim strip. Collapse state persists to `localStorage`.
+2. **Telemetry** (`jobs/Telemetry.tsx`) — four stat tiles: running, completed, results yielded, avg runtime.
 3. **Composer** (`jobs/Composer.tsx`) — tool picker (subfinder/httpx/nuclei) with per-tool config fields; submits new jobs.
-4. **Job Board + Terminal** (`jobs/JobBoard.tsx`, `jobs/Terminal.tsx`) — three switchable board views (Stream, Pipeline, Table); a live terminal showing log output for the selected job.
+4. **Job Board + Terminal** (`jobs/JobBoard.tsx`, `jobs/Terminal.tsx`) — three switchable board views (Stream, Pipeline, Table); a terminal showing status and any backend error message for the selected job.
 
-The `ScanJobUI` type (`frontend/app/types.ts`) extends the API-level `ScanJob` with UI-only fields (`progress`, `yield`, `yieldKind`, `durationMs`, `log[]`). The current implementation uses seed/simulation data; API wiring (real job polling + SSE log stream) is a next step.
+The `ScanJobUI` type (`frontend/app/types.ts`) extends the API-level `ScanJob` with UI-only fields (`progress`, `yield`, `yieldKind`, `durationMs`, `log[]`). Jobs are loaded via real API polling (5 s when active jobs exist, 30 s idle); the Terminal shows current status and any backend error message. Real streamed log output is roadmap (requires the `job_events` table and `GET /jobs/{id}/events` endpoint).
 
 ---
 

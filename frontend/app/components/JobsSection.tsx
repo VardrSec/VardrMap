@@ -163,7 +163,11 @@ export default function JobsSection({
           config:        spec.config,
         }),
       });
-      if (!res.ok) { flash("Failed to queue job."); return; }
+      if (!res.ok) {
+        const err = await res.json().catch(() => null) as { detail?: string } | null;
+        flash(`Failed to queue job${err?.detail ? `: ${err.detail}` : "."}`);
+        return;
+      }
       const created: ScanJob = await res.json();
       const ui = mapToUI(created);
       setJobs((p) => [ui, ...p]);
@@ -178,7 +182,11 @@ export default function JobsSection({
         method: "PATCH",
         body: JSON.stringify({ status: "failed", error_message: "cancelled by operator" }),
       });
-      if (!res.ok) { flash("Failed to cancel job."); return; }
+      if (!res.ok) {
+        const err = await res.json().catch(() => null) as { detail?: string } | null;
+        flash(`Failed to cancel job${err?.detail ? `: ${err.detail}` : "."}`);
+        return;
+      }
       const updated: ScanJob = await res.json();
       setJobs((p) => p.map((j) => (j.id === id ? mapToUI(updated) : j)));
       flash("Job cancelled.");
@@ -197,7 +205,11 @@ export default function JobsSection({
           config:        original.config,
         }),
       });
-      if (!res.ok) { flash("Failed to re-queue job."); return; }
+      if (!res.ok) {
+        const err = await res.json().catch(() => null) as { detail?: string } | null;
+        flash(`Failed to re-queue job${err?.detail ? `: ${err.detail}` : "."}`);
+        return;
+      }
       const created: ScanJob = await res.json();
       const ui = mapToUI(created);
       setJobs((p) => [ui, ...p]);
@@ -271,6 +283,7 @@ export default function JobsSection({
 
       <div className="grid gap-5 xl:grid-cols-[320px_1fr]">
         <Composer
+          key={defaultTool}
           accent={ACCENT}
           onQueue={queueJob}
           runnerOnline={runnerOnline}

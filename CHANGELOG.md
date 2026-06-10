@@ -4,6 +4,19 @@ All notable changes to VardrMap. Versions are tagged by milestone — this proje
 
 ---
 
+## v0.12.1 — Fixes and docs cleanup (2026-06-10)
+
+### Fixed
+- **Composer tool preselect** — `initialTool` prop now re-applies after mount via `useEffect`; Dashboard quick-action buttons correctly pre-select the tool in Composer even when the Run section was already rendered
+- **Frontend error toasts** — Queue, cancel, and re-queue operations now extract `detail` from the backend error response body and display it in the toast (e.g. "Failed to queue job: tool_type must be httpx, nuclei, or subfinder") instead of a generic fallback message
+
+### Changed
+- **Railway deployment config** — `backend/railway.json` now explicitly declares `builder: NIXPACKS` and `watchPatterns: ["**"]` so Railway rebuilds whenever any backend file changes
+- **`docs/development.md`** — backend test count updated to 71; runner test count updated to 51; `test_runner_heartbeat.py` added to coverage table; migration chain updated to include `0005_add_runner_heartbeats`; `vardrrunner heartbeat` command documented in the setup workflow; Go install commands added for httpx/nuclei/subfinder
+- **`docs/architecture.md`** — Run section description updated: Bridge entry reflects real hostname/OS/tool chips; Telemetry entry corrects "throughput sparkline" (removed in v0.11.0); seed/simulation reference replaced with accurate description of real polling and roadmap for streamed logs
+
+---
+
 ## v0.12.0 — VardrRunner real heartbeat (2026-06-10)
 
 ### Added
