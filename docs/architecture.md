@@ -150,6 +150,13 @@ scan_jobs
   created_at, started_at (nullable), completed_at (nullable)
   error_message
 
+runner_heartbeats
+  id (PK)
+  owner_github_id (unique, indexed — one row per user)
+  hostname, version, os_info
+  tools (JSON — {"httpx": {"ok": true, "version": "v1.6.9"}, ...})
+  last_seen (UTC datetime — frontend derives online = last_seen < 5 min ago)
+
 audit_logs
   id (PK)
   github_id (no FK — records survive user deletion)
@@ -164,6 +171,7 @@ audit_logs
 - `api_keys.key_hash` stores the SHA-256 hex digest of the plaintext token. The plaintext is never stored.
 - `scan_jobs.config` is a JSON column with optional tool options. VardrRunner reads this dict when executing the job.
 - `scan_jobs` are scoped to the owning user via `owner_github_id` — a user can only see/update their own jobs.
+- `runner_heartbeats` is a single-row-per-user upsert table. VardrRunner calls `POST /runner/heartbeat` at the start of `jobs run` (and via `vardrrunner heartbeat`). The frontend polls `GET /runner/status` which derives `online: true` if `last_seen` is within 5 minutes.
 
 ---
 

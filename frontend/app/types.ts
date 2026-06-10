@@ -78,6 +78,14 @@ export type ScanJobUI = {
   log: LogLine[];
   _full?: LogLine[];
 };
+export type RunnerStatus = {
+  online: boolean;
+  last_seen: string | null;
+  hostname: string | null;
+  version: string | null;
+  os: string | null;
+  tools: Record<string, { ok: boolean; version: string | null }>;
+};
 export type Section = "dashboard" | "scope" | "overview" | "review" | "findings" | "reports" | "settings";
 export type AppSession = {
   user?: { name?: string | null; email?: string | null; image?: string | null; githubId?: string; username?: string };

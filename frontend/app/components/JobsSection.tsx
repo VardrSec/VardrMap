@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ScanJob, ScanJobUI } from "../types";
+import type { RunnerStatus, ScanJob, ScanJobUI } from "../types";
 import { useAppContext } from "../context/AppContext";
 import { TOOLS } from "./jobs/mockData";
 import Bridge from "./jobs/Bridge";
@@ -86,14 +86,16 @@ export default function JobsSection({
     });
   }
 
-  const [jobs,         setJobs]         = useState<ScanJobUI[]>([]);
-  const [loading,      setLoading]      = useState(true);
-  const [runnerOnline, setRunnerOnline] = useState(false);
-  const [autoRun,      setAutoRun]      = useState(false);
-  const [lastPoll,     setLastPoll]     = useState(() => new Date().toISOString());
-  const [activeId,     setActiveId]     = useState<string | null>(null);
-  const [pulseKey,     setPulseKey]     = useState(0);
-  const [toast,        setToast]        = useState<Toast | null>(null);
+  const [jobs,          setJobs]          = useState<ScanJobUI[]>([]);
+  const [loading,       setLoading]       = useState(true);
+  const [runnerStatus,  setRunnerStatus]  = useState<RunnerStatus | null>(null);
+  const [autoRun,       setAutoRun]       = useState(false);
+  const [lastPoll,      setLastPoll]      = useState(() => new Date().toISOString());
+  const [activeId,      setActiveId]      = useState<string | null>(null);
+  const [pulseKey,      setPulseKey]      = useState(0);
+  const [toast,         setToast]         = useState<Toast | null>(null);
+
+  const runnerOnline = runnerStatus?.online ?? false;
 
   function flash(text: string) { setToast({ text, id: Date.now() }); }
   useEffect(() => {
@@ -107,13 +109,21 @@ export default function JobsSection({
 
   const loadJobs = useCallback(async () => {
     try {
-      const res = await authFetch(`/programs/${programId}/jobs`);
-      if (!res.ok) return;
-      const data = await res.json();
-      const mapped: ScanJobUI[] = Array.isArray(data?.jobs)
-        ? data.jobs.map((j: ScanJob) => mapToUI(j))
-        : [];
-      setJobs(mapped);
+      const [jobsRes, statusRes] = await Promise.all([
+        authFetch(`/programs/${programId}/jobs`),
+        authFetch(`/runner/status`),
+      ]);
+      if (jobsRes.ok) {
+        const data = await jobsRes.json();
+        const mapped: ScanJobUI[] = Array.isArray(data?.jobs)
+          ? data.jobs.map((j: ScanJob) => mapToUI(j))
+          : [];
+        setJobs(mapped);
+      }
+      if (statusRes.ok) {
+        const rs: RunnerStatus = await statusRes.json();
+        setRunnerStatus(rs);
+      }
       setLastPoll(new Date().toISOString());
       setPulseKey((k) => k + 1);
     } catch { /* auth errors surfaced by authFetch */ } finally {
@@ -244,6 +254,7 @@ export default function JobsSection({
       <Bridge
         accent={ACCENT}
         runnerOnline={runnerOnline}
+        runnerStatus={runnerStatus}
         autoRun={autoRun}
         lastPoll={lastPoll}
         queueDepth={pendingCount}
@@ -251,7 +262,7 @@ export default function JobsSection({
         busy={busy}
         pulseKey={pulseKey}
         collapsed={prefs.collapsed}
-        onToggleRunner={() => setRunnerOnline((v) => !v)}
+        onRefreshRunner={() => { void loadJobs(); }}
         onToggleAuto={() => setAutoRun((v) => !v)}
         onToggleCollapse={() => pref("collapsed", !prefs.collapsed)}
       />

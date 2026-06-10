@@ -76,6 +76,16 @@ npm run dev
 
 ## Current roadmap
 
+Shipped (v0.12.0):
+- VardrRunner real heartbeat — `POST /runner/heartbeat` + `GET /runner/status`; Bridge shows real hostname, version, OS, and per-tool availability with version chips
+- `vardrrunner heartbeat` explicit command; auto-heartbeat at start of `vardrrunner jobs run`
+- `runner_heartbeats` table + migration 0005; online = `last_seen < 5 min ago`
+
+Shipped (v0.11.0):
+- Scan Jobs console wired to live API — real `GET /programs/{id}/jobs` polling; `POST` to queue, `PATCH` to cancel; adaptive 5s/30s polling
+- VardrRunner subfinder job dispatch fixed — proper wildcard extraction → subfinder → JSONL → httpx import
+- Simulation engine removed (initJobs, computeYield, RUNNER, THROUGHPUT stubs gone)
+
 Shipped (v0.10.0):
 - Workflow navigation model: 7-section sidebar (Dashboard, Scope, Run, Review, Findings, Reports, Settings)
 - Dashboard: 6 quick-action buttons + inline program edit form (Program Profile section removed)
@@ -94,7 +104,9 @@ Shipped (v0.9.0):
 - Scan Jobs orchestration console — Bridge, Telemetry, Composer, JobBoard (stream/pipeline/table), Terminal with live log streaming
 
 Remaining:
-- Run / Jobs: wire real API (replace mock seed data with `GET /programs/{id}/jobs`; SSE stream for live logs)
+- Job events / real logs — `job_events` table, `POST /jobs/{id}/events` for VardrRunner, `GET /jobs/{id}/events` for frontend Terminal to poll (polling first, SSE later)
+- Nmap / service discovery — `vardrrunner run nmap --from-recon --top-ports 100`, safe profiles only, store as services table
 - RBAC / multi-user support
-- VardrRunner: extract to separate repo (VardrSec/VardrRunner) when API stabilizes
+- Opportunities / Target Radar — new programs or changed scopes
 - AI-assisted finding triage and report drafting
+- VardrRunner: extract to separate repo (VardrSec/VardrRunner) when API stabilizes

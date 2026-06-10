@@ -4,6 +4,25 @@ All notable changes to VardrMap. Versions are tagged by milestone — this proje
 
 ---
 
+## v0.12.0 — VardrRunner real heartbeat (2026-06-10)
+
+### Added
+- **`POST /runner/heartbeat`** — VardrRunner reports hostname, version, OS, and per-tool availability (name, `ok`, version string); upserts one row per user in the new `runner_heartbeats` table
+- **`GET /runner/status`** — frontend polls this; returns `online: true` if a heartbeat arrived within the last 5 minutes, plus the runner's full details
+- **`vardrrunner heartbeat`** command — explicitly send a heartbeat and print per-tool availability to the terminal
+- **Auto-heartbeat in `vardrrunner jobs run`** — heartbeat is sent quietly before processing any jobs, so the Bridge goes online the moment the user starts the runner loop
+- **`runner.tool_version(name)`** — runs `{tool} -version` and parses the semver (e.g. `v1.6.9`) from stdout/stderr; used by the heartbeat to report installed versions
+- **`runner_heartbeats` table + Alembic migration 0005** — `owner_github_id` (unique), `hostname`, `version`, `os_info`, `tools` (JSON), `last_seen`
+
+### Changed
+- **Bridge** — runner node now shows real hostname, OS, runner version, and per-tool chips (green with version = installed; dim = missing); "connect/disconnect" button replaced by a "sync" button that triggers an immediate status re-fetch
+- **JobsSection** — `loadJobs` now fires `GET /programs/{id}/jobs` and `GET /runner/status` in parallel on every poll cycle; `runnerOnline` is derived from `runnerStatus?.online` rather than a manual toggle
+
+### Security
+- Runner heartbeat endpoints scoped by `get_current_user` — a user can only read/write their own runner status; no URL parameter exposed to manipulation
+
+---
+
 ## v0.11.0 — Scan Jobs real API integration (2026-06-09)
 
 ### Changed

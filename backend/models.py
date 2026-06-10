@@ -204,6 +204,19 @@ class ScanJob(Base):
     program = relationship("Program", back_populates="scan_jobs")
 
 
+class RunnerHeartbeat(Base):
+    __tablename__ = "runner_heartbeats"
+
+    id = Column(String, primary_key=True, default=new_uuid)
+    # One row per user — upserted on every heartbeat POST
+    owner_github_id = Column(String, nullable=False, unique=True, index=True)
+    hostname = Column(String(200), default="")
+    version = Column(String(50), default="")
+    os_info = Column(String(200), default="")
+    tools = Column(JSON, nullable=False, default=dict)  # {"httpx": {"ok": true, "version": "v1.6.9"}}
+    last_seen = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+
+
 class ApiKey(Base):
     __tablename__ = "api_keys"
 

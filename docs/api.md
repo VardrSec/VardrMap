@@ -595,3 +595,55 @@ Update a job's status. Used by VardrRunner to claim (`running`) and complete (`d
 **Errors**
 - `400` — invalid status value
 - `404` — job not found or belongs to another user
+
+---
+
+## Runner Heartbeat
+
+VardrRunner reports its status to VardrMap so the Bridge UI can show real connectivity, hostname, version, and tool availability.
+
+### `POST /runner/heartbeat`
+VardrRunner posts its status here. Upserts one row per authenticated user (one row per user — not per device).
+
+**Request body**
+```json
+{
+  "hostname": "dev-laptop",
+  "version":  "0.1.0",
+  "os":       "Linux 6.5",
+  "tools": {
+    "httpx":     { "ok": true,  "version": "v1.6.9" },
+    "nuclei":    { "ok": true,  "version": "v3.2.0" },
+    "subfinder": { "ok": false, "version": null }
+  }
+}
+```
+
+**Response**
+```json
+{ "ok": true, "last_seen": "2026-06-10T12:34:56.789012" }
+```
+
+### `GET /runner/status`
+Frontend polls this to check connectivity and display runner details in the Bridge. Returns `online: true` if a heartbeat was received within the last 5 minutes.
+
+**Response (runner online)**
+```json
+{
+  "online":    true,
+  "last_seen": "2026-06-10T12:34:56.789012",
+  "hostname":  "dev-laptop",
+  "version":   "0.1.0",
+  "os":        "Linux 6.5",
+  "tools": {
+    "httpx":     { "ok": true,  "version": "v1.6.9" },
+    "nuclei":    { "ok": true,  "version": "v3.2.0" },
+    "subfinder": { "ok": false, "version": null }
+  }
+}
+```
+
+**Response (no heartbeat ever sent)**
+```json
+{ "online": false, "last_seen": null, "hostname": null, "version": null, "os": null, "tools": {} }
+```

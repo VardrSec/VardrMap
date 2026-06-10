@@ -1,5 +1,6 @@
 "use client";
 
+import type { RunnerStatus } from "../../types";
 import { fmtAgo } from "./mockData";
 
 function LinkWire({ online, accent, busy, pulseKey }: {
@@ -62,6 +63,20 @@ function Node({ label, sub, glyph, glyphColor, active, children }: {
   );
 }
 
+function ToolChip({ name, ok, version }: { name: string; ok: boolean; version: string | null }) {
+  return (
+    <span
+      className="rounded border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wide"
+      style={{
+        borderColor: ok ? "#a6e3a180" : "#3a3a3a",
+        color:       ok ? "#a6e3a1"   : "#52525b",
+        backgroundColor: ok ? "#a6e3a10d" : "transparent",
+      }}>
+      {name}{ok && version ? ` ${version}` : ok ? " ✓" : " ✗"}
+    </span>
+  );
+}
+
 function BridgeStrip({ accent, runnerOnline, autoRun, queueDepth, runningCount, busy, onExpand }: {
   accent: string; runnerOnline: boolean; autoRun: boolean; queueDepth: number;
   runningCount: number; busy: boolean; onExpand: () => void;
@@ -108,6 +123,7 @@ function BridgeStrip({ accent, runnerOnline, autoRun, queueDepth, runningCount, 
 export type BridgeProps = {
   accent: string;
   runnerOnline: boolean;
+  runnerStatus: RunnerStatus | null;
   autoRun: boolean;
   lastPoll: string;
   queueDepth: number;
@@ -115,14 +131,14 @@ export type BridgeProps = {
   busy: boolean;
   pulseKey: number;
   collapsed: boolean;
-  onToggleRunner: () => void;
+  onRefreshRunner: () => void;
   onToggleAuto: () => void;
   onToggleCollapse: () => void;
 };
 
 export default function Bridge({
-  accent, runnerOnline, autoRun, lastPoll, queueDepth, runningCount,
-  busy, pulseKey, collapsed, onToggleRunner, onToggleAuto, onToggleCollapse,
+  accent, runnerOnline, runnerStatus, autoRun, lastPoll, queueDepth, runningCount,
+  busy, pulseKey, collapsed, onRefreshRunner, onToggleAuto, onToggleCollapse,
 }: BridgeProps) {
   if (collapsed) {
     return (
@@ -133,6 +149,12 @@ export default function Bridge({
       />
     );
   }
+
+  const toolEntries = runnerStatus ? Object.entries(runnerStatus.tools) : [];
+  const seenAgo = runnerStatus?.last_seen ? fmtAgo(runnerStatus.last_seen) : fmtAgo(lastPoll);
+  const runnerSub = runnerStatus?.hostname
+    ? `${runnerStatus.hostname}${runnerStatus.os ? ` · ${runnerStatus.os}` : ""}`
+    : "local machine";
 
   return (
     <div className="rounded-2xl border border-[#2e2e2e] bg-[#1a1a1a] p-5">
@@ -149,9 +171,12 @@ export default function Bridge({
             <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: autoRun ? accent : "#3a3a3a" }} />
             auto-run {autoRun ? "on" : "off"}
           </button>
-          <button onClick={onToggleRunner}
-            className="rounded-md border border-[#2e2e2e] px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-[#94a3b8] transition hover:border-[#3a3a3a] hover:text-[#f1f5f9]">
-            {runnerOnline ? "disconnect" : "connect"}
+          <button onClick={onRefreshRunner}
+            className="flex items-center gap-1.5 rounded-md border border-[#2e2e2e] px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-[#94a3b8] transition hover:border-[#3a3a3a] hover:text-[#f1f5f9]">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16" />
+            </svg>
+            sync
           </button>
           <button onClick={onToggleCollapse}
             className="flex items-center gap-1 rounded-md border border-[#2e2e2e] px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#94a3b8]">
@@ -184,23 +209,41 @@ export default function Bridge({
         {/* Runner node */}
         <Node
           label="VardrRunner"
-          sub="local machine"
+          sub={runnerSub}
           glyph="▣"
           glyphColor={runnerOnline ? "#a6e3a1" : "#52525b"}
           active={runnerOnline}
         >
           {runnerOnline ? (
-            <div className="mt-3 flex items-center justify-between font-mono text-[10px] text-[#52525b]">
-              <span>$ vardrrunner jobs run</span>
-              <span className="flex items-center gap-1.5">
-                <span className="h-1 w-1 animate-pulse rounded-full bg-[#a6e3a1]" />
-                polled {fmtAgo(lastPoll)}
-              </span>
+            <div className="mt-3 space-y-2">
+              <div className="flex items-center justify-between font-mono text-[10px]">
+                {runnerStatus?.version && (
+                  <span className="text-[#52525b]">v{runnerStatus.version}</span>
+                )}
+                <span className="ml-auto flex items-center gap-1.5 text-[#52525b]">
+                  <span className="h-1 w-1 animate-pulse rounded-full bg-[#a6e3a1]" />
+                  seen {seenAgo}
+                </span>
+              </div>
+              {toolEntries.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {toolEntries.map(([name, info]) => (
+                    <ToolChip key={name} name={name} ok={info.ok} version={info.version} />
+                  ))}
+                </div>
+              )}
             </div>
           ) : (
-            <div className="mt-3 rounded-lg border border-dashed border-[#2e2e2e] bg-[#1a1a1a] px-3 py-3 text-center">
-              <p className="font-mono text-[11px] text-[#52525b]">runner offline</p>
-              <p className="mt-1 font-mono text-[10px] text-[#3a3a3a]">$ vardrrunner login vardrmap</p>
+            <div className="mt-3 space-y-2">
+              <div className="rounded-lg border border-dashed border-[#2e2e2e] bg-[#1a1a1a] px-3 py-3 text-center">
+                <p className="font-mono text-[11px] text-[#52525b]">runner offline</p>
+                <p className="mt-1 font-mono text-[10px] text-[#3a3a3a]">$ vardrrunner jobs run</p>
+              </div>
+              {runnerStatus?.last_seen && (
+                <p className="text-center font-mono text-[10px] text-[#3a3a3a]">
+                  last seen {seenAgo}
+                </p>
+              )}
             </div>
           )}
         </Node>
