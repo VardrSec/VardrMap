@@ -13,6 +13,7 @@ All notable changes to VardrMap. Versions are tagged by milestone — this proje
   - "Cancel" button calls `PATCH /jobs/{id}` with `status: "failed"` and `error_message: "cancelled by operator"`
   - "Re-queue" button creates a new job with the same `tool_type`, `target_source`, and `config`
 - `mapToUI(ScanJob → ScanJobUI)` converts backend job records: `progress` is 0/50/100 derived from status; `log` contains only the real `error_message` if present
+- **VardrRunner subfinder job dispatch fixed** — `vardrrunner jobs run` previously fell through to the nuclei branch for any non-httpx tool; subfinder jobs now resolve wildcard scope entries to root domains, run subfinder, convert plain-text output to httpx-compatible JSONL, and upload as `httpx` recon targets (matching the `vardrrunner run subfinder` behavior)
 - **Simulation engine removed** — `initJobs`, `computeYield`, `logFor`, `nextId`, `RUNNER`, `THROUGHPUT`, and the `setInterval` advancement loop are no longer in the codebase
 - `Bridge` — runner node simplified: shows `"local machine"` and last poll timestamp instead of fake tool version chips; `fmtAgo(lastPoll)` now reflects real API poll time
 - `Telemetry` — throughput sparkline removed; fourth tile is now a plain avg-runtime stat (real average over completed jobs with recorded `durationMs`)
