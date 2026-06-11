@@ -9,7 +9,7 @@ A personal bug bounty workflow tool. Manage target programs, track scope, log fi
 | Layer | Technology | Hosting |
 |---|---|---|
 | Frontend | Next.js 16 (App Router, TypeScript) | Vercel |
-| Backend | FastAPI (Python 3.14) | Railway |
+| Backend | FastAPI (Python 3.12) | Railway |
 | Database | PostgreSQL (psycopg3) | Railway |
 | Auth | GitHub OAuth → Auth.js v5 → backend JWT (HS256) | — |
 | ORM | SQLAlchemy + Alembic | — |

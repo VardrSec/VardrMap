@@ -4,6 +4,16 @@ All notable changes to VardrMap. Versions are tagged by milestone — this proje
 
 ---
 
+## v0.13.2 — Pin backend Python to 3.12 for Railway deploy (2026-06-10)
+
+### Fixed
+- **Railway deploy** — added `backend/.python-version` pinned to `3.12`; Nixpacks/mise was attempting to install `python@3.13.14` for which no precompiled build exists, causing deploy failures; `3.12` has a stable precompiled binary in the mise registry
+
+### Docs
+- `README.md` and `docs/development.md`: updated Python version references from 3.14 to 3.12
+
+---
+
 ## v0.13.1 — Validation, preselect, and docs fixes (2026-06-10)
 
 ### Fixed

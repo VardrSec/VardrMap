@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Python 3.12+ (project runs on 3.14)
+- Python 3.12+
 - Node.js 20+
 - PostgreSQL (or use Railway for a hosted instance)
 - A GitHub OAuth App for local login
