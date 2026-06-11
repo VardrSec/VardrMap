@@ -1,8 +1,8 @@
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from db import get_db
@@ -12,9 +12,12 @@ from models import JobEvent, ScanJob
 router = APIRouter(tags=["jobs"])
 
 
+EventKind = Literal["started", "targets_resolved", "running", "uploaded", "done", "failed", "log"]
+
+
 class EventCreate(BaseModel):
-    kind: str
-    text: str = ""
+    kind: EventKind
+    text: str = Field(default="", max_length=2000)
 
 
 class JobCreate(BaseModel):

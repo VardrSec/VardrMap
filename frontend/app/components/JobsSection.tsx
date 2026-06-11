@@ -70,8 +70,8 @@ function mapToUI(job: ScanJob): ScanJobUI {
 }
 
 export default function JobsSection({
-  programId, defaultTool, hideHeader,
-}: { programId: string; defaultTool?: string; hideHeader?: boolean }) {
+  programId, defaultTool, prefillEpoch, hideHeader,
+}: { programId: string; defaultTool?: string; prefillEpoch?: number; hideHeader?: boolean }) {
   const { authFetch, selectedProgram } = useAppContext();
   const scopeCount  = selectedProgram?.scope.in.length ?? 0;
   const reconCount  = selectedProgram?.recon_count     ?? 0;
@@ -283,7 +283,7 @@ export default function JobsSection({
 
       <div className="grid gap-5 xl:grid-cols-[320px_1fr]">
         <Composer
-          key={defaultTool}
+          key={`${defaultTool ?? ""}:${prefillEpoch ?? 0}`}
           accent={ACCENT}
           onQueue={queueJob}
           runnerOnline={runnerOnline}

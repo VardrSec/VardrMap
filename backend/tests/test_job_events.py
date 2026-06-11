@@ -79,6 +79,24 @@ class TestPostJobEvent:
         res = _post_event(client, "no-such-job", auth_headers)
         assert res.status_code == 404
 
+    def test_invalid_kind_422(self, client, program_id, auth_headers):
+        jid = _make_job(client, program_id, auth_headers)
+        res = client.post(
+            f"/jobs/{jid}/events",
+            json={"kind": "not_a_real_kind", "text": "x"},
+            headers=auth_headers,
+        )
+        assert res.status_code == 422
+
+    def test_text_too_long_422(self, client, program_id, auth_headers):
+        jid = _make_job(client, program_id, auth_headers)
+        res = client.post(
+            f"/jobs/{jid}/events",
+            json={"kind": "log", "text": "x" * 2001},
+            headers=auth_headers,
+        )
+        assert res.status_code == 422
+
 
 # ---------------------------------------------------------------------------
 # GET /jobs/{id}/events

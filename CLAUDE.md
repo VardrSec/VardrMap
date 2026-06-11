@@ -6,13 +6,13 @@ Personal bug bounty workflow tool. FastAPI backend (Railway) + Next.js 16 fronte
 ## Where things live
 - `backend/` — FastAPI app, SQLAlchemy models, Alembic migrations, tests
 - `backend/routers/` — one file per resource (programs, findings, reports, etc.)
-- `backend/tests/` — pytest suite, 63 tests, uses SQLite
+- `backend/tests/` — pytest suite, 86 tests, uses SQLite
 - `frontend/app/` — Next.js App Router pages and components
 - `frontend/app/components/` — one component per section (FindingsSection, ReportsSection, JobsSection, etc.)
 - `frontend/app/context/` — AppContext.tsx + appReducer.ts (global state)
 - `runner/` — VardrRunner v1 local CLI; separate venv, installable via `pip install -e ./runner`
 - `runner/vardrrunner/` — Python package: config, api client, subprocess runner, command modules
-- `runner/tests/` — 40 tests; all subprocess and HTTP calls are mocked
+- `runner/tests/` — 58 tests; all subprocess and HTTP calls are mocked
 - `docs/` — architecture, API reference, development setup, security testing record
 - `CHANGELOG.md` — version history, updated with every change
 
@@ -92,11 +92,11 @@ Shipped (v0.11.0):
 - Simulation engine removed (initJobs, computeYield, RUNNER, THROUGHPUT stubs gone)
 
 Shipped (v0.10.0):
-- Workflow navigation model: 7-section sidebar (Dashboard, Scope, Run, Review, Findings, Reports, Settings)
-- Dashboard: 6 quick-action buttons + inline program edit form (Program Profile section removed)
-- Run section: orchestration console (Jobs tab) + file import (Import tab); absorbs Scan Jobs + Imports sections
+- Workflow navigation model: 7-section sidebar (Dashboard, Scope, Overview, Review, Findings, Reports, Settings)
+- Dashboard: orchestration console (Jobs tab) + file import (Import tab); absorbs Scan Jobs + Imports sections
+- Overview: 6 quick-action buttons + inline program edit form (Program Profile section removed)
 - Review section: RECON | SCANS | MANUAL tab switcher wrapping existing sub-components
-- Deep-link navigation: `navigateToRun(tool)` pre-selects tool in Composer via runPrefill state
+- Deep-link navigation: `navigateToDashboard(tool)` pre-selects tool in Composer via runPrefill state
 
 Shipped (v0.9.0):
 - Frontend app state extracted into context/reducer (AppContext + appReducer)

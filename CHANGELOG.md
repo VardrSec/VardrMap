@@ -4,6 +4,20 @@ All notable changes to VardrMap. Versions are tagged by milestone — this proje
 
 ---
 
+## v0.13.1 — Validation, preselect, and docs fixes (2026-06-10)
+
+### Fixed
+- **Composer preselect** — quick-action tool buttons now correctly preselect the Composer tool even when the same tool is re-selected after a manual change; `DashboardSection` now tracks a `prefillEpoch` counter that increments on every click, so `JobsSection` gives `Composer` a new `key` each time and fully resets its state
+- **`EventCreate` validation** — `kind` is now constrained to a `Literal` type (`started | targets_resolved | running | uploaded | done | failed | log`); `text` is capped at 2 000 characters via `Field(max_length=2000)`; invalid inputs return `422`
+- **Docs: CLAUDE.md test counts** — corrected backend (63 → 86) and runner (40 → 58) test counts
+- **Docs: README** — removed stale "throughput sparkline" reference; added heartbeat command and job-events Terminal description; expanded Roadmap with atomic claim and Nmap entries
+- **Docs: development.md** — corrected backend test count (84 → 86) to reflect two new validation tests
+
+### Tests
+- Added `test_invalid_kind_422` and `test_text_too_long_422` to `tests/test_job_events.py`; backend suite is now 86 tests
+
+---
+
 ## v0.13.0 — Job events and real Terminal logs (2026-06-10)
 
 ### Added

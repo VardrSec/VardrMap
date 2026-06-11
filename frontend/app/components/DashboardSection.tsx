@@ -13,13 +13,17 @@ export default function DashboardSection({ program }: { program: Program }) {
 
   const [activeTab,   setActiveTab]   = useState<RunTab>("jobs");
   const [prefillTool, setPrefillTool] = useState<string | undefined>(undefined);
+  const [prefillEpoch, setPrefillEpoch] = useState(0);
 
   useEffect(() => {
     if (!state.runPrefill) return;
     if (state.runPrefill.tab === "import") {
       setActiveTab("import");
     } else {
-      if (state.runPrefill.tool) setPrefillTool(state.runPrefill.tool);
+      if (state.runPrefill.tool) {
+        setPrefillTool(state.runPrefill.tool);
+        setPrefillEpoch((n) => n + 1);
+      }
       setActiveTab("jobs");
     }
     dispatch({ type: "DASHBOARD_PREFILL_CONSUMED" });
@@ -71,7 +75,7 @@ export default function DashboardSection({ program }: { program: Program }) {
       </div>
 
       {activeTab === "jobs" && (
-        <JobsSection programId={program.id} defaultTool={prefillTool} hideHeader />
+        <JobsSection programId={program.id} defaultTool={prefillTool} prefillEpoch={prefillEpoch} hideHeader />
       )}
 
       {activeTab === "import" && (

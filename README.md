@@ -30,15 +30,16 @@ A personal bug bounty workflow tool. Manage target programs, track scope, log fi
 - All write operations logged to an append-only audit log
 
 **Scan Jobs orchestration console** — full job management UI in the browser:
-- Bridge zone — animated link visualization showing live VardrMap ↔ VardrRunner connection status
-- Telemetry zone — running/completed/yield stats and a throughput sparkline
+- Bridge zone — animated link visualization showing live VardrMap ↔ VardrRunner connection status; shows real hostname, OS, version, and per-tool availability from the latest heartbeat
+- Telemetry zone — running/completed/results-yielded/avg-runtime stat tiles
 - Composer zone — tool picker (subfinder, httpx, nuclei) with per-tool config; queues a job with one click
-- Job Board + Terminal — three board views (Stream, Pipeline, Table); selecting a job opens a live log terminal
+- Job Board + Terminal — three board views (Stream, Pipeline, Table); selecting a job opens a terminal that polls live lifecycle events (started → running → done/failed) every 3 s
 
 **VardrRunner** — local CLI companion (`runner/`):
 - Authenticate with `vardrrunner login vardrmap` using a `vmap_` API key
 - `vardrrunner status` — verify config, API connectivity, and local tool availability
-- Run httpx, nuclei, and subfinder locally; results uploaded automatically
+- `vardrrunner heartbeat` — report hostname, OS, version, and per-tool availability to VardrMap; auto-sent at start of `jobs run`
+- Run httpx, nuclei, and subfinder locally; results uploaded automatically; lifecycle events posted at each stage
 - Queue scan jobs from the UI; VardrRunner polls and executes them with `vardrrunner jobs run`
 - Wildcard scope entries (`*.example.com`) handled via subfinder enumeration
 
@@ -95,6 +96,9 @@ npm run dev
 
 ## Roadmap
 
+- Atomic job claim — `POST /jobs/{id}/claim` only updates where `status = 'pending'`, returns 409 if already claimed (race-safe for multiple runner instances)
+- Nmap / service discovery — `vardrrunner run nmap --from-recon --top-ports 100`, safe profiles only, stored in a services table
 - RBAC / multi-user support
+- Opportunities / Target Radar — surface new programs or recently changed scopes
 - AI-assisted finding triage and report drafting
 - VardrRunner: extract to separate repo (VardrSec/VardrRunner) when API stabilizes
