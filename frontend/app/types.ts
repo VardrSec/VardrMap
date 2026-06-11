@@ -27,7 +27,12 @@ export type Program = {
   findings_by_status: Record<string, number>;
   reports_count: number;
 };
-export type ApiKey = { id: string; label: string; created_at: string | null };
+export type ApiKey = { id: string; label: string; created_at: string | null; last_used_at: string | null };
+export type Service = {
+  id: string; program_id: string; host: string; port: number; protocol: string;
+  service_name: string; product: string; version: string; state: string; source: string;
+  created_at: string | null;
+};
 export type ScanJob = {
   id: string; program_id: string; tool_type: string; target_source: string;
   config: Record<string, unknown>; status: string;

@@ -20,10 +20,53 @@ class EventCreate(BaseModel):
     text: str = Field(default="", max_length=2000)
 
 
+_VALID_TOOLS = {"httpx", "nuclei", "subfinder", "nmap"}
+_VALID_SOURCES = {"scope", "recon"}
+
+# Per-tool allowed config keys. Keys not in this set are rejected.
+_TOOL_CONFIG_KEYS: dict[str, set[str]] = {
+    "httpx":     {"status_code", "limit"},
+    "nuclei":    {"severity", "templates"},
+    "subfinder": {"recursive", "sources"},
+    "nmap":      {"top_ports", "timing"},
+}
+_NUCLEI_SEVERITIES = {"info", "low", "medium", "high", "critical"}
+
+
+def _validate_job_config(tool_type: str, config: dict) -> None:
+    allowed = _TOOL_CONFIG_KEYS.get(tool_type, set())
+    unknown = set(config.keys()) - allowed
+    if unknown:
+        raise HTTPException(
+            status_code=400,
+            detail=f"unknown config keys for {tool_type}: {sorted(unknown)}",
+        )
+    if tool_type == "httpx" and "limit" in config:
+        try:
+            int(config["limit"])
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="httpx config.limit must be an integer")
+    if tool_type == "nuclei" and config.get("severity"):
+        parts = [s.strip() for s in str(config["severity"]).split(",") if s.strip()]
+        bad = [s for s in parts if s not in _NUCLEI_SEVERITIES]
+        if bad:
+            raise HTTPException(
+                status_code=400,
+                detail=f"nuclei severity must be info/low/medium/high/critical, got: {bad}",
+            )
+    if tool_type == "nmap" and "timing" in config:
+        try:
+            t = int(config["timing"])
+            if not (0 <= t <= 4):
+                raise ValueError
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="nmap config.timing must be 0-4")
+
+
 class JobCreate(BaseModel):
-    tool_type: str              # "httpx", "nuclei", or "subfinder"
+    tool_type: str              # "httpx", "nuclei", "subfinder", or "nmap"
     target_source: str          # "scope" or "recon"
-    config: Optional[dict] = None  # {status_code, limit, severity, templates, recursive, sources}
+    config: Optional[dict] = None
 
 
 class JobStatusUpdate(BaseModel):
@@ -54,10 +97,12 @@ def create_job(
     db: Session = Depends(get_db),
 ):
     get_program_or_404(program_id, current_user, db)
-    if body.tool_type not in ("httpx", "nuclei", "subfinder"):
-        raise HTTPException(status_code=400, detail="tool_type must be httpx, nuclei, or subfinder")
-    if body.target_source not in ("scope", "recon"):
+    if body.tool_type not in _VALID_TOOLS:
+        raise HTTPException(status_code=400, detail=f"tool_type must be one of {sorted(_VALID_TOOLS)}")
+    if body.target_source not in _VALID_SOURCES:
         raise HTTPException(status_code=400, detail="target_source must be scope or recon")
+    if body.config:
+        _validate_job_config(body.tool_type, body.config)
 
     job = ScanJob(
         program_id=program_id,
@@ -139,6 +184,29 @@ def update_job(
     if body.error_message is not None:
         job.error_message = body.error_message
 
+    db.commit()
+    db.refresh(job)
+    return serialize_job(job)
+
+
+@router.post("/jobs/{job_id}/claim")
+def claim_job(
+    job_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Atomically claim a pending job. Returns 409 if the job is not in 'pending' state."""
+    job = (
+        db.query(ScanJob)
+        .filter(ScanJob.id == job_id, ScanJob.owner_github_id == current_user["github_id"])
+        .first()
+    )
+    if not job:
+        raise HTTPException(status_code=404)
+    if job.status != "pending":
+        raise HTTPException(status_code=409, detail=f"job is already {job.status}")
+    job.status = "running"
+    job.started_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(job)
     return serialize_job(job)

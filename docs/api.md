@@ -66,7 +66,7 @@ List the current user's API keys. Does not return the token or hash — only met
 ```json
 {
   "keys": [
-    { "id": "<uuid>", "label": "Burp Suite", "created_at": "2026-06-08T10:00:00" }
+    { "id": "<uuid>", "label": "Burp Suite", "created_at": "2026-06-08T10:00:00", "last_used_at": "2026-06-11T09:00:00" }
   ]
 }
 ```
@@ -191,7 +191,7 @@ Add an in-scope item.
 ```json
 { "value": "*.acme.com", "kind": "domain", "notes": "" }
 ```
-`kind` values: `domain`, `ip`, `url`, `cidr`, `mobile`, `other`. `notes` is optional.
+`kind` values: `domain`, `subdomain`, `url`, `cidr`, `api`, `mobile`. `notes` is optional.
 
 **Response:** scope item object
 
@@ -247,7 +247,7 @@ Create a finding.
   "remediation": "..."
 }
 ```
-`title` is required. `severity` values: `critical`, `high`, `medium`, `low`, `info`. `status` values: `new`, `triaged`, `accepted`, `rejected`, `informational`.
+`title` is required. `severity` values: `critical`, `high`, `medium`, `low`, `info`. `status` values: `new`, `candidate`, `triaged`, `in_progress`, `closed`.
 
 **Response:** finding object
 
@@ -550,14 +550,14 @@ Queue a new scan job.
   "config": { "status_code": 200, "limit": 500 }
 }
 ```
-- `tool_type`: `"httpx"`, `"nuclei"`, or `"subfinder"`
+- `tool_type`: `"httpx"`, `"nuclei"`, `"subfinder"`, or `"nmap"`
 - `target_source`: `"scope"` or `"recon"`
-- `config` (optional): tool-specific options — `status_code`, `limit` for httpx; `severity`, `templates` for nuclei; `recursive`, `sources` for subfinder
+- `config` (optional): tool-specific options — `status_code`, `limit` for httpx; `severity`, `templates` for nuclei; `top_ports`, `timing` for nmap. Unknown keys are rejected.
 
 **Response:** job object with `status: "pending"`.
 
 **Errors**
-- `400` — invalid `tool_type` (must be `httpx`, `nuclei`, or `subfinder`) or `target_source`
+- `400` — invalid `tool_type`, invalid `target_source`, or unknown config key for the tool
 - `404` — program not found or belongs to another user
 
 ### `GET /programs/{program_id}/jobs`
@@ -576,13 +576,23 @@ Return all `pending` jobs owned by the authenticated user, oldest first. Used by
 { "jobs": [ <job_object>, ... ] }
 ```
 
+### `POST /jobs/{job_id}/claim`
+Atomically claim a pending job. Sets `status: "running"` and stamps `started_at` only if the job is currently `pending`. Returns `409` if the job is already running, done, or failed — prevents two VardrRunner instances from double-claiming the same job.
+
+**Response:** updated job object with `status: "running"`.
+
+**Errors**
+- `401` — not authenticated
+- `404` — job not found or belongs to another user
+- `409` — job is not in `pending` state
+
 ### `PATCH /jobs/{job_id}`
-Update a job's status. Used by VardrRunner to claim (`running`) and complete (`done`/`failed`) jobs.
+Update a job's status. Used by VardrRunner to complete (`done`/`failed`) jobs after claiming via `POST /jobs/{id}/claim`.
 
 **Request body**
 ```json
 {
-  "status": "running",
+  "status": "done",
   "error_message": ""
 }
 ```
@@ -714,3 +724,78 @@ Frontend polls this to stream job lifecycle events into the Terminal. Returns al
 **Errors**
 - `401` — not authenticated
 - `404` — job not found or belongs to another user
+
+---
+
+## Services
+
+Open ports and services discovered by nmap. All endpoints are BOLA-scoped: the program must belong to the authenticated user.
+
+A service object looks like:
+```json
+{
+  "id": "<uuid>",
+  "program_id": "<uuid>",
+  "host": "app.acme.com",
+  "port": 443,
+  "protocol": "tcp",
+  "service_name": "https",
+  "product": "nginx",
+  "version": "1.24.0",
+  "state": "open",
+  "source": "nmap",
+  "created_at": "2026-06-11T10:00:00"
+}
+```
+
+### `GET /programs/{program_id}/services`
+List all services for a program, ordered by host then port.
+
+**Response**
+```json
+{ "services": [ <service_object>, ... ], "total": 42 }
+```
+
+### `POST /programs/{program_id}/services`
+Bulk-upsert services. VardrRunner posts nmap results here after a scan job completes. Upserts on `(host, port, protocol)` — updates metadata if the combination already exists.
+
+**Request body**
+```json
+{
+  "services": [
+    { "host": "app.acme.com", "port": 443, "protocol": "tcp", "service_name": "https", "product": "nginx", "version": "1.24.0" }
+  ]
+}
+```
+
+**Field constraints**
+| Field | Constraint |
+|---|---|
+| `host` | 1–500 chars, required |
+| `port` | 1–65535, required |
+| `protocol` | `"tcp"` or `"udp"`, default `"tcp"` |
+| `service_name` | max 100 chars, default `""` |
+| `product` | max 200 chars, default `""` |
+| `version` | max 100 chars, default `""` |
+| `state` | max 20 chars, default `"open"` |
+| `source` | max 50 chars, default `"nmap"` |
+
+Maximum 5 000 services per request.
+
+**Response** `201`
+```json
+{ "created": 3, "updated": 1 }
+```
+
+### `DELETE /programs/{program_id}/services/{service_id}`
+Delete a single service record.
+
+**Response**
+```json
+{ "message": "Service deleted" }
+```
+
+**Errors**
+- `401` — not authenticated
+- `404` — program or service not found, or belongs to another user
+- `422` — invalid field value (e.g. port out of range)

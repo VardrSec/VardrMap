@@ -9,7 +9,7 @@ from slowapi.util import get_remote_address
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from db import Base, engine
-from routers import apikeys, findings, imports, jobs, manual_tests, programs, recon, reports, runner, scans, scope
+from routers import apikeys, findings, imports, jobs, manual_tests, programs, recon, reports, runner, scans, scope, services
 
 ENV = os.getenv("ENV") or os.getenv("RAILWAY_ENVIRONMENT_NAME", "development")
 
@@ -83,6 +83,7 @@ app.include_router(reports.router)
 app.include_router(imports.router)
 app.include_router(jobs.router)
 app.include_router(runner.router)
+app.include_router(services.router)
 
 # -----------------------------------------------------------------------------
 # Health / root

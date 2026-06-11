@@ -1,5 +1,6 @@
 import hashlib
 import os
+from datetime import datetime, timezone
 
 from fastapi import Depends, Header, HTTPException
 from jose import JWTError, jwt
@@ -40,6 +41,8 @@ def _resolve_api_key(token: str, db: Session) -> dict[str, str]:
     api_key = db.query(ApiKey).filter(ApiKey.key_hash == key_hash).first()
     if not api_key:
         raise HTTPException(status_code=401, detail="Unauthorized")
+    api_key.last_used_at = datetime.now(timezone.utc)
+    db.commit()
     user = db.query(User).filter(User.github_id == api_key.github_id).first()
     return {
         "github_id": api_key.github_id,

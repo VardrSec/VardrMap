@@ -16,18 +16,18 @@ export default function DashboardSection({ program }: { program: Program }) {
   const [prefillEpoch, setPrefillEpoch] = useState(0);
 
   useEffect(() => {
-    if (!state.runPrefill) return;
-    if (state.runPrefill.tab === "import") {
+    if (!state.dashboardPrefill) return;
+    if (state.dashboardPrefill.tab === "import") {
       setActiveTab("import");
     } else {
-      if (state.runPrefill.tool) {
-        setPrefillTool(state.runPrefill.tool);
+      if (state.dashboardPrefill.tool) {
+        setPrefillTool(state.dashboardPrefill.tool);
         setPrefillEpoch((n) => n + 1);
       }
       setActiveTab("jobs");
     }
     dispatch({ type: "DASHBOARD_PREFILL_CONSUMED" });
-  }, [state.runPrefill, dispatch]);
+  }, [state.dashboardPrefill, dispatch]);
 
   const [toolType,    setToolType]    = useState("ffuf");
   const [importFile,  setImportFile]  = useState<File | null>(null);

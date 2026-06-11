@@ -55,8 +55,15 @@ class TestCreateJob:
         assert res.status_code == 200
         assert res.json()["tool_type"] == "subfinder"
 
+    def test_nmap_tool_accepted(self, client, program_id, auth_headers):
+        res = _create_job(client, program_id, auth_headers,
+                          tool_type="nmap", target_source="scope",
+                          config={"top_ports": 100, "timing": 3})
+        assert res.status_code == 200
+        assert res.json()["tool_type"] == "nmap"
+
     def test_invalid_tool_type(self, client, program_id, auth_headers):
-        res = _create_job(client, program_id, auth_headers, tool_type="nmap")
+        res = _create_job(client, program_id, auth_headers, tool_type="masscan")
         assert res.status_code == 400
 
     def test_invalid_target_source(self, client, program_id, auth_headers):
@@ -177,3 +184,69 @@ class TestUpdateJob:
     def test_nonexistent_job_404(self, client, auth_headers):
         res = client.patch("/jobs/does-not-exist", json={"status": "running"}, headers=auth_headers)
         assert res.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# POST /jobs/{id}/claim — atomic job claiming
+# ---------------------------------------------------------------------------
+
+class TestClaimJob:
+    def test_claim_success(self, client, program_id, auth_headers):
+        jid = _create_job(client, program_id, auth_headers).json()["id"]
+        res = client.post(f"/jobs/{jid}/claim", headers=auth_headers)
+        assert res.status_code == 200
+        data = res.json()
+        assert data["status"] == "running"
+        assert data["started_at"] is not None
+
+    def test_claim_already_running_returns_409(self, client, program_id, auth_headers):
+        jid = _create_job(client, program_id, auth_headers).json()["id"]
+        client.post(f"/jobs/{jid}/claim", headers=auth_headers)
+        res = client.post(f"/jobs/{jid}/claim", headers=auth_headers)
+        assert res.status_code == 409
+
+    def test_claim_done_job_returns_409(self, client, program_id, auth_headers):
+        jid = _create_job(client, program_id, auth_headers).json()["id"]
+        client.patch(f"/jobs/{jid}", json={"status": "done"}, headers=auth_headers)
+        res = client.post(f"/jobs/{jid}/claim", headers=auth_headers)
+        assert res.status_code == 409
+
+    def test_claim_wrong_user_404(self, client, program_id, auth_headers, other_headers):
+        jid = _create_job(client, program_id, auth_headers).json()["id"]
+        res = client.post(f"/jobs/{jid}/claim", headers=other_headers)
+        assert res.status_code == 404
+
+    def test_claim_unauthorized(self, client, program_id, auth_headers):
+        jid = _create_job(client, program_id, auth_headers).json()["id"]
+        res = client.post(f"/jobs/{jid}/claim")
+        assert res.status_code == 401
+
+    def test_claim_nonexistent_404(self, client, auth_headers):
+        res = client.post("/jobs/does-not-exist/claim", headers=auth_headers)
+        assert res.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Config validation
+# ---------------------------------------------------------------------------
+
+class TestJobConfigValidation:
+    def test_unknown_config_key_rejected(self, client, program_id, auth_headers):
+        res = _create_job(client, program_id, auth_headers,
+                          tool_type="httpx", config={"unknown_key": True})
+        assert res.status_code == 400
+
+    def test_nuclei_invalid_severity_rejected(self, client, program_id, auth_headers):
+        res = _create_job(client, program_id, auth_headers,
+                          tool_type="nuclei", config={"severity": "extreme"})
+        assert res.status_code == 400
+
+    def test_nmap_timing_out_of_range_rejected(self, client, program_id, auth_headers):
+        res = _create_job(client, program_id, auth_headers,
+                          tool_type="nmap", config={"timing": 5})
+        assert res.status_code == 400
+
+    def test_nmap_valid_config_accepted(self, client, program_id, auth_headers):
+        res = _create_job(client, program_id, auth_headers,
+                          tool_type="nmap", config={"top_ports": 200, "timing": 4})
+        assert res.status_code == 200

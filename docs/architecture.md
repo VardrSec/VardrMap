@@ -92,7 +92,7 @@ programs
   scope_summary, severity_guidance, safe_harbor_notes
   created_at
   → scope_items, findings, reports, manual_tests,
-    recon_items, scan_items, import_records (all cascade delete)
+    recon_items, scan_items, import_records, scan_jobs, services (all cascade delete)
 
 scope_items
   id (PK), program_id (FK), scope_type ("in"|"out")
@@ -138,17 +138,30 @@ api_keys
   github_id (FK → users.github_id, indexed)
   key_hash (SHA-256 hex, unique)
   label, created_at
+  last_used_at (nullable — stamped on every successful API key auth)
 
 scan_jobs
   id (PK)
   program_id (FK → programs.id, CASCADE DELETE, indexed)
   owner_github_id (indexed)
-  tool_type ("httpx"|"nuclei"|"subfinder")
+  tool_type ("httpx"|"nuclei"|"subfinder"|"nmap")
   target_source ("scope"|"recon")
-  config (JSON — tool-specific options: status_code/limit for httpx; severity/templates for nuclei; recursive/sources for subfinder)
+  config (JSON — tool-specific options: status_code/limit for httpx; severity/templates for nuclei; top_ports/timing for nmap)
   status ("pending"|"running"|"done"|"failed")
   created_at, started_at (nullable), completed_at (nullable)
   error_message
+
+services
+  id (PK)
+  program_id (FK → programs.id, CASCADE DELETE, indexed)
+  owner_github_id (indexed)
+  host (VARCHAR 500)
+  port (INTEGER 1–65535)
+  protocol ("tcp"|"udp")
+  service_name, product, version
+  state ("open"|"filtered")
+  source (default "nmap")
+  created_at
 
 runner_heartbeats
   id (PK)
@@ -176,9 +189,10 @@ audit_logs
 **Notes:**
 - `Report.finding_id` is a soft reference — no FK constraint. Reports can exist without a linked finding.
 - `AuditLog` has no FK constraints so records are never deleted when users or programs are removed.
-- `api_keys.key_hash` stores the SHA-256 hex digest of the plaintext token. The plaintext is never stored.
-- `scan_jobs.config` is a JSON column with optional tool options. VardrRunner reads this dict when executing the job.
-- `scan_jobs` are scoped to the owning user via `owner_github_id` — a user can only see/update their own jobs.
+- `api_keys.key_hash` stores the SHA-256 hex digest of the plaintext token. The plaintext is never stored. `last_used_at` is stamped on every successful API key authentication.
+- `scan_jobs.config` is a JSON column with optional tool options. VardrRunner reads this dict when executing the job. Unknown config keys are rejected at creation time.
+- `scan_jobs` are scoped to the owning user via `owner_github_id` — a user can only see/update their own jobs. Claiming a job uses `POST /jobs/{id}/claim` which atomically sets `status = "running"` only if currently `"pending"`, returning 409 otherwise.
+- `services` rows are bulk-upserted on `(host, port, protocol)` — repeated nmap scans update metadata rather than creating duplicates.
 - `runner_heartbeats` is a single-row-per-user upsert table. VardrRunner calls `POST /runner/heartbeat` at the start of `jobs run` (and via `vardrrunner heartbeat`). The frontend polls `GET /runner/status` which derives `online: true` if `last_seen` is within 5 minutes.
 - `job_events` are appended by VardrRunner via `POST /jobs/{id}/events` at each lifecycle stage. The frontend Terminal polls `GET /jobs/{id}/events` (3 s interval while job is pending/running, stops on terminal state). Events cascade-delete with their parent job.
 
@@ -217,14 +231,14 @@ The sidebar exposes **7 top-level sections** mapped to the bug bounty workflow:
 | Dashboard | `"dashboard"` | Orchestration console (Jobs tab) + file import (Import tab) |
 | Scope | `"scope"` | In-scope / out-of-scope asset management |
 | Overview | `"overview"` | Program stats, 6 quick-action buttons, inline program edit form |
-| Review | `"review"` | Recon / Scanning / Manual Testing tab switcher |
+| Review | `"review"` | Recon / Scans / Manual / Services tab switcher |
 | Findings | `"findings"` | Finding log with severity, status, promote-to-report flow |
 | Reports | `"reports"` | Report drafting and PDF export |
 | Settings | `"settings"` | API key management |
 
 `DashboardSection` and `ReviewSection` are thin tab containers. They render child section components (`JobsSection`, `ReconSection`, etc.) with `hideHeader={true}` to suppress duplicate section headings. The `Section` type union in `frontend/app/types.ts` has exactly these 7 values.
 
-**Deep-link navigation** — the Overview quick-action buttons dispatch `NAVIGATE_TO_DASHBOARD` which sets `state.runPrefill = { tool?, tab? }` and navigates to `"dashboard"`. `DashboardSection` consumes the prefill on first render, sets the active tab and forwards `defaultTool` to `JobsSection` → `Composer`, then dispatches `DASHBOARD_PREFILL_CONSUMED`.
+**Deep-link navigation** — the Overview quick-action buttons dispatch `NAVIGATE_TO_DASHBOARD` which sets `state.dashboardPrefill = { tool?, tab? }` and navigates to `"dashboard"`. `DashboardSection` consumes the prefill via `useEffect`, increments `prefillEpoch` (so `Composer` remounts even when the same tool is clicked twice), sets the active tab and forwards `defaultTool` to `JobsSection` → `Composer`, then dispatches `DASHBOARD_PREFILL_CONSUMED`.
 
 ### Dashboard Section — Orchestration Console
 
@@ -232,7 +246,7 @@ The sidebar exposes **7 top-level sections** mapped to the bug bounty workflow:
 
 1. **Bridge** (`jobs/Bridge.tsx`) — animated link visualization showing VardrMap ↔ VardrRunner connection; runner node shows real hostname, OS, version, and per-tool availability chips from the latest heartbeat; collapses to a slim strip. Collapse state persists to `localStorage`.
 2. **Telemetry** (`jobs/Telemetry.tsx`) — four stat tiles: running, completed, results yielded, avg runtime.
-3. **Composer** (`jobs/Composer.tsx`) — tool picker (subfinder/httpx/nuclei) with per-tool config fields; submits new jobs.
+3. **Composer** (`jobs/Composer.tsx`) — tool picker (subfinder/httpx/nuclei/nmap) with per-tool config fields; submits new jobs.
 4. **Job Board + Terminal** (`jobs/JobBoard.tsx`, `jobs/Terminal.tsx`) — three switchable board views (Stream, Pipeline, Table); a terminal showing status and any backend error message for the selected job.
 
 The `ScanJobUI` type (`frontend/app/types.ts`) extends the API-level `ScanJob` with UI-only fields (`progress`, `yield`, `yieldKind`, `durationMs`, `log[]`). Jobs are loaded via real API polling (5 s when active jobs exist, 30 s idle). The Terminal polls `GET /jobs/{id}/events` every 3 s while the job is pending or running, displaying lifecycle events (`started`, `targets_resolved`, `running`, `uploaded`, `done`/`failed`) as colored log lines; polling stops when the job reaches a terminal state.
@@ -284,7 +298,7 @@ VardrMap frontend (Vercel)
 ```
 
 **Key design constraints:**
-- Tool execution uses an allowlist (`ALLOWED_TOOLS` in `runner.py`) — `httpx`, `nuclei`, and `subfinder`
+- Tool execution uses an allowlist (`ALLOWED_TOOLS` in `runner.py`) — `httpx`, `nuclei`, `subfinder`, and `nmap`; nmap uses a safe profile only (`--top-ports N -sV --version-intensity 2 -T{0-4} --open`; never `-A`, `-O`, `-p-`, `--script`, or `-T5`)
 - `subprocess.run` is always called with an argument list, never `shell=True`
 - Wildcard scope entries (`*.example.com`) are skipped by `run httpx/nuclei`; use `vardrrunner run subfinder --program <id>` to enumerate subdomains first, then re-run against recon results
 - Config at `~/.vardrmap/config.json` stores the `vmap_` API key in plaintext — documented clearly and file permissions restricted on Unix
@@ -314,7 +328,7 @@ User's machine
   ▼
 runner/
   │  1. GET /jobs/pending  — fetch pending jobs for this user
-  │  2. PATCH /jobs/{id}            — status = "running"  (claim the job)
+  │  2. POST  /jobs/{id}/claim      — atomically claim; 409 if already claimed
   │  3. POST  /jobs/{id}/events     — kind = "started"
   │  4. resolve targets (same logic as manual run commands)
   │  5. POST  /jobs/{id}/events     — kind = "targets_resolved"

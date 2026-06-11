@@ -9,7 +9,7 @@ export type AppState = {
   message: string;
   findingPrefill: FindingFormState | null;
   reportPrefill: ReportFormState | null;
-  runPrefill: { tool?: string; tab?: "import" } | null;
+  dashboardPrefill: { tool?: string; tab?: "import" } | null;
 };
 
 export type AppAction =
@@ -37,7 +37,7 @@ export const initialState: AppState = {
   message: "",
   findingPrefill: null,
   reportPrefill: null,
-  runPrefill: null,
+  dashboardPrefill: null,
 };
 
 export function appReducer(state: AppState, action: AppAction): AppState {
@@ -79,10 +79,10 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, activeSection: action.section };
 
     case "NAVIGATE_TO_DASHBOARD":
-      return { ...state, activeSection: "dashboard", runPrefill: { tool: action.tool, tab: action.tab } };
+      return { ...state, activeSection: "dashboard", dashboardPrefill: { tool: action.tool, tab: action.tab } };
 
     case "DASHBOARD_PREFILL_CONSUMED":
-      return { ...state, runPrefill: null };
+      return { ...state, dashboardPrefill: null };
 
     case "PROMOTE_TO_FINDING":
       return { ...state, findingPrefill: action.prefill, activeSection: "findings" };

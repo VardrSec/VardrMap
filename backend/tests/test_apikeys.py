@@ -68,6 +68,27 @@ def test_plaintext_token_not_in_list(client, auth_headers):
     client.delete(f"/auth/apikeys/{key_id}", headers=auth_headers)
 
 
+def test_last_used_at_stamped_on_use(client, auth_headers):
+    res = client.post("/auth/apikeys", json={"label": "track-use"}, headers=auth_headers)
+    token  = res.json()["token"]
+    key_id = res.json()["id"]
+
+    # Before first use last_used_at should be null in the listing
+    keys_before = client.get("/auth/apikeys", headers=auth_headers).json()["keys"]
+    row_before = next(k for k in keys_before if k["id"] == key_id)
+    assert row_before.get("last_used_at") is None
+
+    # Authenticate with the API key
+    client.get("/me", headers={"Authorization": f"Bearer {token}"})
+
+    # After use last_used_at should be set
+    keys_after = client.get("/auth/apikeys", headers=auth_headers).json()["keys"]
+    row_after = next(k for k in keys_after if k["id"] == key_id)
+    assert row_after.get("last_used_at") is not None
+
+    client.delete(f"/auth/apikeys/{key_id}", headers=auth_headers)
+
+
 def test_max_keys_per_user(client, auth_headers):
     created = []
     for i in range(10):

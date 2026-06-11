@@ -73,7 +73,8 @@ def list_api_keys(
             {
                 "id": k.id,
                 "label": k.label,
-                "created_at": k.created_at.isoformat() if k.created_at else None,
+                "created_at":  k.created_at.isoformat()  if k.created_at  else None,
+                "last_used_at": k.last_used_at.isoformat() if k.last_used_at else None,
             }
             for k in keys
         ]

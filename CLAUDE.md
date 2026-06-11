@@ -6,13 +6,13 @@ Personal bug bounty workflow tool. FastAPI backend (Railway) + Next.js 16 fronte
 ## Where things live
 - `backend/` — FastAPI app, SQLAlchemy models, Alembic migrations, tests
 - `backend/routers/` — one file per resource (programs, findings, reports, etc.)
-- `backend/tests/` — pytest suite, 86 tests, uses SQLite
+- `backend/tests/` — pytest suite, 114 tests, uses SQLite
 - `frontend/app/` — Next.js App Router pages and components
 - `frontend/app/components/` — one component per section (FindingsSection, ReportsSection, JobsSection, etc.)
 - `frontend/app/context/` — AppContext.tsx + appReducer.ts (global state)
 - `runner/` — VardrRunner v1 local CLI; separate venv, installable via `pip install -e ./runner`
 - `runner/vardrrunner/` — Python package: config, api client, subprocess runner, command modules
-- `runner/tests/` — 58 tests; all subprocess and HTTP calls are mocked
+- `runner/tests/` — 70 tests; all subprocess and HTTP calls are mocked
 - `docs/` — architecture, API reference, development setup, security testing record
 - `CHANGELOG.md` — version history, updated with every change
 
@@ -96,7 +96,7 @@ Shipped (v0.10.0):
 - Dashboard: orchestration console (Jobs tab) + file import (Import tab); absorbs Scan Jobs + Imports sections
 - Overview: 6 quick-action buttons + inline program edit form (Program Profile section removed)
 - Review section: RECON | SCANS | MANUAL tab switcher wrapping existing sub-components
-- Deep-link navigation: `navigateToDashboard(tool)` pre-selects tool in Composer via runPrefill state
+- Deep-link navigation: `navigateToDashboard(tool)` pre-selects tool in Composer via `dashboardPrefill` state
 
 Shipped (v0.9.0):
 - Frontend app state extracted into context/reducer (AppContext + appReducer)
@@ -108,9 +108,13 @@ Shipped (v0.9.0):
 - CI: runner tests added to GitHub Actions workflow
 - Scan Jobs orchestration console — Bridge, Telemetry, Composer, JobBoard (stream/pipeline/table), Terminal with live log streaming
 
+Shipped (v0.14.0):
+- Atomic job claim — `POST /jobs/{id}/claim` returns 409 if not pending; VardrRunner uses this endpoint
+- Service discovery — `services` table + migration 0007; nmap job type in VardrRunner (safe profile); `ServicesSection` in frontend Review tab
+- Per-tool config validation — unknown keys rejected, nuclei severity and nmap timing validated
+- API key `last_used_at` — stamped on every auth, shown in API key list
+
 Remaining:
-- Atomic job claim — `POST /jobs/{id}/claim` only updates where `status = 'pending'`, returns 409 if already claimed
-- Nmap / service discovery — `vardrrunner run nmap --from-recon --top-ports 100`, safe profiles only, store as services table
 - RBAC / multi-user support
 - Opportunities / Target Radar — new programs or changed scopes
 - AI-assisted finding triage and report drafting

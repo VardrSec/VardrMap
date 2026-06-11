@@ -1,0 +1,161 @@
+"""Tests for GET/POST/DELETE /programs/{id}/services.
+
+Coverage:
+- List services — empty, returns own only
+- Bulk create — basic success, 201 status, upsert on (host, port, protocol)
+- Delete — success, wrong-user 404, nonexistent 404
+- BOLA: unauthorized 401, wrong-user 404 on all endpoints
+- Cascade: services are deleted when program is deleted
+"""
+
+import pytest
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+_SVC = {"host": "10.0.0.1", "port": 80, "protocol": "tcp",
+        "service_name": "http", "product": "nginx", "version": "1.24.0"}
+
+
+def _bulk_create(client, program_id, headers, services=None):
+    return client.post(
+        f"/programs/{program_id}/services",
+        json={"services": services or [_SVC]},
+        headers=headers,
+    )
+
+
+# ---------------------------------------------------------------------------
+# GET /programs/{id}/services
+# ---------------------------------------------------------------------------
+
+class TestListServices:
+    def test_list_empty(self, client, program_id, auth_headers):
+        res = client.get(f"/programs/{program_id}/services", headers=auth_headers)
+        assert res.status_code == 200
+        data = res.json()
+        assert data["services"] == []
+        assert data["total"] == 0
+
+    def test_list_returns_created_services(self, client, program_id, auth_headers):
+        _bulk_create(client, program_id, auth_headers)
+        res = client.get(f"/programs/{program_id}/services", headers=auth_headers)
+        assert res.status_code == 200
+        assert len(res.json()["services"]) == 1
+        svc = res.json()["services"][0]
+        assert svc["host"] == "10.0.0.1"
+        assert svc["port"] == 80
+        assert svc["service_name"] == "http"
+
+    def test_list_unauthorized(self, client, program_id):
+        res = client.get(f"/programs/{program_id}/services")
+        assert res.status_code == 401
+
+    def test_list_wrong_user_404(self, client, program_id, other_headers):
+        res = client.get(f"/programs/{program_id}/services", headers=other_headers)
+        assert res.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# POST /programs/{id}/services
+# ---------------------------------------------------------------------------
+
+class TestBulkCreateServices:
+    def test_create_success(self, client, program_id, auth_headers):
+        res = _bulk_create(client, program_id, auth_headers)
+        assert res.status_code == 201
+        data = res.json()
+        assert data["created"] == 1
+        assert data["updated"] == 0
+
+    def test_upsert_updates_existing(self, client, program_id, auth_headers):
+        _bulk_create(client, program_id, auth_headers)
+        updated_svc = {**_SVC, "version": "1.25.0"}
+        res = _bulk_create(client, program_id, auth_headers, [updated_svc])
+        assert res.status_code == 201
+        data = res.json()
+        assert data["created"] == 0
+        assert data["updated"] == 1
+
+        services = client.get(f"/programs/{program_id}/services", headers=auth_headers).json()["services"]
+        assert services[0]["version"] == "1.25.0"
+
+    def test_multiple_services(self, client, program_id, auth_headers):
+        svcs = [
+            {"host": "10.0.0.1", "port": 22, "protocol": "tcp", "service_name": "ssh"},
+            {"host": "10.0.0.1", "port": 443, "protocol": "tcp", "service_name": "https"},
+            {"host": "10.0.0.2", "port": 8080, "protocol": "tcp", "service_name": "http-alt"},
+        ]
+        res = _bulk_create(client, program_id, auth_headers, svcs)
+        assert res.status_code == 201
+        assert res.json()["created"] == 3
+
+    def test_create_unauthorized(self, client, program_id):
+        res = _bulk_create(client, program_id, {})
+        assert res.status_code == 401
+
+    def test_create_wrong_user_404(self, client, program_id, other_headers):
+        res = _bulk_create(client, program_id, other_headers)
+        assert res.status_code == 404
+
+    def test_invalid_port_rejected(self, client, program_id, auth_headers):
+        res = _bulk_create(client, program_id, auth_headers,
+                           [{"host": "10.0.0.1", "port": 99999, "protocol": "tcp"}])
+        assert res.status_code == 422
+
+    def test_invalid_protocol_rejected(self, client, program_id, auth_headers):
+        res = _bulk_create(client, program_id, auth_headers,
+                           [{"host": "10.0.0.1", "port": 80, "protocol": "sctp"}])
+        assert res.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# DELETE /programs/{id}/services/{service_id}
+# ---------------------------------------------------------------------------
+
+class TestDeleteService:
+    def test_delete_success(self, client, program_id, auth_headers):
+        _bulk_create(client, program_id, auth_headers)
+        svc_id = client.get(f"/programs/{program_id}/services", headers=auth_headers).json()["services"][0]["id"]
+        res = client.delete(f"/programs/{program_id}/services/{svc_id}", headers=auth_headers)
+        assert res.status_code == 200
+
+        remaining = client.get(f"/programs/{program_id}/services", headers=auth_headers).json()["services"]
+        assert all(s["id"] != svc_id for s in remaining)
+
+    def test_delete_wrong_user_404(self, client, program_id, auth_headers, other_headers):
+        _bulk_create(client, program_id, auth_headers)
+        svc_id = client.get(f"/programs/{program_id}/services", headers=auth_headers).json()["services"][0]["id"]
+        res = client.delete(f"/programs/{program_id}/services/{svc_id}", headers=other_headers)
+        assert res.status_code == 404
+
+    def test_delete_nonexistent_404(self, client, program_id, auth_headers):
+        res = client.delete(f"/programs/{program_id}/services/does-not-exist", headers=auth_headers)
+        assert res.status_code == 404
+
+    def test_delete_unauthorized(self, client, program_id):
+        res = client.delete(f"/programs/{program_id}/services/any-id")
+        assert res.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Cascade delete
+# ---------------------------------------------------------------------------
+
+class TestServicesCascade:
+    def test_services_deleted_with_program(self, client, auth_headers):
+        prog = client.post("/programs", json={"name": "Cascade Test"}, headers=auth_headers)
+        pid = prog.json()["id"]
+        _bulk_create(client, pid, auth_headers)
+
+        # Verify services exist
+        assert client.get(f"/programs/{pid}/services", headers=auth_headers).json()["total"] == 1
+
+        # Delete program
+        client.delete(f"/programs/{pid}", headers=auth_headers)
+
+        # Program gone — services endpoint returns 404
+        res = client.get(f"/programs/{pid}/services", headers=auth_headers)
+        assert res.status_code == 404

@@ -4,6 +4,32 @@ All notable changes to VardrMap. Versions are tagged by milestone — this proje
 
 ---
 
+## v0.14.0 — Service discovery, atomic job claim, config validation, API key tracking (2026-06-11)
+
+### Added
+- **Service discovery** — `services` table + Alembic migration 0007; `GET/POST/DELETE /programs/{id}/services`; VardrRunner `nmap` job type: safe profile (`--top-ports N -sV --version-intensity 2 -T{0-4} --open`), parses XML output via stdlib `ElementTree`, bulk-upserts via `POST /programs/{id}/services`; `ServicesSection` in frontend Review tab
+- **Atomic job claim** — `POST /jobs/{id}/claim`: atomically sets `status = "running"` only if currently `"pending"`, returns `409` if not pending; VardrRunner now uses this endpoint instead of `PATCH /jobs/{id}`
+- **Per-tool config validation** — `POST /programs/{id}/jobs` rejects unknown config keys, invalid nuclei severity values, and nmap timing values outside 0–4
+- **API key `last_used_at`** — stamped on every successful API key authentication; included in `GET /auth/apikeys` list response
+- **nmap tool in Composer** — added to frontend `TOOLS` dict with `top_ports` and `timing` config fields
+- **Services tab in Review section** — fourth tab in `ReviewSection`; `ServicesSection` shows host/port/protocol/service/product+version/state table with per-row delete
+
+### Fixed
+- **nuclei templates bug** — `",".join(cfg["templates"])` would iterate characters when `templates` was already a string (e.g. `"cves,exposures"` → `"c,v,e,s,…"`); fixed with `isinstance(raw_templates, list)` guard
+- **Subfinder config UI** — removed unused `recursive`/`sources` fields from Composer (they have no effect in VardrRunner)
+- **Docs enum drift** — `api.md`: scope kinds now correct (`subdomain`, `api` replacing `ip`, `other`); finding status values now correct (`candidate`, `in_progress`, `closed` replacing `accepted`, `rejected`, `informational`)
+
+### Tests
+- Backend: 114 tests (was 86); +`TestClaimJob` (6 tests), +`TestJobConfigValidation` (4 tests), +`test_nmap_tool_accepted`, +`TestListServices`/`TestBulkCreateServices`/`TestDeleteService`/`TestServicesCascade` (13 tests), +`test_last_used_at_stamped_on_use`
+- Runner: 70 tests (was 58); +`test_nmap.py` (12 tests); fixed `test_client_claim_job` (now uses `POST /claim`); fixed `test_tool_version_returns_none_for_unknown_tool` (`nmap` is now valid, test uses `masscan`)
+
+### Docs
+- `docs/api.md`: services section, claim endpoint, nmap job type, corrected scope kinds and finding statuses, `last_used_at` in API key list
+- `docs/architecture.md`: services table, `last_used_at` on `api_keys`, `dashboardPrefill` rename, nmap in Composer, corrected job claim flow, nmap in ALLOWED_TOOLS
+- `CLAUDE.md`: atomic claim and services marked shipped; test counts updated
+
+---
+
 ## v0.13.2 — Pin backend Python to 3.12 for Railway deploy (2026-06-10)
 
 ### Fixed

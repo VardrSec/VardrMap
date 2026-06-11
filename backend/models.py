@@ -47,6 +47,7 @@ class Program(Base):
     scan_items = relationship("ScanItem", back_populates="program", cascade="all, delete-orphan")
     import_records = relationship("ImportRecord", back_populates="program", cascade="all, delete-orphan")
     scan_jobs = relationship("ScanJob", back_populates="program", cascade="all, delete-orphan")
+    services  = relationship("Service",  back_populates="program", cascade="all, delete-orphan")
 
 
 class ScopeItem(Base):
@@ -240,5 +241,25 @@ class ApiKey(Base):
     key_hash = Column(String(64), nullable=False, unique=True)
     label = Column(String(100), default="")
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    last_used_at = Column(DateTime, nullable=True)
 
     user = relationship("User", back_populates="api_keys")
+
+
+class Service(Base):
+    __tablename__ = "services"
+
+    id = Column(String, primary_key=True, default=new_uuid)
+    program_id = Column(String, ForeignKey("programs.id", ondelete="CASCADE"), nullable=False, index=True)
+    owner_github_id = Column(String, nullable=False, index=True)
+    host = Column(String(500), nullable=False)
+    port = Column(Integer, nullable=False)
+    protocol = Column(String(10), default="tcp")       # tcp | udp
+    service_name = Column(String(100), default="")
+    product = Column(String(200), default="")
+    version = Column(String(100), default="")
+    state = Column(String(20), default="open")         # open | filtered
+    source = Column(String(50), default="nmap")
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    program = relationship("Program", back_populates="services")

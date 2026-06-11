@@ -9,10 +9,7 @@ export const TOOLS: Record<string, ToolDef> = {
     yields: "subdomains",
     yieldsTo: "recon",
     sources: ["scope"],
-    config: [
-      { key: "recursive", label: "Recursive", type: "toggle", default: true },
-      { key: "sources", label: "Sources", type: "text", placeholder: "crtsh,virustotal" },
-    ],
+    config: [],
   },
   httpx: {
     id: "httpx",
@@ -38,6 +35,19 @@ export const TOOLS: Record<string, ToolDef> = {
     config: [
       { key: "severity", label: "Severity", type: "text", placeholder: "high,critical" },
       { key: "templates", label: "Templates", type: "text", placeholder: "cves,exposures" },
+    ],
+  },
+  nmap: {
+    id: "nmap",
+    label: "nmap",
+    glyph: "◎",
+    blurb: "Service & port discovery",
+    yields: "services",
+    yieldsTo: "services",
+    sources: ["scope", "recon"],
+    config: [
+      { key: "top_ports", label: "Top ports", type: "number", placeholder: "100" },
+      { key: "timing", label: "Timing (0-4)", type: "number", placeholder: "3" },
     ],
   },
 };

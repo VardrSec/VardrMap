@@ -5,13 +5,15 @@ import { Program } from "../types";
 import ReconSection from "./ReconSection";
 import ScanningSection from "./ScanningSection";
 import ManualSection from "./ManualSection";
+import ServicesSection from "./ServicesSection";
 
-type ReviewTab = "recon" | "scans" | "manual";
+type ReviewTab = "recon" | "scans" | "manual" | "services";
 
 const TABS: { id: ReviewTab; label: string }[] = [
-  { id: "recon",  label: "Recon"  },
-  { id: "scans",  label: "Scans"  },
-  { id: "manual", label: "Manual" },
+  { id: "recon",    label: "Recon"    },
+  { id: "scans",    label: "Scans"    },
+  { id: "manual",   label: "Manual"   },
+  { id: "services", label: "Services" },
 ];
 
 export default function ReviewSection({ program }: { program: Program }) {
@@ -23,7 +25,7 @@ export default function ReviewSection({ program }: { program: Program }) {
         <div>
           <h2 className="text-2xl font-bold tracking-tight text-[#f1f5f9]">Review</h2>
           <p className="mt-1.5 text-sm text-[#52525b]">
-            Explore recon data, scan results, and manual test notes.
+            Explore recon data, scan results, manual test notes, and discovered services.
           </p>
         </div>
         <div className="flex rounded-lg border border-[#2e2e2e] bg-[#1a1a1a] p-0.5">
@@ -37,9 +39,10 @@ export default function ReviewSection({ program }: { program: Program }) {
         </div>
       </div>
 
-      {activeTab === "recon"  && <ReconSection    programId={program.id} hideHeader />}
-      {activeTab === "scans"  && <ScanningSection programId={program.id} hideHeader />}
-      {activeTab === "manual" && <ManualSection   program={program}      hideHeader />}
+      {activeTab === "recon"     && <ReconSection     programId={program.id} hideHeader />}
+      {activeTab === "scans"     && <ScanningSection  programId={program.id} hideHeader />}
+      {activeTab === "manual"    && <ManualSection    program={program}      hideHeader />}
+      {activeTab === "services"  && <ServicesSection  programId={program.id} hideHeader />}
     </div>
   );
 }
