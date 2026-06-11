@@ -214,28 +214,28 @@ The sidebar exposes **7 top-level sections** mapped to the bug bounty workflow:
 
 | Section | `Section` value | What it shows |
 |---|---|---|
-| Dashboard | `"dashboard"` | Program stats, 6 quick-action buttons, inline program edit form |
+| Dashboard | `"dashboard"` | Orchestration console (Jobs tab) + file import (Import tab) |
 | Scope | `"scope"` | In-scope / out-of-scope asset management |
-| Run | `"run"` | Orchestration console (Jobs tab) + file import (Import tab) |
+| Overview | `"overview"` | Program stats, 6 quick-action buttons, inline program edit form |
 | Review | `"review"` | Recon / Scanning / Manual Testing tab switcher |
 | Findings | `"findings"` | Finding log with severity, status, promote-to-report flow |
 | Reports | `"reports"` | Report drafting and PDF export |
 | Settings | `"settings"` | API key management |
 
-`RunSection` and `ReviewSection` are thin tab containers. They render child section components (`JobsSection`, `ReconSection`, etc.) with `hideHeader={true}` to suppress duplicate section headings. The `Section` type union in `frontend/app/types.ts` has exactly these 7 values.
+`DashboardSection` and `ReviewSection` are thin tab containers. They render child section components (`JobsSection`, `ReconSection`, etc.) with `hideHeader={true}` to suppress duplicate section headings. The `Section` type union in `frontend/app/types.ts` has exactly these 7 values.
 
-**Deep-link navigation** — the Dashboard quick-action buttons call `navigateToRun(tool)` or `navigate(section)` from `AppContext`. `navigateToRun` dispatches `NAVIGATE_TO_RUN` which sets `state.runPrefill = { tool?, tab? }` and navigates to `"run"`. `RunSection` consumes the prefill on first render, sets the active tab and forwards `defaultTool` to `JobsSection` → `Composer`, then dispatches `RUN_PREFILL_CONSUMED`.
+**Deep-link navigation** — the Overview quick-action buttons dispatch `NAVIGATE_TO_DASHBOARD` which sets `state.runPrefill = { tool?, tab? }` and navigates to `"dashboard"`. `DashboardSection` consumes the prefill on first render, sets the active tab and forwards `defaultTool` to `JobsSection` → `Composer`, then dispatches `DASHBOARD_PREFILL_CONSUMED`.
 
-### Run Section — Orchestration Console
+### Dashboard Section — Orchestration Console
 
-`JobsSection` (`frontend/app/components/JobsSection.tsx`) is hosted inside `RunSection`'s Jobs tab and rendered as four stacked zones:
+`JobsSection` (`frontend/app/components/JobsSection.tsx`) is hosted inside `DashboardSection`'s Jobs tab and rendered as four stacked zones:
 
 1. **Bridge** (`jobs/Bridge.tsx`) — animated link visualization showing VardrMap ↔ VardrRunner connection; runner node shows real hostname, OS, version, and per-tool availability chips from the latest heartbeat; collapses to a slim strip. Collapse state persists to `localStorage`.
 2. **Telemetry** (`jobs/Telemetry.tsx`) — four stat tiles: running, completed, results yielded, avg runtime.
 3. **Composer** (`jobs/Composer.tsx`) — tool picker (subfinder/httpx/nuclei) with per-tool config fields; submits new jobs.
 4. **Job Board + Terminal** (`jobs/JobBoard.tsx`, `jobs/Terminal.tsx`) — three switchable board views (Stream, Pipeline, Table); a terminal showing status and any backend error message for the selected job.
 
-The `ScanJobUI` type (`frontend/app/types.ts`) extends the API-level `ScanJob` with UI-only fields (`progress`, `yield`, `yieldKind`, `durationMs`, `log[]`). Jobs are loaded via real API polling (5 s when active jobs exist, 30 s idle); the Terminal shows current status and any backend error message. Real streamed log output is roadmap (requires the `job_events` table and `GET /jobs/{id}/events` endpoint).
+The `ScanJobUI` type (`frontend/app/types.ts`) extends the API-level `ScanJob` with UI-only fields (`progress`, `yield`, `yieldKind`, `durationMs`, `log[]`). Jobs are loaded via real API polling (5 s when active jobs exist, 30 s idle). The Terminal polls `GET /jobs/{id}/events` every 3 s while the job is pending or running, displaying lifecycle events (`started`, `targets_resolved`, `running`, `uploaded`, `done`/`failed`) as colored log lines; polling stops when the job reaches a terminal state.
 
 ---
 
