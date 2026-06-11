@@ -1,13 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Program } from "../types";
+import { ManualTestFormState } from "../types";
+import { ReviewTab } from "../context/appReducer";
+import { useAppContext } from "../context/AppContext";
 import ReconSection from "./ReconSection";
 import ScanningSection from "./ScanningSection";
 import ManualSection from "./ManualSection";
 import ServicesSection from "./ServicesSection";
-
-type ReviewTab = "recon" | "scans" | "manual" | "services";
 
 const TABS: { id: ReviewTab; label: string }[] = [
   { id: "recon",    label: "Recon"    },
@@ -17,7 +18,25 @@ const TABS: { id: ReviewTab; label: string }[] = [
 ];
 
 export default function ReviewSection({ program }: { program: Program }) {
+  const { state: { reviewPrefill }, dispatch } = useAppContext();
   const [activeTab, setActiveTab] = useState<ReviewTab>("recon");
+  const [manualPrefill, setManualPrefill] = useState<{ data: ManualTestFormState; epoch: number } | null>(null);
+  const lastPrefillEpoch = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!reviewPrefill) return;
+    const epoch = reviewPrefill.prefillEpoch ?? 0;
+    if (lastPrefillEpoch.current === epoch) return;
+    lastPrefillEpoch.current = epoch;
+    if (reviewPrefill.tab) {
+      setActiveTab(reviewPrefill.tab);
+    }
+    if (reviewPrefill.manualTest) {
+      setManualPrefill({ data: reviewPrefill.manualTest, epoch });
+    }
+    dispatch({ type: "REVIEW_PREFILL_CONSUMED" });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reviewPrefill]);
 
   return (
     <div className="space-y-7">
@@ -39,10 +58,16 @@ export default function ReviewSection({ program }: { program: Program }) {
         </div>
       </div>
 
-      {activeTab === "recon"     && <ReconSection     programId={program.id} hideHeader />}
-      {activeTab === "scans"     && <ScanningSection  programId={program.id} hideHeader />}
-      {activeTab === "manual"    && <ManualSection    program={program}      hideHeader />}
-      {activeTab === "services"  && <ServicesSection  programId={program.id} hideHeader />}
+      {activeTab === "recon"    && <ReconSection    programId={program.id} hideHeader />}
+      {activeTab === "scans"    && <ScanningSection programId={program.id} hideHeader />}
+      {activeTab === "manual"   && (
+        <ManualSection
+          program={program}
+          hideHeader
+          prefill={manualPrefill ?? undefined}
+        />
+      )}
+      {activeTab === "services" && <ServicesSection programId={program.id} hideHeader />}
     </div>
   );
 }

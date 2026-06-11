@@ -66,6 +66,7 @@ The app is now at `http://localhost:3000`.
 | `ALLOWED_ORIGINS` | Yes | Comma-separated list of allowed CORS origins. Local: `http://localhost:3000` |
 | `ENV` | No | Environment name. Set to `development` locally. Railway sets `RAILWAY_ENVIRONMENT_NAME` automatically. Controls whether HSTS is sent. |
 | `MAX_UPLOAD_BYTES` | No | Max file size for tool imports in bytes. Default: `2097152` (2 MB). |
+| `ANTHROPIC_API_KEY` | No | Anthropic API key. Required for `POST /programs/{id}/findings/{id}/suggest` (AI triage). If absent, the endpoint returns `503`. Obtain at [console.anthropic.com](https://console.anthropic.com). |
 
 ### Frontend (`frontend/.env.local`)
 
@@ -100,7 +101,7 @@ cd backend
 pytest tests -v
 ```
 
-All 114 tests should pass. There are no frontend tests at this time.
+All 139 tests should pass. There are no frontend tests at this time.
 
 ### Test coverage areas
 
@@ -222,7 +223,7 @@ cd runner
 pytest tests -v
 ```
 
-70 tests should pass. Tests mock all subprocess and HTTP calls — no tools or backend required.
+81 tests should pass. Tests mock all subprocess and HTTP calls — no tools or backend required.
 
 ### Prerequisites for `run` commands
 

@@ -1,3 +1,6 @@
+import json
+import os
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
@@ -73,6 +76,74 @@ def update_finding(
     db.commit()
     db.refresh(finding)
     return serialize_finding(finding)
+
+
+_SUGGEST_PROMPT = """\
+You are a bug bounty triage assistant. Given the following finding, provide concise, \
+actionable suggestions for CVSS score, impact statement, and remediation.
+
+Finding title: {title}
+Severity: {severity}
+Asset: {asset}
+Summary: {summary}
+Steps to reproduce: {steps}
+
+Respond with valid JSON only — no markdown fences, no explanation:
+{{"cvss": "<score and label e.g. 7.5 (High)>", "impact": "<2-3 sentence impact>", "remediation": "<2-3 sentence remediation>"}}"""
+
+
+@router.post("/programs/{program_id}/findings/{finding_id}/suggest")
+def suggest_finding(
+    program_id: str,
+    finding_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Call Claude API to draft CVSS, impact, and remediation for a finding."""
+    # BOLA scope check first — wrong-user gets 404, not a 503 that leaks API state
+    get_program_or_404(program_id, current_user, db)
+    finding = db.query(Finding).filter(
+        Finding.id == finding_id,
+        Finding.program_id == program_id,
+    ).first()
+    if not finding:
+        raise HTTPException(status_code=404, detail="Finding not found")
+
+    api_key = os.getenv("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        raise HTTPException(
+            status_code=503,
+            detail="AI suggestions require ANTHROPIC_API_KEY to be configured on the server",
+        )
+
+    try:
+        import anthropic
+        client = anthropic.Anthropic(api_key=api_key)
+        message = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=512,
+            messages=[{
+                "role": "user",
+                "content": _SUGGEST_PROMPT.format(
+                    title=finding.title,
+                    severity=finding.severity,
+                    asset=finding.asset or "(not specified)",
+                    summary=finding.summary or "(not specified)",
+                    steps=finding.steps or "(not specified)",
+                ),
+            }],
+        )
+        raw = message.content[0].text.strip()
+        suggestion = json.loads(raw)
+        return {
+            "cvss":        str(suggestion.get("cvss", "")),
+            "impact":      str(suggestion.get("impact", "")),
+            "remediation": str(suggestion.get("remediation", "")),
+        }
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=502, detail="AI returned non-JSON response; try again")
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"AI request failed: {exc}")
 
 
 @router.delete("/programs/{program_id}/findings/{finding_id}")

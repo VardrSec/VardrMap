@@ -4,12 +4,13 @@ real connectivity, hostname, version, and tool availability in the Bridge.
 """
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from db import get_db
 from deps import get_current_user
+from limiter import limiter
 from models import RunnerHeartbeat
 
 router = APIRouter(tags=["runner"])
@@ -46,7 +47,9 @@ class HeartbeatPayload(BaseModel):
 
 
 @router.post("/runner/heartbeat")
+@limiter.limit("60/minute")
 def post_heartbeat(
+    request: Request,
     body: HeartbeatPayload,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),

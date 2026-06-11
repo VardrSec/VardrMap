@@ -9,3 +9,5 @@ python-dotenv
 bleach
 slowapi
 alembic
+anthropic
+httpx

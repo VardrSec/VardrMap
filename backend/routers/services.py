@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -28,17 +29,18 @@ class ServicesBulkCreate(BaseModel):
 
 def serialize_service(s: Service) -> dict:
     return {
-        "id":           s.id,
-        "program_id":   s.program_id,
-        "host":         s.host,
-        "port":         s.port,
-        "protocol":     s.protocol,
-        "service_name": s.service_name,
-        "product":      s.product,
-        "version":      s.version,
-        "state":        s.state,
-        "source":       s.source,
-        "created_at":   s.created_at.isoformat() if s.created_at else None,
+        "id":             s.id,
+        "program_id":     s.program_id,
+        "host":           s.host,
+        "port":           s.port,
+        "protocol":       s.protocol,
+        "service_name":   s.service_name,
+        "product":        s.product,
+        "version":        s.version,
+        "state":          s.state,
+        "source":         s.source,
+        "created_at":     s.created_at.isoformat()      if s.created_at      else None,
+        "last_scanned_at": s.last_scanned_at.isoformat() if s.last_scanned_at else None,
     }
 
 
@@ -69,6 +71,7 @@ def bulk_create_services(
     service metadata if the combination already exists rather than creating duplicates."""
     get_program_or_404(program_id, current_user, db)
 
+    now = datetime.now(timezone.utc)
     created = 0
     updated = 0
     for svc in body.services:
@@ -83,11 +86,12 @@ def bulk_create_services(
             .first()
         )
         if existing:
-            existing.service_name = svc.service_name or ""
-            existing.product = svc.product or ""
-            existing.version = svc.version or ""
-            existing.state = svc.state or "open"
-            existing.source = svc.source or "nmap"
+            existing.service_name    = svc.service_name or ""
+            existing.product         = svc.product or ""
+            existing.version         = svc.version or ""
+            existing.state           = svc.state or "open"
+            existing.source          = svc.source or "nmap"
+            existing.last_scanned_at = now
             updated += 1
         else:
             db.add(Service(
@@ -101,6 +105,7 @@ def bulk_create_services(
                 version=svc.version or "",
                 state=svc.state or "open",
                 source=svc.source or "nmap",
+                last_scanned_at=now,
             ))
             created += 1
 

@@ -6,7 +6,7 @@ import { useAppContext } from "../context/AppContext";
 import { Panel, SectionHeader } from "./ui";
 
 export default function ServicesSection({ programId, hideHeader }: { programId: string; hideHeader?: boolean }) {
-  const { authFetch, setMessage } = useAppContext();
+  const { authFetch, setMessage, dispatch } = useAppContext();
   const [services, setServices] = useState<Service[]>([]);
   const [loading,  setLoading]  = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
@@ -32,6 +32,20 @@ export default function ServicesSection({ programId, hideHeader }: { programId: 
     } catch { setMessage("Failed to delete service."); } finally { setDeleting(null); }
   }
 
+  function handleInvestigate(svc: Service) {
+    dispatch({
+      type: "NAVIGATE_TO_REVIEW",
+      tab: "manual",
+      manualTest: {
+        title: `Investigate ${svc.service_name || "service"} on ${svc.host}:${svc.port}`,
+        hypothesis: `Port ${svc.port}/${svc.protocol} is open on ${svc.host} (${svc.service_name || "unknown"} — ${[svc.product, svc.version].filter(Boolean).join(" ") || "no version info"}). Investigate for misconfigurations, exposed admin interfaces, or vulnerabilities.`,
+        payload: "",
+        evidence: "",
+        status: "new",
+      },
+    });
+  }
+
   return (
     <div className="space-y-7">
       {!hideHeader && (
@@ -55,7 +69,7 @@ export default function ServicesSection({ programId, hideHeader }: { programId: 
             <table className="w-full text-left text-xs">
               <thead>
                 <tr className="border-b border-[#2e2e2e]">
-                  {["Host", "Port", "Proto", "Service", "Product / Version", "State", ""].map((h) => (
+                  {["Host", "Port", "Proto", "Service", "Product / Version", "State", "Last Scanned", ""].map((h) => (
                     <th key={h} className="pb-2 pr-4 font-semibold uppercase tracking-widest text-[#52525b]">{h}</th>
                   ))}
                 </tr>
@@ -76,13 +90,25 @@ export default function ServicesSection({ programId, hideHeader }: { programId: 
                         {svc.state}
                       </span>
                     </td>
+                    <td className="py-2 pr-4 font-mono text-[#3a3a3a]">
+                      {svc.last_scanned_at
+                        ? new Date(svc.last_scanned_at).toLocaleDateString()
+                        : "—"}
+                    </td>
                     <td className="py-2 text-right">
-                      <button
-                        onClick={() => handleDelete(svc.id)}
-                        disabled={deleting === svc.id}
-                        className="rounded px-2 py-0.5 text-[10px] text-[#52525b] transition hover:bg-[#2e2e2e] hover:text-red-400 disabled:opacity-40">
-                        {deleting === svc.id ? "…" : "Delete"}
-                      </button>
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => handleInvestigate(svc)}
+                          className="rounded px-2 py-0.5 text-[10px] text-[#52525b] transition hover:bg-[#2e2e2e] hover:text-[#89b4fa]">
+                          Investigate
+                        </button>
+                        <button
+                          onClick={() => handleDelete(svc.id)}
+                          disabled={deleting === svc.id}
+                          className="rounded px-2 py-0.5 text-[10px] text-[#52525b] transition hover:bg-[#2e2e2e] hover:text-red-400 disabled:opacity-40">
+                          {deleting === svc.id ? "…" : "Delete"}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

@@ -31,7 +31,15 @@ export type ApiKey = { id: string; label: string; created_at: string | null; las
 export type Service = {
   id: string; program_id: string; host: string; port: number; protocol: string;
   service_name: string; product: string; version: string; state: string; source: string;
-  created_at: string | null;
+  created_at: string | null; last_scanned_at: string | null;
+};
+export type RadarProgram = {
+  id: string; platform: string; platform_id: string; name: string; url: string;
+  max_payout: number | null; is_new: boolean;
+  discovered_at: string | null; last_fetched_at: string | null;
+};
+export type ManualTestFormState = {
+  title: string; hypothesis: string; payload: string; evidence: string; status: string;
 };
 export type ScanJob = {
   id: string; program_id: string; tool_type: string; target_source: string;

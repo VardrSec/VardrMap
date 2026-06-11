@@ -1,4 +1,6 @@
-import { AppSession, FindingFormState, Program, ReportFormState, Section } from "../types";
+import { AppSession, FindingFormState, ManualTestFormState, Program, ReportFormState, Section } from "../types";
+
+export type ReviewTab = "recon" | "scans" | "manual" | "services";
 
 export type AppState = {
   session: AppSession | null;
@@ -10,6 +12,7 @@ export type AppState = {
   findingPrefill: FindingFormState | null;
   reportPrefill: ReportFormState | null;
   dashboardPrefill: { tool?: string; tab?: "import" } | null;
+  reviewPrefill: { tab?: ReviewTab; manualTest?: ManualTestFormState; prefillEpoch?: number } | null;
 };
 
 export type AppAction =
@@ -21,6 +24,8 @@ export type AppAction =
   | { type: "NAVIGATE"; section: Section }
   | { type: "NAVIGATE_TO_DASHBOARD"; tool?: string; tab?: "import" }
   | { type: "DASHBOARD_PREFILL_CONSUMED" }
+  | { type: "NAVIGATE_TO_REVIEW"; tab?: ReviewTab; manualTest?: ManualTestFormState }
+  | { type: "REVIEW_PREFILL_CONSUMED" }
   | { type: "PROMOTE_TO_FINDING"; prefill: FindingFormState }
   | { type: "FINDING_PREFILL_CONSUMED" }
   | { type: "PROMOTE_TO_REPORT"; prefill: ReportFormState }
@@ -38,6 +43,7 @@ export const initialState: AppState = {
   findingPrefill: null,
   reportPrefill: null,
   dashboardPrefill: null,
+  reviewPrefill: null,
 };
 
 export function appReducer(state: AppState, action: AppAction): AppState {
@@ -83,6 +89,20 @@ export function appReducer(state: AppState, action: AppAction): AppState {
 
     case "DASHBOARD_PREFILL_CONSUMED":
       return { ...state, dashboardPrefill: null };
+
+    case "NAVIGATE_TO_REVIEW":
+      return {
+        ...state,
+        activeSection: "review",
+        reviewPrefill: {
+          tab: action.tab,
+          manualTest: action.manualTest,
+          prefillEpoch: (state.reviewPrefill?.prefillEpoch ?? 0) + 1,
+        },
+      };
+
+    case "REVIEW_PREFILL_CONSUMED":
+      return { ...state, reviewPrefill: null };
 
     case "PROMOTE_TO_FINDING":
       return { ...state, findingPrefill: action.prefill, activeSection: "findings" };

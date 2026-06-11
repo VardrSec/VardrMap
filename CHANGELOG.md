@@ -4,6 +4,29 @@ All notable changes to VardrMap. Versions are tagged by milestone — this proje
 
 ---
 
+## v0.15.0 — Target Radar, AI triage, service deep-links, rate limits, nmap URL normalization (2026-06-11)
+
+### Added
+- **Target Radar** — `radar_programs` table + Alembic migration 0008; `GET /radar` (list, marks programs seen) and `POST /radar/refresh` (fetch from Bugcrowd and HackerOne public APIs, upsert, flag new programs); Overview section shows Radar widget with last-refreshed date and Refresh button; BOLA-scoped per user
+- **AI-assisted triage** — `POST /programs/{id}/findings/{id}/suggest` calls `claude-haiku-4-5-20251001` to draft CVSS score, impact, and remediation from the finding's title/severity/summary/steps; requires `ANTHROPIC_API_KEY`; returns `503` if unconfigured; "AI Suggest" button in Findings section pre-fills the edit form with the response
+- **Services → Manual Test promotion** — "Investigate" button on each service row in ServicesSection dispatches `NAVIGATE_TO_REVIEW` with pre-filled manual test form (title, hypothesis populated from host/port/service context)
+- **ReviewSection deep-link** — `NAVIGATE_TO_REVIEW` action + `REVIEW_PREFILL_CONSUMED` in appReducer; ReviewSection switches to the target tab and passes prefill to ManualSection; epoch counter prevents stale re-application
+- **Per-endpoint rate limits** — `POST /jobs/{id}/events` → 600/min; `POST /runner/heartbeat` → 60/min; both are separate from the global 200/min default; shared `limiter.py` module prevents circular imports
+- **nmap URL normalization** — `strip_url_to_host(url)` helper in `runner.py` extracts hostname from full URLs (e.g. `https://app.example.com/path` → `app.example.com`) before passing targets to nmap; deduplicates targets after normalization
+- **`last_scanned_at` on services** — nullable `DateTime` column stamped on both create and upsert; shown in ServicesSection table; Alembic migration 0008 adds the column alongside `radar_programs`
+
+### Tests
+- Backend: 139 tests (was 114); +`TestLastScannedAt` (2), +`TestSuggestAuth`/`TestSuggestServiceCheck`/`TestSuggestSuccess` (10), +`TestListRadar`/`TestRefreshRadar` (13)
+- Runner: 81 tests (was 70); +`test_strip_url_to_host` (10 parametrized), +`test_strip_url_to_host_empty/whitespace`, +`test_run_nmap_job_strips_url_targets`
+
+### Docs
+- `docs/api.md`: AI suggest endpoint, radar endpoints, `last_scanned_at` in service object, rate limit notes on events/heartbeat
+- `docs/architecture.md`: `radar_programs` model, `last_scanned_at` on services, `strip_url_to_host`, `ANTHROPIC_API_KEY`, updated rate limit notes
+- `docs/development.md`: `ANTHROPIC_API_KEY` env var, updated test counts (backend 139, runner 81)
+- `CLAUDE.md`: v0.15.0 items marked shipped, test counts updated
+
+---
+
 ## v0.14.0 — Service discovery, atomic job claim, config validation, API key tracking (2026-06-11)
 
 ### Added

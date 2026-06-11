@@ -1,12 +1,13 @@
 from datetime import datetime, timezone
 from typing import Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from db import get_db
 from deps import get_current_user, get_program_or_404, log_action
+from limiter import limiter
 from models import JobEvent, ScanJob
 
 router = APIRouter(tags=["jobs"])
@@ -223,7 +224,9 @@ def serialize_event(e: JobEvent) -> dict:
 
 
 @router.post("/jobs/{job_id}/events", status_code=201)
+@limiter.limit("600/minute")
 def create_job_event(
+    request: Request,
     job_id: str,
     body: EventCreate,
     current_user: dict = Depends(get_current_user),

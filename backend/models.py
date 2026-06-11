@@ -261,5 +261,21 @@ class Service(Base):
     state = Column(String(20), default="open")         # open | filtered
     source = Column(String(50), default="nmap")
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    last_scanned_at = Column(DateTime, nullable=True)   # stamped on every upsert
 
     program = relationship("Program", back_populates="services")
+
+
+class RadarProgram(Base):
+    __tablename__ = "radar_programs"
+
+    id = Column(String, primary_key=True, default=new_uuid)
+    owner_github_id = Column(String, nullable=False, index=True)
+    platform = Column(String(20), nullable=False)   # "bugcrowd" | "hackerone"
+    platform_id = Column(String(200), nullable=False)  # unique slug/handle on platform
+    name = Column(String(300), nullable=False)
+    url = Column(String(500), default="")
+    max_payout = Column(Integer, nullable=True)
+    is_new = Column(String(1), default="1")  # "1" = unseen since last refresh, "0" = seen
+    discovered_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    last_fetched_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))

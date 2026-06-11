@@ -31,13 +31,14 @@ export default function FindingsSection({ program }: { program: Program }) {
     authFetch, setMessage, refreshSelectedProgram, promoteToReport,
     state: { findingPrefill }, dispatch,
   } = useAppContext();
-  const [findings,  setFindings]  = useState<Finding[]>([]);
-  const [total,     setTotal]     = useState(0);
-  const [offset,    setOffset]    = useState(0);
+  const [findings,    setFindings]    = useState<Finding[]>([]);
+  const [total,       setTotal]       = useState(0);
+  const [offset,      setOffset]      = useState(0);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [form,      setForm]      = useState<FindingFormState>(EMPTY);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editForm,  setEditForm]  = useState<FindingFormState>(EMPTY);
+  const [form,        setForm]        = useState<FindingFormState>(EMPTY);
+  const [editingId,   setEditingId]   = useState<string | null>(null);
+  const [editForm,    setEditForm]    = useState<FindingFormState>(EMPTY);
+  const [suggesting,  setSuggesting]  = useState<string | null>(null);
 
   const PAGE = 50;
 
@@ -113,6 +114,31 @@ export default function FindingsSection({ program }: { program: Program }) {
     } catch { setMessage("Failed to update finding."); }
   }
 
+  async function aiSuggest(finding: Finding) {
+    setSuggesting(finding.id);
+    try {
+      const res = await authFetch(`/programs/${program.id}/findings/${finding.id}/suggest`, { method: "POST" });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        setMessage(err.detail || "AI suggestion failed.");
+        return;
+      }
+      const data = await res.json();
+      setEditingId(finding.id);
+      setEditForm({
+        title: finding.title,
+        severity: finding.severity,
+        asset: finding.asset,
+        status: finding.status,
+        summary: finding.summary,
+        steps: finding.steps,
+        impact: data.impact || finding.impact,
+        remediation: data.remediation || finding.remediation,
+      });
+      setMessage(`AI suggestion applied. CVSS: ${data.cvss || "(none)"}`);
+    } catch { setMessage("AI suggestion request failed."); } finally { setSuggesting(null); }
+  }
+
   return (
     <div className="space-y-7">
       <SectionHeader title="Findings" description="Track validated issues before drafting the final report." />
@@ -156,6 +182,13 @@ export default function FindingsSection({ program }: { program: Program }) {
                         </div>
                       </div>
                       <div className="flex gap-2">
+                        <button
+                          onClick={() => aiSuggest(finding)}
+                          disabled={suggesting === finding.id}
+                          title="Use Claude AI to draft CVSS, impact, and remediation"
+                          className="rounded-md border border-[#2e2e2e] px-2.5 py-1 text-xs text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#a6e3a1] disabled:opacity-40">
+                          {suggesting === finding.id ? "…" : "AI Suggest"}
+                        </button>
                         <button onClick={() => promoteToReport(finding)} className="rounded-md border border-[#2e2e2e] px-2.5 py-1 text-xs text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#94a3b8]">
                           Draft Report →
                         </button>

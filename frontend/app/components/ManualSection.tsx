@@ -1,11 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { Program, ManualTest } from "../types";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ManualTestFormState, Program, ManualTest } from "../types";
 import { useAppContext } from "../context/AppContext";
 import { Panel, Input, Textarea, SelectField, PrimaryButton, DangerButton, StatusBadge, SectionHeader } from "./ui";
 
-type ManualFormState = { title: string; hypothesis: string; payload: string; evidence: string; status: string };
+type ManualFormState = ManualTestFormState;
 const EMPTY: ManualFormState = { title: "", hypothesis: "", payload: "", evidence: "", status: "new" };
 
 function ManualForm({ value, onChange }: { value: ManualFormState; onChange: (v: ManualFormState) => void }) {
@@ -21,12 +21,24 @@ function ManualForm({ value, onChange }: { value: ManualFormState; onChange: (v:
   );
 }
 
-export default function ManualSection({ program, hideHeader }: { program: Program; hideHeader?: boolean }) {
+export default function ManualSection({
+  program, hideHeader, prefill,
+}: {
+  program: Program; hideHeader?: boolean;
+  prefill?: { data: ManualFormState; epoch: number };
+}) {
   const { authFetch, setMessage, refreshSelectedProgram } = useAppContext();
   const [manualTests, setManualTests] = useState<ManualTest[]>([]);
   const [form,        setForm]        = useState<ManualFormState>(EMPTY);
   const [editingId,   setEditingId]   = useState<string | null>(null);
   const [editForm,    setEditForm]    = useState<ManualFormState>(EMPTY);
+  const consumedEpoch = useRef<number>(-1);
+
+  useEffect(() => {
+    if (!prefill || prefill.epoch === consumedEpoch.current) return;
+    consumedEpoch.current = prefill.epoch;
+    setForm(prefill.data);
+  }, [prefill]);
 
   const loadManualTests = useCallback(async () => {
     try {

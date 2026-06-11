@@ -6,13 +6,13 @@ Personal bug bounty workflow tool. FastAPI backend (Railway) + Next.js 16 fronte
 ## Where things live
 - `backend/` — FastAPI app, SQLAlchemy models, Alembic migrations, tests
 - `backend/routers/` — one file per resource (programs, findings, reports, etc.)
-- `backend/tests/` — pytest suite, 114 tests, uses SQLite
+- `backend/tests/` — pytest suite, 139 tests, uses SQLite
 - `frontend/app/` — Next.js App Router pages and components
 - `frontend/app/components/` — one component per section (FindingsSection, ReportsSection, JobsSection, etc.)
 - `frontend/app/context/` — AppContext.tsx + appReducer.ts (global state)
 - `runner/` — VardrRunner v1 local CLI; separate venv, installable via `pip install -e ./runner`
 - `runner/vardrrunner/` — Python package: config, api client, subprocess runner, command modules
-- `runner/tests/` — 70 tests; all subprocess and HTTP calls are mocked
+- `runner/tests/` — 81 tests; all subprocess and HTTP calls are mocked
 - `docs/` — architecture, API reference, development setup, security testing record
 - `CHANGELOG.md` — version history, updated with every change
 
@@ -114,8 +114,14 @@ Shipped (v0.14.0):
 - Per-tool config validation — unknown keys rejected, nuclei severity and nmap timing validated
 - API key `last_used_at` — stamped on every auth, shown in API key list
 
+Shipped (v0.15.0):
+- Target Radar — `radar_programs` table + migration 0008; `GET /radar` + `POST /radar/refresh` (Bugcrowd + HackerOne); Overview Radar widget
+- AI-assisted triage — `POST /programs/{id}/findings/{id}/suggest` via `claude-haiku-4-5-20251001`; "AI Suggest" button in FindingsSection
+- Services → Manual Test promotion — "Investigate" button dispatches `NAVIGATE_TO_REVIEW` with pre-filled manual test
+- Per-endpoint rate limits — events 600/min, heartbeat 60/min; shared `limiter.py`
+- nmap URL normalization — `strip_url_to_host()` helper; deduplicates after normalization
+- `last_scanned_at` on services — stamped on every upsert; shown in ServicesSection
+
 Remaining:
 - RBAC / multi-user support
-- Opportunities / Target Radar — new programs or changed scopes
-- AI-assisted finding triage and report drafting
 - VardrRunner: extract to separate repo (VardrSec/VardrRunner) when API stabilizes

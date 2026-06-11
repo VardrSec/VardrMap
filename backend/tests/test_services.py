@@ -141,6 +141,29 @@ class TestDeleteService:
 
 
 # ---------------------------------------------------------------------------
+# last_scanned_at
+# ---------------------------------------------------------------------------
+
+class TestLastScannedAt:
+    def test_last_scanned_at_set_on_create(self, client, program_id, auth_headers):
+        _bulk_create(client, program_id, auth_headers)
+        svc = client.get(f"/programs/{program_id}/services", headers=auth_headers).json()["services"][0]
+        assert svc["last_scanned_at"] is not None
+
+    def test_last_scanned_at_updated_on_upsert(self, client, program_id, auth_headers):
+        import time
+        _bulk_create(client, program_id, auth_headers)
+        first_ts = client.get(f"/programs/{program_id}/services", headers=auth_headers).json()["services"][0]["last_scanned_at"]
+
+        time.sleep(0.05)
+        _bulk_create(client, program_id, auth_headers, [{**_SVC, "version": "2.0.0"}])
+        second_ts = client.get(f"/programs/{program_id}/services", headers=auth_headers).json()["services"][0]["last_scanned_at"]
+
+        # Timestamps should differ — upsert stamps a new value
+        assert second_ts >= first_ts
+
+
+# ---------------------------------------------------------------------------
 # Cascade delete
 # ---------------------------------------------------------------------------
 

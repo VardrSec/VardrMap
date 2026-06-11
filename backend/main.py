@@ -2,14 +2,14 @@ import os
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
-from slowapi.util import get_remote_address
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from db import Base, engine
-from routers import apikeys, findings, imports, jobs, manual_tests, programs, recon, reports, runner, scans, scope, services
+from limiter import limiter
+from routers import apikeys, findings, imports, jobs, manual_tests, programs, radar, recon, reports, runner, scans, scope, services
 
 ENV = os.getenv("ENV") or os.getenv("RAILWAY_ENVIRONMENT_NAME", "development")
 
@@ -50,8 +50,6 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 # App + middleware stack
 # -----------------------------------------------------------------------------
 
-limiter = Limiter(key_func=get_remote_address, default_limits=["200/minute"])
-
 app = FastAPI(title="VardrMap API")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -84,6 +82,7 @@ app.include_router(imports.router)
 app.include_router(jobs.router)
 app.include_router(runner.router)
 app.include_router(services.router)
+app.include_router(radar.router)
 
 # -----------------------------------------------------------------------------
 # Health / root

@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Program } from "../types";
+import { useCallback, useEffect, useState } from "react";
+import { Program, RadarProgram } from "../types";
 import { useAppContext } from "../context/AppContext";
 import { Panel, SectionHeader, Input, Textarea, PrimaryButton, DangerButton } from "./ui";
 
@@ -43,6 +43,90 @@ function QuickActionButton({ label, sub, onClick }: QuickAction) {
       <span className="text-sm font-semibold text-[#f1f5f9]">{label}</span>
       <span className="mt-0.5 text-[10px] text-[#52525b]">{sub}</span>
     </button>
+  );
+}
+
+function RadarWidget({ authFetch, setMessage }: { authFetch: (p: string, i?: RequestInit) => Promise<Response>; setMessage: (m: string) => void }) {
+  const [programs, setPrograms] = useState<RadarProgram[]>([]);
+  const [newCount, setNewCount] = useState(0);
+  const [lastFetched, setLastFetched] = useState<string | null>(null);
+  const [loading, setLoading]  = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await authFetch("/radar");
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      setPrograms((data.programs ?? []).slice(0, 10));
+      setNewCount(data.new_count ?? 0);
+      if (data.programs?.length > 0) {
+        const latest = data.programs.reduce((a: RadarProgram, b: RadarProgram) => {
+          if (!a.last_fetched_at) return b;
+          if (!b.last_fetched_at) return a;
+          return a.last_fetched_at > b.last_fetched_at ? a : b;
+        });
+        setLastFetched(latest.last_fetched_at);
+      }
+    } catch { /* empty radar is fine */ } finally { setLoading(false); }
+  }, [authFetch]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  async function handleRefresh() {
+    setRefreshing(true);
+    try {
+      const res = await authFetch("/radar/refresh", { method: "POST" });
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      setMessage(`Radar refreshed — ${data.new} new program(s) found.`);
+      await load();
+    } catch { setMessage("Radar refresh failed."); } finally { setRefreshing(false); }
+  }
+
+  return (
+    <Panel title={`Target Radar${newCount > 0 ? ` · ${newCount} new` : ""}`}>
+      <div className="mb-3 flex items-center justify-between">
+        <p className="text-xs text-[#52525b]">
+          {lastFetched
+            ? `Last refreshed ${new Date(lastFetched).toLocaleDateString()}`
+            : "Never refreshed"}
+        </p>
+        <button
+          onClick={handleRefresh}
+          disabled={refreshing}
+          className="rounded-md border border-[#2e2e2e] px-3 py-1.5 text-xs text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#94a3b8] disabled:opacity-50">
+          {refreshing ? "Refreshing…" : "Refresh"}
+        </button>
+      </div>
+      {loading && <p className="py-4 text-center text-xs text-[#52525b]">Loading…</p>}
+      {!loading && programs.length === 0 && (
+        <p className="py-4 text-center text-xs text-[#3a3a3a]">
+          No programs found. Click Refresh to fetch from HackerOne and Bugcrowd.
+        </p>
+      )}
+      {!loading && programs.length > 0 && (
+        <div className="space-y-1.5">
+          {programs.map((p) => (
+            <a key={p.id} href={p.url || "#"} target="_blank" rel="noopener noreferrer"
+              className="flex items-center justify-between rounded-lg border border-[#2e2e2e] bg-[#161616] px-3 py-2 transition hover:border-[#3a3a3a]">
+              <div className="flex items-center gap-2 min-w-0">
+                {p.is_new && (
+                  <span className="flex-shrink-0 rounded px-1 py-0.5 text-[9px] font-bold uppercase"
+                    style={{ background: "#1d4ed8", color: "#bfdbfe" }}>new</span>
+                )}
+                <span className="truncate text-xs font-medium text-[#f1f5f9]">{p.name}</span>
+                <span className="flex-shrink-0 text-[10px] text-[#52525b] uppercase">{p.platform}</span>
+              </div>
+              {p.max_payout != null && (
+                <span className="flex-shrink-0 font-mono text-xs text-[#a6e3a1]">${p.max_payout.toLocaleString()}</span>
+              )}
+            </a>
+          ))}
+        </div>
+      )}
+    </Panel>
   );
 }
 
@@ -111,6 +195,9 @@ export default function OverviewSection({ program }: { program: Program }) {
         <DashboardCard title="Findings"        value={total}                              accent="#f9e2af" />
         <DashboardCard title="Reports"         value={program.reports_count}              accent="#a6e3a1" />
       </div>
+
+      {/* Target Radar */}
+      <RadarWidget authFetch={authFetch} setMessage={setMessage} />
 
       {/* Charts */}
       {total > 0 && (

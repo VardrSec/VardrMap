@@ -264,6 +264,20 @@ Delete a finding.
 { "message": "Finding deleted" }
 ```
 
+### `POST /programs/{program_id}/findings/{finding_id}/suggest`
+Ask Claude AI to draft CVSS score, impact statement, and remediation for a finding.
+
+Requires `ANTHROPIC_API_KEY` to be set on the server. Returns `503` if the key is absent.
+
+**Response**
+```json
+{ "cvss": "7.5 (High)", "impact": "Attackers can exfiltrate sensitive data...", "remediation": "Use parameterized queries..." }
+```
+
+**Error codes:** `401` unauthorized / wrong user, `404` finding not found, `503` API key not configured, `502` AI returned non-JSON or request failed.
+
+**Rate limit:** shares the global 200/min default.
+
 ---
 
 ## Reports
@@ -615,6 +629,8 @@ VardrRunner reports its status to VardrMap so the Bridge UI can show real connec
 ### `POST /runner/heartbeat`
 VardrRunner posts its status here. Upserts one row per authenticated user (one row per user — not per device).
 
+**Rate limit:** 60/minute (separate from the global 200/min default).
+
 **Request body**
 ```json
 {
@@ -666,6 +682,8 @@ VardrRunner posts lifecycle events as it executes a job. The frontend Terminal p
 
 ### `POST /jobs/{job_id}/events`
 VardrRunner posts a lifecycle event for a job it owns.
+
+**Rate limit:** 600/minute (higher than the global 200/min default to accommodate frequent log events during fast jobs).
 
 **Path params**
 - `job_id` — UUID of the scan job
@@ -744,7 +762,8 @@ A service object looks like:
   "version": "1.24.0",
   "state": "open",
   "source": "nmap",
-  "created_at": "2026-06-11T10:00:00"
+  "created_at": "2026-06-11T10:00:00",
+  "last_scanned_at": "2026-06-11T12:30:00"
 }
 ```
 
@@ -799,3 +818,58 @@ Delete a single service record.
 - `401` — not authenticated
 - `404` — program or service not found, or belongs to another user
 - `422` — invalid field value (e.g. port out of range)
+
+**`last_scanned_at`** — stamped on both create and upsert (whenever VardrRunner reports the port). Reflects when the service was last seen by nmap. `created_at` is only set once at insert time.
+
+---
+
+## Target Radar
+
+Program discovery feed — fetches public bug bounty program listings from Bugcrowd and HackerOne and surfaces newly seen programs. All endpoints are BOLA-scoped by authenticated user.
+
+A radar program object looks like:
+```json
+{
+  "id": "<uuid>",
+  "platform": "bugcrowd",
+  "platform_id": "prog-alpha",
+  "name": "Alpha Program",
+  "url": "https://bugcrowd.com/prog-alpha",
+  "max_payout": 5000,
+  "is_new": true,
+  "discovered_at": "2026-06-11T10:00:00",
+  "last_fetched_at": "2026-06-11T10:00:00"
+}
+```
+
+### `GET /radar`
+Return stored radar programs for the authenticated user, ordered by `discovered_at` descending. Marks all returned programs as seen (`is_new = false`).
+
+**Query parameters**
+| Parameter | Description |
+|---|---|
+| `platform` | Optional filter: `bugcrowd` or `hackerone` |
+
+**Response**
+```json
+{ "programs": [ <radar_object>, ... ], "total": 42, "new_count": 3 }
+```
+
+`new_count` reflects how many programs were `is_new = true` before this call marked them as seen.
+
+### `POST /radar/refresh`
+Fetch program listings from platform APIs and upsert into the database. Programs that have never been seen before are inserted with `is_new = true`. Programs already stored are updated in place (`last_fetched_at` refreshed, metadata synced).
+
+**Query parameters**
+| Parameter | Description |
+|---|---|
+| `platform` | Optional: `bugcrowd` or `hackerone`. Omit to refresh all platforms. |
+
+**Response**
+```json
+{ "new": 12, "updated": 38, "platforms": ["bugcrowd", "hackerone"] }
+```
+
+**Errors**
+- `400` — unknown platform name
+- `502` — upstream platform API request failed

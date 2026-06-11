@@ -162,6 +162,20 @@ services
   state ("open"|"filtered")
   source (default "nmap")
   created_at
+  last_scanned_at (nullable datetime — stamped on every upsert, reflects when port was last seen by nmap)
+
+radar_programs
+  id (PK)
+  owner_github_id (indexed — one set of rows per user)
+  platform (VARCHAR 20 — "bugcrowd" | "hackerone")
+  platform_id (VARCHAR 200 — unique slug/handle on the platform)
+  name (VARCHAR 300)
+  url (VARCHAR 500)
+  max_payout (nullable INTEGER)
+  is_new (VARCHAR 1 — "1" = unseen since last refresh, "0" = seen; marked "0" when GET /radar delivers it)
+  discovered_at (UTC datetime — when first inserted)
+  last_fetched_at (UTC datetime — updated on every POST /radar/refresh)
+  Indexes: owner_github_id; (platform, platform_id)
 
 runner_heartbeats
   id (PK)
@@ -192,9 +206,10 @@ audit_logs
 - `api_keys.key_hash` stores the SHA-256 hex digest of the plaintext token. The plaintext is never stored. `last_used_at` is stamped on every successful API key authentication.
 - `scan_jobs.config` is a JSON column with optional tool options. VardrRunner reads this dict when executing the job. Unknown config keys are rejected at creation time.
 - `scan_jobs` are scoped to the owning user via `owner_github_id` — a user can only see/update their own jobs. Claiming a job uses `POST /jobs/{id}/claim` which atomically sets `status = "running"` only if currently `"pending"`, returning 409 otherwise.
-- `services` rows are bulk-upserted on `(host, port, protocol)` — repeated nmap scans update metadata rather than creating duplicates.
-- `runner_heartbeats` is a single-row-per-user upsert table. VardrRunner calls `POST /runner/heartbeat` at the start of `jobs run` (and via `vardrrunner heartbeat`). The frontend polls `GET /runner/status` which derives `online: true` if `last_seen` is within 5 minutes.
-- `job_events` are appended by VardrRunner via `POST /jobs/{id}/events` at each lifecycle stage. The frontend Terminal polls `GET /jobs/{id}/events` (3 s interval while job is pending/running, stops on terminal state). Events cascade-delete with their parent job.
+- `services` rows are bulk-upserted on `(host, port, protocol)` — repeated nmap scans update metadata rather than creating duplicates. `last_scanned_at` is stamped on both insert and update so freshness is always visible.
+- `radar_programs` are upserted per user on `(owner_github_id, platform, platform_id)`. New programs land with `is_new = "1"` so the Overview Radar widget can badge them; `GET /radar` marks all returned rows as seen.
+- `runner_heartbeats` is a single-row-per-user upsert table. VardrRunner calls `POST /runner/heartbeat` at the start of `jobs run` (and via `vardrrunner heartbeat`). The frontend polls `GET /runner/status` which derives `online: true` if `last_seen` is within 5 minutes. Rate-limited to 60/min.
+- `job_events` are appended by VardrRunner via `POST /jobs/{id}/events` at each lifecycle stage. The frontend Terminal polls `GET /jobs/{id}/events` (3 s interval while job is pending/running, stops on terminal state). Events cascade-delete with their parent job. Rate-limited to 600/min.
 
 ---
 
@@ -299,6 +314,7 @@ VardrMap frontend (Vercel)
 
 **Key design constraints:**
 - Tool execution uses an allowlist (`ALLOWED_TOOLS` in `runner.py`) — `httpx`, `nuclei`, `subfinder`, and `nmap`; nmap uses a safe profile only (`--top-ports N -sV --version-intensity 2 -T{0-4} --open`; never `-A`, `-O`, `-p-`, `--script`, or `-T5`)
+- `strip_url_to_host(url)` normalizes recon targets (e.g. `https://app.example.com/path` → `app.example.com`) before passing them to nmap, which requires hostnames/IPs rather than full URLs
 - `subprocess.run` is always called with an argument list, never `shell=True`
 - Wildcard scope entries (`*.example.com`) are skipped by `run httpx/nuclei`; use `vardrrunner run subfinder --program <id>` to enumerate subdomains first, then re-run against recon results
 - Config at `~/.vardrmap/config.json` stores the `vmap_` API key in plaintext — documented clearly and file permissions restricted on Unix
