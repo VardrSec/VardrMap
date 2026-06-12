@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef } from "react";
-import { AppSession, AuthFetch, Finding, Program, ScanItem, Section } from "../types";
+import { AppSession, AuthFetch, Finding, Program, Report, ScanItem, Section } from "../types";
 import { AppAction, AppState, appReducer, initialState } from "./appReducer";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
@@ -64,6 +64,7 @@ type AppContextValue = {
   deleteProgram: () => Promise<void>;
   promoteScanToFinding: (scan: ScanItem) => void;
   promoteToReport: (finding: Finding) => void;
+  promoteToSubmission: (report: Report) => void;
   dispatch: React.Dispatch<AppAction>;
 };
 
@@ -172,6 +173,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  const promoteToSubmission = useCallback((report: Report) => {
+    dispatch({
+      type: "PROMOTE_TO_SUBMISSION",
+      prefill: {
+        title: report.title,
+        report_id: report.id,
+        finding_id: report.finding_id || "",
+      },
+    });
+  }, []);
+
   const promoteToReport = useCallback((finding: Finding) => {
     dispatch({
       type: "PROMOTE_TO_REPORT",
@@ -226,6 +238,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     deleteProgram,
     promoteScanToFinding,
     promoteToReport,
+    promoteToSubmission,
     dispatch,
   };
 

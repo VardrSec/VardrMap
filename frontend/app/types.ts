@@ -38,6 +38,7 @@ export type RadarProgram = {
   max_payout: number | null; is_new: boolean;
   discovered_at: string | null; last_fetched_at: string | null;
 };
+export type SubmissionPrefill = { title: string; report_id: string; finding_id: string };
 export type ManualTestFormState = {
   title: string; hypothesis: string; payload: string; evidence: string; status: string;
 };

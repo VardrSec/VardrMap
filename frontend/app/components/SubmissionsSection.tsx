@@ -31,6 +31,7 @@ const SEV_COLOR: Record<string, string> = {
 const EMPTY_FORM = {
   title: "", platform: "", platform_reference: "", severity: "",
   status: "submitted" as SubmissionStatus, payout_usd: "", notes: "",
+  report_id: "", finding_id: "",
 };
 
 function fmtDate(iso: string | null) {
@@ -48,7 +49,7 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 export default function SubmissionsSection({ program }: { program: Program }) {
-  const { authFetch, setMessage } = useAppContext();
+  const { authFetch, setMessage, state: { submissionPrefill }, dispatch } = useAppContext();
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loading,     setLoading]     = useState(true);
   const [showForm,    setShowForm]    = useState(false);
@@ -68,6 +69,20 @@ export default function SubmissionsSection({ program }: { program: Program }) {
 
   useEffect(() => { void load(); }, [load]);
 
+  useEffect(() => {
+    if (submissionPrefill) {
+      setForm({
+        ...EMPTY_FORM,
+        title: submissionPrefill.title,
+        report_id: submissionPrefill.report_id,
+        finding_id: submissionPrefill.finding_id,
+      });
+      setShowForm(true);
+      dispatch({ type: "SUBMISSION_PREFILL_CONSUMED" });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [submissionPrefill]);
+
   async function create() {
     if (!form.title.trim()) return;
     setSaving(true);
@@ -80,6 +95,8 @@ export default function SubmissionsSection({ program }: { program: Program }) {
         status: form.status,
         payout_usd: form.payout_usd ? parseFloat(form.payout_usd) : null,
         notes: form.notes,
+        report_id: form.report_id || "",
+        finding_id: form.finding_id || "",
       };
       const res = await authFetch(`/programs/${program.id}/submissions`, { method: "POST", body: JSON.stringify(body) });
       if (!res.ok) throw new Error();

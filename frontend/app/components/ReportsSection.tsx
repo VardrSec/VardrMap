@@ -54,7 +54,7 @@ function ReportFields({ value, onChange }: { value: ReportFormState; onChange: (
 
 export default function ReportsSection({ program }: { program: Program }) {
   const {
-    authFetch, setMessage, refreshSelectedProgram,
+    authFetch, setMessage, refreshSelectedProgram, promoteToSubmission,
     state: { reportPrefill }, dispatch,
   } = useAppContext();
   const [reports,     setReports]     = useState<Report[]>([]);
@@ -301,6 +301,11 @@ export default function ReportsSection({ program }: { program: Program }) {
                     </div>
                   </div>
                   <div className="flex gap-2">
+                    <button onClick={() => promoteToSubmission(report)}
+                      className="rounded-md border border-[#f59e0b]/40 px-2.5 py-1 text-xs text-[#f59e0b] transition hover:border-[#f59e0b] hover:bg-[#f59e0b]/10"
+                      title="Log as a platform submission">
+                      Submit →
+                    </button>
                     <button onClick={() => startEdit(report)} className="rounded-md border border-[#2e2e2e] px-2.5 py-1 text-xs text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#94a3b8]">
                       Edit
                     </button>

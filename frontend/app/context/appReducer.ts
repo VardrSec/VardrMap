@@ -1,4 +1,4 @@
-import { AppSession, FindingFormState, ManualTestFormState, Program, ReportFormState, Section } from "../types";
+import { AppSession, FindingFormState, ManualTestFormState, Program, ReportFormState, Section, SubmissionPrefill } from "../types";
 
 export type ReviewTab = "recon" | "scans" | "manual" | "services";
 
@@ -11,6 +11,7 @@ export type AppState = {
   message: string;
   findingPrefill: FindingFormState | null;
   reportPrefill: ReportFormState | null;
+  submissionPrefill: SubmissionPrefill | null;
   dashboardPrefill: { tool?: string; tab?: "import" } | null;
   reviewPrefill: { tab?: ReviewTab; manualTest?: ManualTestFormState; prefillEpoch?: number } | null;
 };
@@ -30,6 +31,8 @@ export type AppAction =
   | { type: "FINDING_PREFILL_CONSUMED" }
   | { type: "PROMOTE_TO_REPORT"; prefill: ReportFormState }
   | { type: "REPORT_PREFILL_CONSUMED" }
+  | { type: "PROMOTE_TO_SUBMISSION"; prefill: SubmissionPrefill }
+  | { type: "SUBMISSION_PREFILL_CONSUMED" }
   | { type: "SET_MESSAGE"; message: string }
   | { type: "CLEAR_MESSAGE" };
 
@@ -42,6 +45,7 @@ export const initialState: AppState = {
   message: "",
   findingPrefill: null,
   reportPrefill: null,
+  submissionPrefill: null,
   dashboardPrefill: null,
   reviewPrefill: null,
 };
@@ -115,6 +119,12 @@ export function appReducer(state: AppState, action: AppAction): AppState {
 
     case "REPORT_PREFILL_CONSUMED":
       return { ...state, reportPrefill: null };
+
+    case "PROMOTE_TO_SUBMISSION":
+      return { ...state, submissionPrefill: action.prefill, activeSection: "submissions" };
+
+    case "SUBMISSION_PREFILL_CONSUMED":
+      return { ...state, submissionPrefill: null };
 
     case "SET_MESSAGE":
       return { ...state, message: action.message };
