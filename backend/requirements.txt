@@ -11,3 +11,4 @@ slowapi
 alembic
 anthropic
 httpx
+pytest-cov
