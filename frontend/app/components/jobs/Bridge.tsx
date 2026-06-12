@@ -1,7 +1,23 @@
 "use client";
 
-import type { RunnerStatus } from "../../types";
+import type { RunnerInfo, RunnerStatus } from "../../types";
 import { fmtAgo } from "./mockData";
+
+function RunnerRow({ runner }: { runner: RunnerInfo }) {
+  return (
+    <div className="rounded-lg border border-[#2e2e2e] bg-[#1a1a1a] px-3 py-2">
+      <div className="flex items-center gap-2 font-mono text-[11px]">
+        <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full"
+          style={{ backgroundColor: runner.online ? "#a6e3a1" : "#52525b", boxShadow: runner.online ? "0 0 5px #a6e3a1" : "none" }} />
+        <span className="truncate font-semibold text-[#f1f5f9]">{runner.hostname || "unknown"}</span>
+        {runner.os && <span className="hidden truncate text-[#52525b] sm:inline">{runner.os}</span>}
+        <span className="ml-auto flex-shrink-0 text-[10px] text-[#52525b]">
+          {runner.last_seen ? `seen ${fmtAgo(runner.last_seen)}` : "never"}
+        </span>
+      </div>
+    </div>
+  );
+}
 
 function LinkWire({ online, accent, busy, pulseKey }: {
   online: boolean; accent: string; busy: boolean; pulseKey: number;
@@ -152,9 +168,13 @@ export default function Bridge({
 
   const toolEntries = runnerStatus ? Object.entries(runnerStatus.tools) : [];
   const seenAgo = runnerStatus?.last_seen ? fmtAgo(runnerStatus.last_seen) : fmtAgo(lastPoll);
-  const runnerSub = runnerStatus?.hostname
-    ? `${runnerStatus.hostname}${runnerStatus.os ? ` · ${runnerStatus.os}` : ""}`
-    : "local machine";
+  const allRunners = runnerStatus?.runners ?? [];
+  const multiRunner = allRunners.length > 1;
+  const runnerSub = multiRunner
+    ? `${allRunners.length} machines · ${allRunners.filter((r) => r.online).length} online`
+    : runnerStatus?.hostname
+      ? `${runnerStatus.hostname}${runnerStatus.os ? ` · ${runnerStatus.os}` : ""}`
+      : "local machine";
 
   return (
     <div className="rounded-2xl border border-[#2e2e2e] bg-[#1a1a1a] p-5">
@@ -229,6 +249,13 @@ export default function Bridge({
                 <div className="flex flex-wrap gap-1.5">
                   {toolEntries.map(([name, info]) => (
                     <ToolChip key={name} name={name} ok={info.ok} version={info.version} />
+                  ))}
+                </div>
+              )}
+              {multiRunner && (
+                <div className="space-y-1.5">
+                  {allRunners.map((r) => (
+                    <RunnerRow key={r.hostname ?? "?"} runner={r} />
                   ))}
                 </div>
               )}

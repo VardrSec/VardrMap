@@ -83,6 +83,8 @@ users
   github_id (PK)
   username
   email
+  webhook_url (VARCHAR 500 — Discord/Slack incoming webhook; "" = notifications off)
+  notify_min_severity ("info"|"low"|"medium"|"high"|"critical" — finding notification threshold)
   created_at
 
 programs
@@ -194,10 +196,24 @@ submissions
 
 runner_heartbeats
   id (PK)
-  owner_github_id (unique, indexed — one row per user)
+  owner_github_id (indexed)
   hostname, version, os_info
   tools (JSON — {"httpx": {"ok": true, "version": "v1.6.9"}, ...})
   last_seen (UTC datetime — frontend derives online = last_seen < 5 min ago)
+  Unique: (owner_github_id, hostname) — one row per user per machine
+
+scheduled_scans
+  id (PK)
+  program_id (FK → programs.id, CASCADE DELETE, indexed)
+  owner_github_id (indexed)
+  tool_type ("httpx"|"nuclei"|"subfinder"|"nmap")
+  target_source ("scope"|"recon")
+  config (JSON — same shape and validation as scan_jobs.config)
+  interval ("hourly"|"daily"|"weekly")
+  enabled (BOOLEAN — paused schedules are skipped at materialization)
+  last_run_at (nullable datetime — when a job was last materialized)
+  next_run_at (datetime — schedule is due when <= now)
+  created_at
 
 job_events
   id (PK)
@@ -225,7 +241,9 @@ audit_logs
 - `radar_programs` are upserted per user on `(owner_github_id, platform, platform_id)`. New programs land with `is_new = "1"` so the Overview Radar widget can badge them; `GET /radar` marks all returned rows as seen.
 - `submissions` track the full lifecycle of a bug bounty submission. `finding_id` and `report_id` are soft references — submissions survive finding/report deletion. Transitioning `status` to a terminal state (`accepted`, `duplicate`, `na`, `paid`, `rejected`) via `PATCH` auto-stamps `resolved_at` if it was not already set.
 - Deleting a `scan_job` (via `DELETE /jobs/{id}`) also deletes all its `job_events` via CASCADE.
-- `runner_heartbeats` is a single-row-per-user upsert table. VardrRunner calls `POST /runner/heartbeat` at the start of `jobs run` (and via `vardrrunner heartbeat`). The frontend polls `GET /runner/status` which derives `online: true` if `last_seen` is within 5 minutes. Rate-limited to 60/min.
+- `runner_heartbeats` is upserted per `(owner_github_id, hostname)` so multiple machines (laptop + VPS) report independently. VardrRunner calls `POST /runner/heartbeat` at the start of `jobs run`, every 60 s inside the daemon, and via `vardrrunner heartbeat`. The frontend polls `GET /runner/status` which returns all runners and derives per-runner `online: true` if `last_seen` is within 5 minutes. Rate-limited to 60/min.
+- `scheduled_scans` have no backend cron. Due schedules (`enabled` and `next_run_at <= now`) are materialized into pending `scan_jobs` inside `GET /jobs/pending` — the runner's poll drives the clock. `next_run_at` advances from *now* rather than the previous `next_run_at`, so a runner that was offline for a week creates one catch-up job, not seven.
+- `users.webhook_url` (stored plaintext — it must be usable, unlike hashed API keys; only ever returned to its owner) and `users.notify_min_severity` drive outbound notifications, sent via FastAPI BackgroundTasks so webhook latency never delays API responses. URLs are validated against an SSRF guard (HTTPS only, no localhost/private/link-local targets).
 - `job_events` are appended by VardrRunner via `POST /jobs/{id}/events` at each lifecycle stage. The frontend Terminal polls `GET /jobs/{id}/events` (3 s interval while job is pending/running, stops on terminal state). Events cascade-delete with their parent job. Rate-limited to 600/min.
 
 ---

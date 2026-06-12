@@ -46,12 +46,16 @@ function QuickActionButton({ label, sub, onClick }: QuickAction) {
   );
 }
 
+const PLATFORM_LABELS: Record<string, string> = { bugcrowd: "Bugcrowd", hackerone: "HackerOne" };
+
 function RadarWidget({ authFetch, setMessage }: { authFetch: (p: string, i?: RequestInit) => Promise<Response>; setMessage: (m: string) => void }) {
+  const { loadPrograms, selectProgram, navigate } = useAppContext();
   const [programs, setPrograms] = useState<RadarProgram[]>([]);
   const [newCount, setNewCount] = useState(0);
   const [lastFetched, setLastFetched] = useState<string | null>(null);
   const [loading, setLoading]  = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [trackingId, setTrackingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -85,6 +89,27 @@ function RadarWidget({ authFetch, setMessage }: { authFetch: (p: string, i?: Req
     } catch { setMessage("Radar refresh failed."); } finally { setRefreshing(false); }
   }
 
+  // One-click: create a tracked program from a radar entry and jump to its scope
+  async function track(rp: RadarProgram) {
+    setTrackingId(rp.id);
+    try {
+      const res = await authFetch("/programs", {
+        method: "POST",
+        body: JSON.stringify({
+          name: rp.name,
+          platform: PLATFORM_LABELS[rp.platform] ?? rp.platform,
+          program_url: rp.url || "",
+        }),
+      });
+      if (!res.ok) throw new Error();
+      const created = await res.json();
+      await loadPrograms();
+      selectProgram(created.id as string);
+      navigate("scope");
+      setMessage(`Now tracking ${rp.name} — add its scope to get started.`);
+    } catch { setMessage("Failed to track program."); } finally { setTrackingId(null); }
+  }
+
   return (
     <Panel title={`Target Radar${newCount > 0 ? ` · ${newCount} new` : ""}`}>
       <div className="mb-3 flex items-center justify-between">
@@ -109,20 +134,28 @@ function RadarWidget({ authFetch, setMessage }: { authFetch: (p: string, i?: Req
       {!loading && programs.length > 0 && (
         <div className="space-y-1.5">
           {programs.map((p) => (
-            <a key={p.id} href={p.url || "#"} target="_blank" rel="noopener noreferrer"
-              className="flex items-center justify-between rounded-lg border border-[#2e2e2e] bg-[#161616] px-3 py-2 transition hover:border-[#3a3a3a]">
-              <div className="flex items-center gap-2 min-w-0">
+            <div key={p.id}
+              className="flex items-center justify-between gap-2 rounded-lg border border-[#2e2e2e] bg-[#161616] px-3 py-2 transition hover:border-[#3a3a3a]">
+              <a href={p.url || "#"} target="_blank" rel="noopener noreferrer"
+                className="flex min-w-0 flex-1 items-center gap-2">
                 {p.is_new && (
                   <span className="flex-shrink-0 rounded px-1 py-0.5 text-[9px] font-bold uppercase"
                     style={{ background: "#1d4ed8", color: "#bfdbfe" }}>new</span>
                 )}
                 <span className="truncate text-xs font-medium text-[#f1f5f9]">{p.name}</span>
                 <span className="flex-shrink-0 text-[10px] text-[#52525b] uppercase">{p.platform}</span>
-              </div>
+              </a>
               {p.max_payout != null && (
                 <span className="flex-shrink-0 font-mono text-xs text-[#a6e3a1]">${p.max_payout.toLocaleString()}</span>
               )}
-            </a>
+              <button
+                onClick={() => track(p)}
+                disabled={trackingId === p.id}
+                title="Create a tracked program from this listing"
+                className="flex-shrink-0 rounded-md border border-[#f59e0b]/40 px-2 py-0.5 text-[10px] text-[#f59e0b] transition hover:border-[#f59e0b] hover:bg-[#f59e0b]/10 disabled:opacity-50">
+                {trackingId === p.id ? "…" : "+ Track"}
+              </button>
+            </div>
           ))}
         </div>
       )}

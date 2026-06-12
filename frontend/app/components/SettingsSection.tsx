@@ -5,11 +5,15 @@ import { ApiKey } from "../types";
 import { useAppContext } from "../context/AppContext";
 import { Panel, Input, PrimaryButton, DangerButton, SectionHeader } from "./ui";
 
+const SEVERITIES = ["info", "low", "medium", "high", "critical"] as const;
+
 export default function SettingsSection() {
   const { authFetch, setMessage } = useAppContext();
   const [keys,     setKeys]     = useState<ApiKey[]>([]);
   const [label,    setLabel]    = useState("");
   const [newToken, setNewToken] = useState<string | null>(null);
+  const [webhookUrl,  setWebhookUrl]  = useState("");
+  const [minSeverity, setMinSeverity] = useState("high");
 
   const loadKeys = useCallback(async () => {
     try {
@@ -21,6 +25,34 @@ export default function SettingsSection() {
   }, [authFetch, setMessage]);
 
   useEffect(() => { void loadKeys(); }, [loadKeys]);
+
+  // Notification settings
+  useEffect(() => {
+    void (async () => {
+      try {
+        const res = await authFetch("/settings");
+        if (!res.ok) return;
+        const data = await res.json();
+        setWebhookUrl(data.webhook_url ?? "");
+        setMinSeverity(data.notify_min_severity ?? "high");
+      } catch { /* defaults are fine */ }
+    })();
+  }, [authFetch]);
+
+  async function saveNotifications() {
+    try {
+      const res = await authFetch("/settings", {
+        method: "PATCH",
+        body: JSON.stringify({ webhook_url: webhookUrl, notify_min_severity: minSeverity }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        setMessage((err as { detail?: string }).detail || "Failed to save notification settings.");
+        return;
+      }
+      setMessage(webhookUrl ? "Notification settings saved." : "Notifications disabled.");
+    } catch { setMessage("Failed to save notification settings."); }
+  }
 
   async function generate() {
     try {
@@ -83,6 +115,39 @@ export default function SettingsSection() {
             Authorization: Bearer vmap_…
           </code>
           {" "}to authenticate any API request.
+        </p>
+      </Panel>
+
+      <Panel title="Notifications">
+        <div className="space-y-3">
+          <Input
+            label="Webhook URL (Discord or Slack incoming webhook — leave empty to disable)"
+            value={webhookUrl}
+            onChange={setWebhookUrl}
+          />
+          <div>
+            <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-widest text-[#52525b]">
+              Notify on findings at or above
+            </label>
+            <div className="flex gap-1.5">
+              {SEVERITIES.map((s) => (
+                <button key={s} onClick={() => setMinSeverity(s)}
+                  className="flex-1 rounded-md border px-2 py-1.5 font-mono text-[11px] uppercase transition"
+                  style={{
+                    borderColor: minSeverity === s ? "#f59e0b80" : "#2e2e2e",
+                    color: minSeverity === s ? "#f59e0b" : "#94a3b8",
+                    backgroundColor: minSeverity === s ? "#f59e0b12" : "#161616",
+                  }}>
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
+          <PrimaryButton onClick={saveNotifications} label="Save Notifications" />
+        </div>
+        <p className="mt-3 text-xs text-[#52525b]">
+          Sends a message when a scan job fails or a nuclei import contains findings at or above the threshold.
+          Must be an HTTPS URL.
         </p>
       </Panel>
 

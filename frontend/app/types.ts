@@ -100,7 +100,7 @@ export type JobEvent = {
   created_at: string;
 };
 
-export type RunnerStatus = {
+export type RunnerInfo = {
   online: boolean;
   last_seen: string | null;
   hostname: string | null;
@@ -108,6 +108,15 @@ export type RunnerStatus = {
   os: string | null;
   tools: Record<string, { ok: boolean; version: string | null }>;
 };
+// Top-level fields mirror the most recently seen runner (backward compat);
+// `runners` lists every machine that has sent a heartbeat.
+export type RunnerStatus = RunnerInfo & { runners?: RunnerInfo[] };
+export type ScheduledScan = {
+  id: string; program_id: string; tool_type: string; target_source: string;
+  config: Record<string, unknown>; interval: string; enabled: boolean;
+  last_run_at: string | null; next_run_at: string | null; created_at: string | null;
+};
+export type UserSettings = { webhook_url: string; notify_min_severity: string };
 export type Submission = {
   id: string; program_id: string;
   finding_id: string; report_id: string;

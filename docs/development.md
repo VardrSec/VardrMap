@@ -101,7 +101,7 @@ cd backend
 pytest tests -v
 ```
 
-All 242 tests should pass. There are no frontend tests at this time.
+All 302 tests should pass. (The frontend also has reducer unit tests: `cd frontend && npm test`.)
 
 ### Test coverage areas
 

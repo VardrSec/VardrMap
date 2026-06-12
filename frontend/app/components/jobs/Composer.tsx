@@ -10,7 +10,10 @@ type QueueSpec = {
   config: Record<string, unknown>;
   targets: number;
   yieldKind: string;
+  interval?: string; // "hourly" | "daily" | "weekly" — undefined = run once
 };
+
+const RECURRENCE = ["once", "hourly", "daily", "weekly"] as const;
 
 type ComposerProps = {
   accent: string;
@@ -61,6 +64,7 @@ export default function Composer({ accent, onQueue, runnerOnline, scopeCount, re
     return t.sources[0];
   });
   const [cfg, setCfg] = useState<Record<string, unknown>>({ severity: "high,critical", templates: "cves,exposures" });
+  const [recurrence, setRecurrence] = useState<(typeof RECURRENCE)[number]>("once");
 
   const tool = TOOLS[toolId];
 
@@ -76,7 +80,10 @@ export default function Composer({ accent, onQueue, runnerOnline, scopeCount, re
   const sourceCount = source === "scope" ? scopeCount : reconCount;
 
   function submit() {
-    onQueue({ tool: toolId, source, config: { ...cfg }, targets: sourceCount, yieldKind: tool.yields });
+    onQueue({
+      tool: toolId, source, config: { ...cfg }, targets: sourceCount, yieldKind: tool.yields,
+      interval: recurrence === "once" ? undefined : recurrence,
+    });
   }
 
   return (
@@ -139,19 +146,36 @@ export default function Composer({ accent, onQueue, runnerOnline, scopeCount, re
           )}
         </div>
 
+        <Field label="Recurrence">
+          <div className="flex gap-1.5">
+            {RECURRENCE.map((r) => (
+              <button key={r} onClick={() => setRecurrence(r)}
+                className="flex-1 rounded-md border px-2 py-1.5 font-mono text-[11px] transition"
+                style={{
+                  borderColor: recurrence === r ? `${accent}80` : "#2e2e2e",
+                  color: recurrence === r ? accent : "#94a3b8",
+                  backgroundColor: recurrence === r ? `${accent}12` : "#161616",
+                }}>
+                {r}
+              </button>
+            ))}
+          </div>
+        </Field>
+
         <div className="flex items-center gap-2 rounded-lg border border-[#2e2e2e] bg-[#0d0d0d] px-3 py-2">
           <span className="font-mono text-base leading-none" style={{ color: accent }}>{tool.glyph}</span>
           <p className="font-mono text-[11px] leading-tight text-[#52525b]">
             <span className="text-[#94a3b8]">{tool.label}</span>{" on "}
             <span className="text-[#94a3b8]">{sourceCount}</span>{" "}{source} targets → yields{" "}
             <span style={{ color: accent }}>{tool.yields}</span>
+            {recurrence !== "once" && <>{" · repeats "}<span style={{ color: accent }}>{recurrence}</span></>}
           </p>
         </div>
 
         <button onClick={submit}
           className="w-full rounded-md px-4 py-2.5 text-sm font-semibold text-[#161616] transition active:scale-[0.98]"
           style={{ backgroundColor: accent }}>
-          Queue Job
+          {recurrence === "once" ? "Queue Job" : `Schedule ${recurrence}`}
         </button>
 
         {!runnerOnline && (

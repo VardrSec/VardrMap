@@ -1,16 +1,25 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from db import get_db
 from deps import get_current_user, get_program_or_404, log_action
 from limiter import limiter
-from models import JobEvent, ScanJob
+from models import JobEvent, ScanJob, ScheduledScan, User
+from notifications import send_webhook
 
 router = APIRouter(tags=["jobs"])
+
+# Schedule intervals live here (not in routers/schedules.py) because both this
+# module and schedules.py need them, and schedules.py already imports from here.
+SCHEDULE_INTERVALS: dict[str, timedelta] = {
+    "hourly": timedelta(hours=1),
+    "daily":  timedelta(days=1),
+    "weekly": timedelta(weeks=1),
+}
 
 
 EventKind = Literal["started", "targets_resolved", "running", "uploaded", "done", "failed", "log"]
@@ -136,12 +145,43 @@ def list_jobs(
     return {"jobs": [serialize_job(j) for j in jobs]}
 
 
+def _materialize_due_schedules(db: Session, github_id: str) -> None:
+    """Turn due scheduled scans into pending jobs and advance their next_run_at.
+
+    next_run_at advances from now (not from the old next_run_at) so a daemon
+    that was offline for a week creates one catch-up job, not seven.
+    """
+    now = datetime.now(timezone.utc)
+    due = (
+        db.query(ScheduledScan)
+        .filter(
+            ScheduledScan.owner_github_id == github_id,
+            ScheduledScan.enabled == True,  # noqa: E712 — SQLAlchemy needs the comparison
+            ScheduledScan.next_run_at <= now,
+        )
+        .all()
+    )
+    for schedule in due:
+        db.add(ScanJob(
+            program_id=schedule.program_id,
+            owner_github_id=github_id,
+            tool_type=schedule.tool_type,
+            target_source=schedule.target_source,
+            config=schedule.config or {},
+        ))
+        schedule.last_run_at = now
+        schedule.next_run_at = now + SCHEDULE_INTERVALS.get(schedule.interval, timedelta(days=1))
+    if due:
+        db.commit()
+
+
 @router.get("/jobs/pending")
 def get_pending_jobs(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """All pending jobs for the authenticated user, oldest first. Used by VardrRunner to poll."""
+    _materialize_due_schedules(db, current_user["github_id"])
     jobs = (
         db.query(ScanJob)
         .filter(
@@ -158,6 +198,7 @@ def get_pending_jobs(
 def update_job(
     job_id: str,
     body: JobStatusUpdate,
+    background_tasks: BackgroundTasks,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -187,6 +228,20 @@ def update_job(
 
     db.commit()
     db.refresh(job)
+
+    # Notify on failure — but not for operator-initiated cancels (the user
+    # clicked the button themselves; a webhook ping would just be noise)
+    is_cancel = "cancelled" in (job.error_message or "").lower()
+    if body.status == "failed" and not is_cancel:
+        user = db.query(User).filter(User.github_id == current_user["github_id"]).first()
+        if user and user.webhook_url:
+            program_name = job.program.name if job.program else job.program_id
+            message = (
+                f"❌ VardrMap: {job.tool_type} job failed for {program_name}"
+                + (f" — {job.error_message[:300]}" if job.error_message else "")
+            )
+            background_tasks.add_task(send_webhook, user.webhook_url, message)
+
     return serialize_job(job)
 
 

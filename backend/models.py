@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, Column, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from db import Base
@@ -19,6 +19,10 @@ class User(Base):
     github_id = Column(String, primary_key=True)
     username = Column(String(100), default="")
     email = Column(String(200), default="")
+    # Outbound notification settings — webhook_url is a Discord/Slack-style
+    # incoming webhook; empty string = notifications disabled
+    webhook_url = Column(String(500), default="")
+    notify_min_severity = Column(String(20), default="high")  # info|low|medium|high|critical
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     programs = relationship("Program", back_populates="owner", cascade="all, delete-orphan")
@@ -49,6 +53,7 @@ class Program(Base):
     scan_jobs   = relationship("ScanJob",    back_populates="program", cascade="all, delete-orphan")
     services    = relationship("Service",    back_populates="program", cascade="all, delete-orphan")
     submissions = relationship("Submission", back_populates="program", cascade="all, delete-orphan")
+    scheduled_scans = relationship("ScheduledScan", back_populates="program", cascade="all, delete-orphan")
 
 
 class ScopeItem(Base):
@@ -209,10 +214,12 @@ class ScanJob(Base):
 
 class RunnerHeartbeat(Base):
     __tablename__ = "runner_heartbeats"
+    # One row per (user, machine) — upserted on every heartbeat POST so
+    # multiple runners (laptop + VPS) can report independently
+    __table_args__ = (UniqueConstraint("owner_github_id", "hostname", name="uq_runner_heartbeats_owner_host"),)
 
     id = Column(String, primary_key=True, default=new_uuid)
-    # One row per user — upserted on every heartbeat POST
-    owner_github_id = Column(String, nullable=False, unique=True, index=True)
+    owner_github_id = Column(String, nullable=False, index=True)
     hostname = Column(String(200), default="")
     version = Column(String(50), default="")
     os_info = Column(String(200), default="")
@@ -280,6 +287,26 @@ class RadarProgram(Base):
     is_new = Column(String(1), default="1")  # "1" = unseen since last refresh, "0" = seen
     discovered_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     last_fetched_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+
+
+class ScheduledScan(Base):
+    __tablename__ = "scheduled_scans"
+
+    id = Column(String, primary_key=True, default=new_uuid)
+    program_id = Column(String, ForeignKey("programs.id", ondelete="CASCADE"), nullable=False, index=True)
+    owner_github_id = Column(String, nullable=False, index=True)
+    tool_type = Column(String(20), nullable=False)       # "httpx" | "nuclei" | "subfinder" | "nmap"
+    target_source = Column(String(20), nullable=False)   # "scope" | "recon"
+    config = Column(JSON, nullable=True)                 # tool-specific options, same shape as ScanJob.config
+    interval = Column(String(20), nullable=False)        # "hourly" | "daily" | "weekly"
+    enabled = Column(Boolean, nullable=False, default=True)
+    last_run_at = Column(DateTime, nullable=True)
+    # Due schedules are materialized into scan_jobs when the runner polls
+    # GET /jobs/pending — the polling daemon drives the clock, no cron needed
+    next_run_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    program = relationship("Program", back_populates="scheduled_scans")
 
 
 class Submission(Base):

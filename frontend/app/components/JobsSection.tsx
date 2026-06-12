@@ -1,13 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { RunnerStatus, ScanJob, ScanJobUI } from "../types";
+import type { RunnerStatus, ScanJob, ScanJobUI, ScheduledScan } from "../types";
 import { useAppContext } from "../context/AppContext";
 import { TOOLS } from "./jobs/mockData";
 import Bridge from "./jobs/Bridge";
 import Telemetry from "./jobs/Telemetry";
 import Composer from "./jobs/Composer";
 import JobBoard from "./jobs/JobBoard";
+import SchedulesPanel from "./jobs/SchedulesPanel";
 import Terminal from "./jobs/Terminal";
 
 const ACCENT = "#f59e0b";
@@ -87,6 +88,7 @@ export default function JobsSection({
   }
 
   const [jobs,          setJobs]          = useState<ScanJobUI[]>([]);
+  const [schedules,     setSchedules]     = useState<ScheduledScan[]>([]);
   const [loading,       setLoading]       = useState(true);
   const [runnerStatus,  setRunnerStatus]  = useState<RunnerStatus | null>(null);
   const [autoRun,       setAutoRun]       = useState(false);
@@ -131,10 +133,20 @@ export default function JobsSection({
     }
   }, [authFetch, programId]);
 
+  const loadSchedules = useCallback(async () => {
+    try {
+      const res = await authFetch(`/programs/${programId}/schedules`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setSchedules(Array.isArray(data?.schedules) ? data.schedules : []);
+    } catch { /* schedules panel just stays hidden */ }
+  }, [authFetch, programId]);
+
   // Initial load
   useEffect(() => {
     void loadJobs();
-  }, [loadJobs]);
+    void loadSchedules();
+  }, [loadJobs, loadSchedules]);
 
   // Adaptive polling: 5s while any jobs are active, 30s when idle
   useEffect(() => {
@@ -153,7 +165,31 @@ export default function JobsSection({
 
   async function queueJob(spec: {
     tool: string; source: string; config: Record<string, unknown>; targets: number; yieldKind: string;
+    interval?: string;
   }) {
+    // Recurring specs become schedules; the backend materializes a job on each due poll
+    if (spec.interval) {
+      try {
+        const res = await authFetch(`/programs/${programId}/schedules`, {
+          method: "POST",
+          body: JSON.stringify({
+            tool_type:     spec.tool,
+            target_source: spec.source,
+            config:        spec.config,
+            interval:      spec.interval,
+          }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => null) as { detail?: string } | null;
+          flash(`Failed to create schedule${err?.detail ? `: ${err.detail}` : "."}`);
+          return;
+        }
+        await loadSchedules();
+        flash(`Scheduled ${spec.tool} ${spec.interval} — first run on the runner's next poll.`);
+      } catch { flash("Failed to create schedule."); }
+      return;
+    }
+
     try {
       const res = await authFetch(`/programs/${programId}/jobs`, {
         method: "POST",
@@ -174,6 +210,27 @@ export default function JobsSection({
       setActiveId(ui.id);
       flash("Job queued. Run `vardrrunner jobs run` to execute.");
     } catch { flash("Failed to queue job."); }
+  }
+
+  async function toggleSchedule(id: string, enabled: boolean) {
+    try {
+      const res = await authFetch(`/programs/${programId}/schedules/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ enabled }),
+      });
+      if (!res.ok) { flash("Failed to update schedule."); return; }
+      const updated: ScheduledScan = await res.json();
+      setSchedules((p) => p.map((s) => (s.id === id ? updated : s)));
+    } catch { flash("Failed to update schedule."); }
+  }
+
+  async function deleteSchedule(id: string) {
+    try {
+      const res = await authFetch(`/programs/${programId}/schedules/${id}`, { method: "DELETE" });
+      if (!res.ok) { flash("Failed to delete schedule."); return; }
+      setSchedules((p) => p.filter((s) => s.id !== id));
+      flash("Schedule deleted.");
+    } catch { flash("Failed to delete schedule."); }
   }
 
   async function cancel(id: string) {
@@ -296,16 +353,24 @@ export default function JobsSection({
       <Telemetry jobs={jobs} accent={ACCENT} />
 
       <div className="grid gap-5 xl:grid-cols-[320px_1fr]">
-        <Composer
-          key={`${defaultTool ?? ""}:${prefillEpoch ?? 0}`}
-          accent={ACCENT}
-          onQueue={queueJob}
-          runnerOnline={runnerOnline}
-          scopeCount={scopeCount}
-          reconCount={reconCount}
-          programName={programName}
-          initialTool={defaultTool}
-        />
+        <div className="space-y-5">
+          <Composer
+            key={`${defaultTool ?? ""}:${prefillEpoch ?? 0}`}
+            accent={ACCENT}
+            onQueue={queueJob}
+            runnerOnline={runnerOnline}
+            scopeCount={scopeCount}
+            reconCount={reconCount}
+            programName={programName}
+            initialTool={defaultTool}
+          />
+          <SchedulesPanel
+            accent={ACCENT}
+            schedules={schedules}
+            onToggle={toggleSchedule}
+            onDelete={deleteSchedule}
+          />
+        </div>
 
         <div className="space-y-5">
           {loading ? (

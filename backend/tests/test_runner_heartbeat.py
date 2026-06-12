@@ -89,3 +89,36 @@ class TestGetRunnerStatus:
     def test_unauthorized(self, client):
         res = client.get("/runner/status")
         assert res.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Multi-runner — one heartbeat row per (user, hostname)
+# ---------------------------------------------------------------------------
+
+class TestMultiRunner:
+    def test_two_hostnames_create_two_runners(self, client, auth_headers):
+        client.post("/runner/heartbeat", json={**_PAYLOAD, "hostname": "laptop-a"}, headers=auth_headers)
+        client.post("/runner/heartbeat", json={**_PAYLOAD, "hostname": "vps-b"}, headers=auth_headers)
+        status = client.get("/runner/status", headers=auth_headers).json()
+        hostnames = [r["hostname"] for r in status["runners"]]
+        assert "laptop-a" in hostnames
+        assert "vps-b" in hostnames
+
+    def test_same_hostname_upserts_not_duplicates(self, client, auth_headers):
+        client.post("/runner/heartbeat", json={**_PAYLOAD, "hostname": "laptop-c"}, headers=auth_headers)
+        client.post("/runner/heartbeat", json={**_PAYLOAD, "hostname": "laptop-c", "version": "9.9.9"}, headers=auth_headers)
+        status = client.get("/runner/status", headers=auth_headers).json()
+        rows = [r for r in status["runners"] if r["hostname"] == "laptop-c"]
+        assert len(rows) == 1
+        assert rows[0]["version"] == "9.9.9"
+
+    def test_top_level_fields_mirror_most_recent(self, client, auth_headers):
+        client.post("/runner/heartbeat", json={**_PAYLOAD, "hostname": "older-machine"}, headers=auth_headers)
+        client.post("/runner/heartbeat", json={**_PAYLOAD, "hostname": "newest-machine"}, headers=auth_headers)
+        status = client.get("/runner/status", headers=auth_headers).json()
+        assert status["hostname"] == "newest-machine"
+        assert status["online"] is True
+
+    def test_runners_list_empty_when_no_heartbeats(self, client, other_headers):
+        status = client.get("/runner/status", headers=other_headers).json()
+        assert status["runners"] == []

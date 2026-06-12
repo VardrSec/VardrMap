@@ -9,7 +9,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from db import Base, engine
 from limiter import limiter
-from routers import apikeys, findings, imports, jobs, manual_tests, programs, radar, recon, reports, runner, scans, scope, services, submissions
+from routers import apikeys, findings, imports, jobs, manual_tests, programs, radar, recon, reports, runner, scans, schedules, scope, services, settings, submissions
 
 ENV = os.getenv("ENV") or os.getenv("RAILWAY_ENVIRONMENT_NAME", "development")
 
@@ -84,6 +84,8 @@ app.include_router(runner.router)
 app.include_router(services.router)
 app.include_router(radar.router)
 app.include_router(submissions.router)
+app.include_router(schedules.router)
+app.include_router(settings.router)
 
 # -----------------------------------------------------------------------------
 # Health / root

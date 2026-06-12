@@ -945,3 +945,85 @@ Permanently delete a job and all its events. Intended for removing stuck jobs th
 
 **Errors**
 - `404` — job not found or belongs to another user
+
+---
+
+## Scheduled Scans
+
+Recurring scan definitions. There is no backend cron: due schedules are materialized into pending `scan_jobs` whenever VardrRunner polls `GET /jobs/pending`, so schedules only fire while a runner is connected. New schedules are due immediately — the first job is created on the runner's next poll. After a runner outage, one catch-up job is created (not one per missed interval).
+
+**Schedule object shape**
+```json
+{
+  "id":            "uuid",
+  "program_id":    "uuid",
+  "tool_type":     "httpx",
+  "target_source": "scope",
+  "config":        { "limit": 50 },
+  "interval":      "daily",
+  "enabled":       true,
+  "last_run_at":   "2026-06-12T10:00:00+00:00",
+  "next_run_at":   "2026-06-13T10:00:00+00:00",
+  "created_at":    "2026-06-12T10:00:00+00:00"
+}
+```
+
+### `GET /programs/{program_id}/schedules`
+List all schedules for a program, newest first.
+
+**Response**
+```json
+{ "schedules": [ <schedule_object>, ... ], "total": 2 }
+```
+
+### `POST /programs/{program_id}/schedules`
+Create a recurring scan.
+
+**Request body**
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `tool_type` | string | yes | `httpx`, `nuclei`, `subfinder`, or `nmap` |
+| `target_source` | string | yes | `scope` or `recon` |
+| `config` | object | no | Tool config, same validation as job creation |
+| `interval` | string | yes | `hourly`, `daily`, or `weekly` |
+
+**Errors**
+- `400` — invalid tool, source, interval, or config keys
+- `404` — program not found or belongs to another user
+
+### `PATCH /programs/{program_id}/schedules/{schedule_id}`
+Update `enabled` (pause/resume) and/or `interval`.
+
+### `DELETE /programs/{program_id}/schedules/{schedule_id}`
+Permanently delete a schedule. Jobs already materialized from it are unaffected.
+
+---
+
+## Settings
+
+Per-user notification settings.
+
+### `GET /settings`
+Returns the authenticated user's settings (defaults if never saved).
+
+**Response**
+```json
+{ "webhook_url": "https://discord.com/api/webhooks/...", "notify_min_severity": "high" }
+```
+
+### `PATCH /settings`
+Update settings. `webhook_url` must be an HTTPS URL and may not point at localhost or a private/link-local address (SSRF guard); send `""` to disable notifications. `notify_min_severity` must be `info`/`low`/`medium`/`high`/`critical`.
+
+Notifications fire (as a Discord/Slack-compatible webhook POST) when:
+- a scan job is marked `failed` (except operator cancels), or
+- a nuclei import contains findings at or above `notify_min_severity`.
+
+**Errors**
+- `400` — non-HTTPS or private-address webhook URL, or invalid severity
+
+---
+
+## Runner Status (updated)
+
+### `GET /runner/status`
+Now returns a `runners` array — one entry per machine that has sent a heartbeat (newest first), each with `online`, `last_seen`, `hostname`, `version`, `os`, and `tools`. Heartbeats are upserted per `(user, hostname)` so a laptop and a VPS report independently. Top-level fields mirror the most recently seen runner for backward compatibility; top-level `online` is true if **any** runner is online.

@@ -6,7 +6,7 @@ Personal bug bounty workflow tool. FastAPI backend (Railway) + Next.js 16 fronte
 ## Where things live
 - `backend/` — FastAPI app, SQLAlchemy models, Alembic migrations, tests
 - `backend/routers/` — one file per resource (programs, findings, reports, etc.)
-- `backend/tests/` — pytest suite, 242 tests, uses SQLite
+- `backend/tests/` — pytest suite, 302 tests, uses SQLite
 - `frontend/app/` — Next.js App Router pages and components
 - `frontend/app/components/` — one component per section (FindingsSection, ReportsSection, JobsSection, etc.)
 - `frontend/app/context/` — AppContext.tsx + appReducer.ts (global state)
@@ -131,6 +131,16 @@ Shipped (v0.16.0):
 Shipped (v0.17.0):
 - VardrRunner daemon — `vardrrunner daemon start/stop/status`; polls jobs every 5 s, heartbeats every 60 s on a dedicated thread, `--detach` background mode with PID file, graceful SIGTERM shutdown
 - Extracted `execute_pending_jobs()` from `run_jobs()` so one-shot and daemon share the same execution path
+
+Shipped (v0.17.1):
+- Daemon Windows fixes — ctypes liveness probe (os.kill on Windows is TerminateProcess and was killing the daemon), PID-file-removal graceful stop protocol, DETACHED_PROCESS detach, double-start guard
+- Backend Postgres `pool_pre_ping=True` — no more stale-connection 500s after Railway idles connections
+
+Shipped (v0.18.0):
+- Scheduled scans — `scheduled_scans` table + migration 0010; CRUD at `/programs/{id}/schedules`; due schedules materialize into pending jobs inside `GET /jobs/pending` (runner poll drives the clock, no backend cron); Composer recurrence picker + Recurring Scans panel
+- Webhook notifications — `users.webhook_url` + `notify_min_severity`; `GET/PATCH /settings`; fires on job failure and notable nuclei imports via BackgroundTasks; SSRF guard (HTTPS only, no private targets); Settings UI panel
+- Multi-runner — heartbeats upserted per `(owner, hostname)`; `GET /runner/status` returns `runners` array; Bridge lists machines
+- Radar → Program tracking — "+ Track" button creates a program from a radar entry and jumps to Scope
 
 Remaining:
 - RBAC / multi-user support
