@@ -6,13 +6,13 @@ Personal bug bounty workflow tool. FastAPI backend (Railway) + Next.js 16 fronte
 ## Where things live
 - `backend/` — FastAPI app, SQLAlchemy models, Alembic migrations, tests
 - `backend/routers/` — one file per resource (programs, findings, reports, etc.)
-- `backend/tests/` — pytest suite, 139 tests, uses SQLite
+- `backend/tests/` — pytest suite, 242 tests, uses SQLite
 - `frontend/app/` — Next.js App Router pages and components
 - `frontend/app/components/` — one component per section (FindingsSection, ReportsSection, JobsSection, etc.)
 - `frontend/app/context/` — AppContext.tsx + appReducer.ts (global state)
 - `runner/` — VardrRunner v1 local CLI; separate venv, installable via `pip install -e ./runner`
 - `runner/vardrrunner/` — Python package: config, api client, subprocess runner, command modules
-- `runner/tests/` — 81 tests; all subprocess and HTTP calls are mocked
+- `runner/tests/` — 104 tests; all subprocess and HTTP calls are mocked
 - `docs/` — architecture, API reference, development setup, security testing record
 - `CHANGELOG.md` — version history, updated with every change
 
@@ -121,6 +121,16 @@ Shipped (v0.15.0):
 - Per-endpoint rate limits — events 600/min, heartbeat 60/min; shared `limiter.py`
 - nmap URL normalization — `strip_url_to_host()` helper; deduplicates after normalization
 - `last_scanned_at` on services — stamped on every upsert; shown in ServicesSection
+
+Shipped (v0.16.0):
+- Submission tracker — full CRUD (`/programs/{id}/submissions`); `submissions` table + migration 0009; `SubmissionsSection` in frontend; payout tracking, status lifecycle, `resolved_at` auto-stamp
+- Report → Submission promotion — "Submit →" button in ReportsSection dispatches `PROMOTE_TO_SUBMISSION` prefill
+- Delete stuck job — `DELETE /jobs/{id}`; delete button in Terminal footer
+- CI hardening — gitleaks secret scanning, pip-audit, npm audit, alembic heads check
+
+Shipped (v0.17.0):
+- VardrRunner daemon — `vardrrunner daemon start/stop/status`; polls jobs every 5 s, heartbeats every 60 s on a dedicated thread, `--detach` background mode with PID file, graceful SIGTERM shutdown
+- Extracted `execute_pending_jobs()` from `run_jobs()` so one-shot and daemon share the same execution path
 
 Remaining:
 - RBAC / multi-user support

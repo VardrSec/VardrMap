@@ -71,7 +71,7 @@ def _fetch_platform(platform: str) -> list[dict]:
     url = _SOURCES[platform]
     try:
         resp = httpx.get(url, timeout=_FETCH_TIMEOUT, follow_redirects=True,
-                         headers={"User-Agent": "VardrMap/0.15 (+https://github.com/VardrSec)"})
+                         headers={"User-Agent": "VardrMap/0.17 (+https://github.com/VardrSec)"})
         resp.raise_for_status()
         data = resp.json()
     except httpx.HTTPError as exc:

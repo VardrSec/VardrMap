@@ -879,6 +879,26 @@ Fetch program listings from platform APIs and upsert into the database. Programs
 
 Tracks the full lifecycle of a bug bounty submission from filed to resolved. Statuses: `submitted` → `triaged` → `accepted` | `duplicate` | `na` | `paid` | `rejected`.
 
+**Submission object shape**
+```json
+{
+  "id":                 "uuid",
+  "program_id":         "uuid",
+  "finding_id":         "uuid or empty string",
+  "report_id":          "uuid or empty string",
+  "platform":           "HackerOne",
+  "platform_reference": "report-12345",
+  "title":              "XSS in search parameter",
+  "status":             "submitted",
+  "payout_usd":         500.0,
+  "severity":           "high",
+  "notes":              "Triaged within 2 hours.",
+  "submitted_at":       "2026-06-12T10:00:00+00:00",
+  "resolved_at":        null,
+  "created_at":         "2026-06-12T10:00:00+00:00"
+}
+```
+
 ### `GET /programs/{program_id}/submissions`
 List all submissions for a program, ordered newest-first.
 

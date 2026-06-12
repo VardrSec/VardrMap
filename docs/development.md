@@ -101,7 +101,7 @@ cd backend
 pytest tests -v
 ```
 
-All 139 tests should pass. There are no frontend tests at this time.
+All 242 tests should pass. There are no frontend tests at this time.
 
 ### Test coverage areas
 
@@ -249,7 +249,7 @@ cd runner
 pytest tests -v
 ```
 
-81 tests should pass. Tests mock all subprocess and HTTP calls — no tools or backend required.
+104 tests should pass. Tests mock all subprocess and HTTP calls — no tools or backend required.
 
 ### Prerequisites for `run` commands
 

@@ -116,6 +116,7 @@ def update_submission(
     if body.status in terminal and sub.resolved_at is None:
         sub.resolved_at = datetime.now(timezone.utc)
 
+    log_action(db, current_user["github_id"], "update", "submission", submission_id, program_id)
     db.commit()
     db.refresh(sub)
     return serialize(sub)
