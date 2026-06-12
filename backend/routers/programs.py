@@ -2,8 +2,8 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from db import get_db
-from deps import get_current_user, get_program_or_404, log_action
-from models import Program, User
+from deps import get_current_user, get_program_or_404, log_action, require_program_owner
+from models import Program, ProgramMember, User
 from schemas import ProgramCreate, ProgramUpdate
 from serializers import serialize_program
 
@@ -46,8 +46,26 @@ def get_programs(
     current_user: dict[str, str] = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    rows = db.query(Program).filter(Program.owner_github_id == current_user["github_id"]).all()
-    return {"programs": [serialize_program(p, db) for p in rows]}
+    github_id = current_user["github_id"]
+    owned = db.query(Program).filter(Program.owner_github_id == github_id).all()
+
+    # Also include programs where this user is an invited member
+    member_program_ids = [
+        row[0]
+        for row in db.query(ProgramMember.program_id).filter(
+            ProgramMember.member_github_id == github_id
+        ).all()
+    ]
+    shared = (
+        db.query(Program)
+        .filter(Program.id.in_(member_program_ids))
+        .all()
+        if member_program_ids else []
+    )
+
+    seen = {p.id for p in owned}
+    all_programs = owned + [p for p in shared if p.id not in seen]
+    return {"programs": [serialize_program(p, db) for p in all_programs]}
 
 
 @router.post("/programs")
@@ -102,6 +120,7 @@ def update_program(
     db: Session = Depends(get_db),
 ):
     program = get_program_or_404(program_id, current_user, db)
+    require_program_owner(program, current_user)
     for key, value in payload.model_dump(exclude_unset=True).items():
         setattr(program, key, value)
     log_action(db, current_user["github_id"], "update", "program", program_id, program_id)
@@ -117,6 +136,7 @@ def delete_program(
     db: Session = Depends(get_db),
 ):
     program = get_program_or_404(program_id, current_user, db)
+    require_program_owner(program, current_user)
     log_action(db, current_user["github_id"], "delete", "program", program_id)
     db.delete(program)
     db.commit()

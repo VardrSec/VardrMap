@@ -122,6 +122,8 @@ recon_items
   id (PK), program_id (FK), source ("ffuf"|"httpx")
   url, path, host, title, status_code, webserver,
   port, tech, content_type, length, words, lines, notes
+  first_seen_at (nullable datetime — set once at first import, never overwritten; used for dedup)
+  job_id (nullable VARCHAR — soft ref to the scan_job that produced this item)
   created_at
 
 scan_items
@@ -140,6 +142,7 @@ api_keys
   github_id (FK → users.github_id, indexed)
   key_hash (SHA-256 hex, unique)
   label, created_at
+  scope (VARCHAR 20 — "full" (default) or "runner"; runner keys may only call jobs/imports/heartbeat)
   last_used_at (nullable — stamped on every successful API key auth)
 
 scan_jobs
@@ -223,6 +226,15 @@ job_events
   text (detail message — target count, result count, error text, etc.)
   created_at (UTC datetime)
 
+program_members
+  id (PK)
+  program_id (FK → programs.id, CASCADE DELETE, indexed)
+  owner_github_id (indexed — the program owner, for fast BOLA checks)
+  member_github_id (indexed — the invited collaborator)
+  role (VARCHAR 20 — "member"; future: "admin")
+  invited_at
+  Unique: (program_id, member_github_id)
+
 audit_logs
   id (PK)
   github_id (no FK — records survive user deletion)
@@ -234,7 +246,9 @@ audit_logs
 **Notes:**
 - `Report.finding_id` is a soft reference — no FK constraint. Reports can exist without a linked finding.
 - `AuditLog` has no FK constraints so records are never deleted when users or programs are removed.
-- `api_keys.key_hash` stores the SHA-256 hex digest of the plaintext token. The plaintext is never stored. `last_used_at` is stamped on every successful API key authentication.
+- `api_keys.key_hash` stores the SHA-256 hex digest of the plaintext token. The plaintext is never stored. `last_used_at` is stamped on every successful API key authentication. `scope` restricts runner-scoped keys to jobs/imports/heartbeat endpoints — all other endpoints return `403` for runner keys.
+- `recon_items.first_seen_at` is set once when an item is first imported and never overwritten. Dedup key is `(program_id, source, url)`: re-importing the same URL produces `new_count: 0` with no duplicate row.
+- `program_members` grant collaborators read+write access to a program's resources. Only the owner can manage members and delete/PATCH the program itself. `GET /programs` returns both owned programs and programs where the user is a member.
 - `scan_jobs.config` is a JSON column with optional tool options. VardrRunner reads this dict when executing the job. Unknown config keys are rejected at creation time.
 - `scan_jobs` are scoped to the owning user via `owner_github_id` — a user can only see/update their own jobs. Claiming a job uses `POST /jobs/{id}/claim` which atomically sets `status = "running"` only if currently `"pending"`, returning 409 otherwise.
 - `services` rows are bulk-upserted on `(host, port, protocol)` — repeated nmap scans update metadata rather than creating duplicates. `last_scanned_at` is stamped on both insert and update so freshness is always visible.

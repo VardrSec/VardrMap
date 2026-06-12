@@ -53,12 +53,13 @@ def list_schedules(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    get_program_or_404(program_id, current_user, db)
+    # Use program.owner_github_id so members see the owner's schedules too
+    program = get_program_or_404(program_id, current_user, db)
     rows = (
         db.query(ScheduledScan)
         .filter(
             ScheduledScan.program_id == program_id,
-            ScheduledScan.owner_github_id == current_user["github_id"],
+            ScheduledScan.owner_github_id == program.owner_github_id,
         )
         .order_by(ScheduledScan.created_at.desc())
         .all()
@@ -73,7 +74,7 @@ def create_schedule(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    get_program_or_404(program_id, current_user, db)
+    program = get_program_or_404(program_id, current_user, db)
     if body.tool_type not in _VALID_TOOLS:
         raise HTTPException(status_code=400, detail=f"tool_type must be one of {sorted(_VALID_TOOLS)}")
     if body.target_source not in _VALID_SOURCES:
@@ -85,7 +86,7 @@ def create_schedule(
 
     schedule = ScheduledScan(
         program_id=program_id,
-        owner_github_id=current_user["github_id"],
+        owner_github_id=program.owner_github_id,
         tool_type=body.tool_type,
         target_source=body.target_source,
         config=body.config or {},
@@ -109,13 +110,13 @@ def update_schedule(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    get_program_or_404(program_id, current_user, db)
+    program = get_program_or_404(program_id, current_user, db)
     schedule = (
         db.query(ScheduledScan)
         .filter(
             ScheduledScan.id == schedule_id,
             ScheduledScan.program_id == program_id,
-            ScheduledScan.owner_github_id == current_user["github_id"],
+            ScheduledScan.owner_github_id == program.owner_github_id,
         )
         .first()
     )
@@ -142,13 +143,13 @@ def delete_schedule(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    get_program_or_404(program_id, current_user, db)
+    program = get_program_or_404(program_id, current_user, db)
     schedule = (
         db.query(ScheduledScan)
         .filter(
             ScheduledScan.id == schedule_id,
             ScheduledScan.program_id == program_id,
-            ScheduledScan.owner_github_id == current_user["github_id"],
+            ScheduledScan.owner_github_id == program.owner_github_id,
         )
         .first()
     )

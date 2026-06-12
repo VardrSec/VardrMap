@@ -101,3 +101,76 @@ def test_max_keys_per_user(client, auth_headers):
 
     for kid in created:
         client.delete(f"/auth/apikeys/{kid}", headers=auth_headers)
+
+
+# ---------------------------------------------------------------------------
+# Scope — full vs runner
+# ---------------------------------------------------------------------------
+
+def test_create_full_scope_key(client, auth_headers):
+    res = client.post("/auth/apikeys", json={"label": "full", "scope": "full"}, headers=auth_headers)
+    assert res.status_code == 200
+    assert res.json()["scope"] == "full"
+    client.delete(f"/auth/apikeys/{res.json()['id']}", headers=auth_headers)
+
+
+def test_create_runner_scope_key(client, auth_headers):
+    res = client.post("/auth/apikeys", json={"label": "runner", "scope": "runner"}, headers=auth_headers)
+    assert res.status_code == 200
+    assert res.json()["scope"] == "runner"
+    client.delete(f"/auth/apikeys/{res.json()['id']}", headers=auth_headers)
+
+
+def test_scope_appears_in_list(client, auth_headers):
+    res = client.post("/auth/apikeys", json={"label": "ls", "scope": "runner"}, headers=auth_headers)
+    key_id = res.json()["id"]
+
+    keys = client.get("/auth/apikeys", headers=auth_headers).json()["keys"]
+    row = next(k for k in keys if k["id"] == key_id)
+    assert row["scope"] == "runner"
+
+    client.delete(f"/auth/apikeys/{key_id}", headers=auth_headers)
+
+
+def test_default_scope_is_full(client, auth_headers):
+    res = client.post("/auth/apikeys", json={"label": "no-scope"}, headers=auth_headers)
+    assert res.json()["scope"] == "full"
+    client.delete(f"/auth/apikeys/{res.json()['id']}", headers=auth_headers)
+
+
+def test_runner_key_cannot_access_full_endpoints(client, auth_headers):
+    res = client.post("/auth/apikeys", json={"scope": "runner"}, headers=auth_headers)
+    token = res.json()["token"]
+    key_id = res.json()["id"]
+
+    # /programs is full-scope only
+    blocked = client.get("/programs", headers={"Authorization": f"Bearer {token}"})
+    assert blocked.status_code == 403
+
+    client.delete(f"/auth/apikeys/{key_id}", headers=auth_headers)
+
+
+def test_runner_key_can_access_runner_endpoints(client, auth_headers):
+    res = client.post("/auth/apikeys", json={"scope": "runner"}, headers=auth_headers)
+    token = res.json()["token"]
+    key_id = res.json()["id"]
+
+    # /jobs/pending is runner-accessible
+    jobs = client.get("/jobs/pending", headers={"Authorization": f"Bearer {token}"})
+    assert jobs.status_code == 200
+
+    client.delete(f"/auth/apikeys/{key_id}", headers=auth_headers)
+
+
+def test_full_key_can_access_all_endpoints(client, auth_headers):
+    res = client.post("/auth/apikeys", json={"scope": "full"}, headers=auth_headers)
+    token = res.json()["token"]
+    key_id = res.json()["id"]
+
+    programs = client.get("/programs", headers={"Authorization": f"Bearer {token}"})
+    assert programs.status_code == 200
+
+    jobs = client.get("/jobs/pending", headers={"Authorization": f"Bearer {token}"})
+    assert jobs.status_code == 200
+
+    client.delete(f"/auth/apikeys/{key_id}", headers=auth_headers)

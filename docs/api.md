@@ -66,7 +66,7 @@ List the current user's API keys. Does not return the token or hash — only met
 ```json
 {
   "keys": [
-    { "id": "<uuid>", "label": "Burp Suite", "created_at": "2026-06-08T10:00:00", "last_used_at": "2026-06-11T09:00:00" }
+    { "id": "<uuid>", "label": "Burp Suite", "scope": "full", "created_at": "2026-06-08T10:00:00", "last_used_at": "2026-06-11T09:00:00" }
   ]
 }
 ```
@@ -76,15 +76,19 @@ Generate a new API key. The plaintext token is returned **once** in this respons
 
 **Request body**
 ```json
-{ "label": "Burp Suite" }
+{ "label": "Burp Suite", "scope": "runner" }
 ```
-`label` is optional (max 100 chars). Validated and sanitized server-side.
+`label` is optional (max 100 chars). `scope` is `"full"` (default) or `"runner"`.
+
+- **`full`** — unrestricted; can call any endpoint
+- **`runner`** — restricted to job polling, imports, and heartbeat; safe to deploy on a VPS running VardrRunner
 
 **Response**
 ```json
 {
   "id": "<uuid>",
   "label": "Burp Suite",
+  "scope": "full",
   "created_at": "2026-06-08T10:00:00",
   "token": "vmap_<43 random chars>"
 }
@@ -106,7 +110,7 @@ Revoke an API key. Returns 404 if the key does not belong to the current user.
 ## Programs
 
 ### `GET /programs`
-List all programs belonging to the current user. Each program includes aggregate stats — not full arrays of findings, reports, or manual tests.
+List all programs where the current user is the owner **or** an invited member. Each program includes aggregate stats — not full arrays of findings, reports, or manual tests.
 
 **Response**
 ```json
@@ -1020,6 +1024,63 @@ Notifications fire (as a Discord/Slack-compatible webhook POST) when:
 
 **Errors**
 - `400` — non-HTTPS or private-address webhook URL, or invalid severity
+
+---
+
+## Program Members
+
+Invite GitHub collaborators to read and write a program's resources. Only the program owner can manage membership and delete the program; members can create, update, and delete all other resources (findings, reports, submissions, etc.).
+
+### `GET /programs/{program_id}/members`
+List invited members. Accessible by owner or any member.
+
+**Response**
+```json
+{
+  "owner_github_id": "gh_owner_id",
+  "members": [
+    { "id": "<uuid>", "program_id": "<uuid>", "member_github_id": "gh_collaborator", "role": "member", "invited_at": "2026-06-12T10:00:00" }
+  ]
+}
+```
+
+### `POST /programs/{program_id}/members`
+Invite a collaborator by GitHub ID. Owner only. Max 20 members per program.
+
+**Request body**
+```json
+{ "github_id": "gh_collaborator" }
+```
+
+**Errors**
+- `400` — invited user is the owner, or max members reached
+- `403` — caller is not the program owner
+- `409` — user already a member
+
+### `DELETE /programs/{program_id}/members/{member_github_id}`
+Remove a collaborator. Owner only.
+
+**Errors**
+- `403` — caller is not the program owner
+- `404` — member not found
+
+---
+
+## Imports (updated)
+
+### `POST /programs/{program_id}/imports`
+The response now includes `new_count` for httpx and ffuf imports — the number of recon items that were not previously seen for this program. Re-importing the same file a second time will produce `imported_count: 0, new_count: 0`. A new `first_seen_at` timestamp is set on each unique recon item at discovery time and never overwritten. A webhook fires (if configured) when `new_count > 0` for httpx imports.
+
+Updated response shape:
+```json
+{
+  "message":        "Import complete",
+  "imported_count": 12,
+  "new_count":       8,
+  "import_record":  { ... },
+  "program":        { ... }
+}
+```
 
 ---
 

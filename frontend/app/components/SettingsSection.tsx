@@ -9,9 +9,10 @@ const SEVERITIES = ["info", "low", "medium", "high", "critical"] as const;
 
 export default function SettingsSection() {
   const { authFetch, setMessage } = useAppContext();
-  const [keys,     setKeys]     = useState<ApiKey[]>([]);
-  const [label,    setLabel]    = useState("");
-  const [newToken, setNewToken] = useState<string | null>(null);
+  const [keys,       setKeys]       = useState<ApiKey[]>([]);
+  const [label,      setLabel]      = useState("");
+  const [keyScope,   setKeyScope]   = useState<"full" | "runner">("full");
+  const [newToken,   setNewToken]   = useState<string | null>(null);
   const [webhookUrl,  setWebhookUrl]  = useState("");
   const [minSeverity, setMinSeverity] = useState("high");
 
@@ -56,7 +57,10 @@ export default function SettingsSection() {
 
   async function generate() {
     try {
-      const res = await authFetch("/auth/apikeys", { method: "POST", body: JSON.stringify({ label }) });
+      const res = await authFetch("/auth/apikeys", {
+        method: "POST",
+        body: JSON.stringify({ label, scope: keyScope }),
+      });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         setMessage((err as { detail?: string }).detail || "Failed to generate API key.");
@@ -65,6 +69,7 @@ export default function SettingsSection() {
       const data = await res.json();
       setNewToken(data.token as string);
       setLabel("");
+      setKeyScope("full");
       await loadKeys();
     } catch { setMessage("Failed to generate API key."); }
   }
@@ -107,6 +112,29 @@ export default function SettingsSection() {
       <Panel title="Generate API Key">
         <div className="space-y-3">
           <Input label="Label (optional, e.g. Burp Suite)" value={label} onChange={setLabel} />
+          <div>
+            <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-widest text-[#52525b]">
+              Scope
+            </label>
+            <div className="flex gap-2">
+              {(["full", "runner"] as const).map((s) => (
+                <button key={s} onClick={() => setKeyScope(s)}
+                  className="flex-1 rounded-md border px-3 py-2 text-xs font-semibold uppercase tracking-widest transition"
+                  style={{
+                    borderColor: keyScope === s ? "#f59e0b80" : "#2e2e2e",
+                    color: keyScope === s ? "#f59e0b" : "#52525b",
+                    backgroundColor: keyScope === s ? "#f59e0b12" : "#161616",
+                  }}>
+                  {s === "full" ? "Full access" : "Runner only"}
+                </button>
+              ))}
+            </div>
+            <p className="mt-1.5 text-[10px] text-[#52525b]">
+              {keyScope === "runner"
+                ? "Runner keys can only poll jobs, post imports, and send heartbeats — safe to place on a server."
+                : "Full-access keys can call any endpoint."}
+            </p>
+          </div>
           <PrimaryButton onClick={generate} label="Generate Key" />
         </div>
         <p className="mt-3 text-xs text-[#52525b]">

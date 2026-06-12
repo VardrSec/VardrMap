@@ -44,16 +44,18 @@ def create_api_key(
         github_id=current_user["github_id"],
         key_hash=key_hash,
         label=payload.label or "",
+        scope=payload.scope or "full",
     )
     db.add(key)
     db.commit()
     db.refresh(key)
 
     return {
-        "id": key.id,
-        "label": key.label,
+        "id":         key.id,
+        "label":      key.label,
+        "scope":      key.scope,
         "created_at": key.created_at.isoformat() if key.created_at else None,
-        "token": raw,  # plaintext shown once — not stored, only the hash is
+        "token":      raw,  # plaintext shown once — not stored, only the hash is
     }
 
 
@@ -71,9 +73,10 @@ def list_api_keys(
     return {
         "keys": [
             {
-                "id": k.id,
-                "label": k.label,
-                "created_at":  k.created_at.isoformat()  if k.created_at  else None,
+                "id":           k.id,
+                "label":        k.label,
+                "scope":        k.scope or "full",
+                "created_at":   k.created_at.isoformat()   if k.created_at   else None,
                 "last_used_at": k.last_used_at.isoformat() if k.last_used_at else None,
             }
             for k in keys

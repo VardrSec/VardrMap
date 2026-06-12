@@ -54,6 +54,7 @@ class Program(Base):
     services    = relationship("Service",    back_populates="program", cascade="all, delete-orphan")
     submissions = relationship("Submission", back_populates="program", cascade="all, delete-orphan")
     scheduled_scans = relationship("ScheduledScan", back_populates="program", cascade="all, delete-orphan")
+    members = relationship("ProgramMember", back_populates="program", cascade="all, delete-orphan")
 
 
 class ScopeItem(Base):
@@ -141,6 +142,9 @@ class ReconItem(Base):
     words = Column(Integer, nullable=True)
     lines = Column(Integer, nullable=True)
     notes = Column(Text, default="")
+    # Set once on first discovery — never overwritten on re-import.
+    first_seen_at = Column(DateTime, nullable=True)
+    job_id = Column(String, nullable=True)  # scan_job that produced this item, if any
     created_at = Column(DateTime, nullable=True, default=lambda: datetime.now(timezone.utc))
 
     program = relationship("Program", back_populates="recon_items")
@@ -248,6 +252,8 @@ class ApiKey(Base):
     # SHA-256 hex of the plaintext token — 64 chars. Raw token is never stored.
     key_hash = Column(String(64), nullable=False, unique=True)
     label = Column(String(100), default="")
+    # "full" = unrestricted; "runner" = jobs/imports/heartbeat only
+    scope = Column(String(20), nullable=False, default="full")
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     last_used_at = Column(DateTime, nullable=True)
 
@@ -330,3 +336,19 @@ class Submission(Base):
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
     program = relationship("Program", back_populates="submissions")
+
+
+class ProgramMember(Base):
+    """Invited collaborators on a program. Members can read and write program resources;
+    only the owner can delete the program or manage membership."""
+    __tablename__ = "program_members"
+    __table_args__ = (UniqueConstraint("program_id", "member_github_id", name="uq_program_members"),)
+
+    id = Column(String, primary_key=True, default=new_uuid)
+    program_id = Column(String, ForeignKey("programs.id", ondelete="CASCADE"), nullable=False, index=True)
+    owner_github_id = Column(String, nullable=False, index=True)   # program owner — for fast BOLA checks
+    member_github_id = Column(String, nullable=False, index=True)  # the invited collaborator
+    role = Column(String(20), nullable=False, default="member")    # "member" (future: "admin")
+    invited_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    program = relationship("Program", back_populates="members")

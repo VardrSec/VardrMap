@@ -36,12 +36,13 @@ def list_submissions(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    get_program_or_404(program_id, current_user, db)
+    # Use program.owner_github_id so members see the owner's submissions too
+    program = get_program_or_404(program_id, current_user, db)
     rows = (
         db.query(Submission)
         .filter(
             Submission.program_id == program_id,
-            Submission.owner_github_id == current_user["github_id"],
+            Submission.owner_github_id == program.owner_github_id,
         )
         .order_by(Submission.created_at.desc())
         .all()
@@ -56,10 +57,11 @@ def create_submission(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    get_program_or_404(program_id, current_user, db)
+    program = get_program_or_404(program_id, current_user, db)
     sub = Submission(
         program_id=program_id,
-        owner_github_id=current_user["github_id"],
+        # Store under the program owner so the list query finds it regardless of who created it
+        owner_github_id=program.owner_github_id,
         finding_id=body.finding_id or "",
         report_id=body.report_id or "",
         platform=body.platform or "",
@@ -86,13 +88,13 @@ def update_submission(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    get_program_or_404(program_id, current_user, db)
+    program = get_program_or_404(program_id, current_user, db)
     sub = (
         db.query(Submission)
         .filter(
             Submission.id == submission_id,
             Submission.program_id == program_id,
-            Submission.owner_github_id == current_user["github_id"],
+            Submission.owner_github_id == program.owner_github_id,
         )
         .first()
     )
@@ -129,13 +131,13 @@ def delete_submission(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    get_program_or_404(program_id, current_user, db)
+    program = get_program_or_404(program_id, current_user, db)
     sub = (
         db.query(Submission)
         .filter(
             Submission.id == submission_id,
             Submission.program_id == program_id,
-            Submission.owner_github_id == current_user["github_id"],
+            Submission.owner_github_id == program.owner_github_id,
         )
         .first()
     )

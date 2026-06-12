@@ -142,6 +142,38 @@ export default function SubmissionsSection({ program }: { program: Program }) {
   const acceptRate  = total > 0 ? Math.round((accepted / total) * 100) : 0;
   const totalPayout = submissions.reduce((sum, s) => sum + (s.payout_usd ?? 0), 0);
 
+  // Analytics: by-platform breakdown
+  const byPlatform = submissions.reduce<Record<string, { total: number; accepted: number; payout: number }>>((acc, s) => {
+    const p = s.platform || "Unknown";
+    if (!acc[p]) acc[p] = { total: 0, accepted: 0, payout: 0 };
+    acc[p].total++;
+    if (s.status === "accepted" || s.status === "paid") acc[p].accepted++;
+    acc[p].payout += s.payout_usd ?? 0;
+    return acc;
+  }, {});
+
+  // Analytics: by-severity breakdown
+  const SEV_ORDER = ["critical", "high", "medium", "low", "info"];
+  const bySeverity = submissions.reduce<Record<string, number>>((acc, s) => {
+    const sev = s.severity || "unknown";
+    acc[sev] = (acc[sev] ?? 0) + 1;
+    return acc;
+  }, {});
+  const maxSevCount = Math.max(...SEV_ORDER.map((s) => bySeverity[s] ?? 0), 1);
+
+  // Analytics: avg time-to-resolution (accepted + paid with both dates set)
+  const resolved = submissions.filter((s) =>
+    (s.status === "accepted" || s.status === "paid") && s.submitted_at && s.resolved_at
+  );
+  const avgDays = resolved.length > 0
+    ? Math.round(
+        resolved.reduce((sum, s) => {
+          const ms = new Date(s.resolved_at!).getTime() - new Date(s.submitted_at!).getTime();
+          return sum + ms / 86400000;
+        }, 0) / resolved.length
+      )
+    : null;
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -165,11 +197,12 @@ export default function SubmissionsSection({ program }: { program: Program }) {
       </div>
 
       {/* Stats row */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         {[
           { label: "Total submitted", value: total },
           { label: "Acceptance rate", value: `${acceptRate}%` },
-          { label: "Total payout", value: totalPayout > 0 ? `$${totalPayout.toLocaleString()}` : "—" },
+          { label: "Total payout",    value: totalPayout > 0 ? `$${totalPayout.toLocaleString()}` : "—" },
+          { label: "Avg time-to-resolve", value: avgDays != null ? `${avgDays}d` : "—" },
         ].map(({ label, value }) => (
           <div key={label} className="rounded-xl border border-[#2e2e2e] bg-[#1a1a1a] px-4 py-3">
             <p className="text-[10px] font-semibold uppercase tracking-widest text-[#52525b]">{label}</p>
@@ -177,6 +210,64 @@ export default function SubmissionsSection({ program }: { program: Program }) {
           </div>
         ))}
       </div>
+
+      {/* Analytics — only shown when there is data */}
+      {total > 0 && (
+        <div className="grid gap-5 xl:grid-cols-2">
+          {/* By-severity bars */}
+          <div className="rounded-2xl border border-[#2e2e2e] bg-[#1a1a1a] p-5">
+            <p className="mb-3 text-[10px] font-semibold uppercase tracking-widest text-[#52525b]">By Severity</p>
+            <div className="space-y-2.5">
+              {SEV_ORDER.map((sev) => {
+                const count = bySeverity[sev] ?? 0;
+                const pct   = Math.round((count / maxSevCount) * 100);
+                const color = { critical: "#f38ba8", high: "#fab387", medium: "#f9e2af", low: "#89b4fa", info: "#74c7ec" }[sev] ?? "#52525b";
+                return (
+                  <div key={sev} className="flex items-center gap-3">
+                    <span className="w-14 flex-shrink-0 text-[11px] font-medium text-[#52525b]">{sev}</span>
+                    <div className="h-2 flex-1 overflow-hidden rounded-full bg-[#2e2e2e]">
+                      <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, backgroundColor: color }} />
+                    </div>
+                    <span className="w-5 flex-shrink-0 text-right font-mono text-xs" style={{ color }}>{count}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* By-platform table */}
+          <div className="rounded-2xl border border-[#2e2e2e] bg-[#1a1a1a] p-5">
+            <p className="mb-3 text-[10px] font-semibold uppercase tracking-widest text-[#52525b]">By Platform</p>
+            {Object.keys(byPlatform).length === 0 ? (
+              <p className="text-xs text-[#3a3a3a]">No platform data.</p>
+            ) : (
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-[#2e2e2e]">
+                    {["Platform", "Submitted", "Accepted", "Payout"].map((h) => (
+                      <th key={h} className="pb-2 font-semibold uppercase tracking-widest text-[#52525b] text-[9px]">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#2e2e2e]">
+                  {Object.entries(byPlatform)
+                    .sort((a, b) => b[1].total - a[1].total)
+                    .map(([platform, stat]) => (
+                      <tr key={platform}>
+                        <td className="py-2 font-medium text-[#f1f5f9]">{platform}</td>
+                        <td className="py-2 font-mono text-[#94a3b8]">{stat.total}</td>
+                        <td className="py-2 font-mono text-[#a6e3a1]">{stat.accepted}</td>
+                        <td className="py-2 font-mono text-[#a6e3a1]">
+                          {stat.payout > 0 ? `$${stat.payout.toLocaleString()}` : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* New submission form */}
       {showForm && (

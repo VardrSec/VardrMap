@@ -1,6 +1,6 @@
 import os
 
-from fastapi import FastAPI, Request, Response
+from fastapi import Depends, FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -8,8 +8,9 @@ from slowapi.middleware import SlowAPIMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from db import Base, engine
+from deps import require_full_scope
 from limiter import limiter
-from routers import apikeys, findings, imports, jobs, manual_tests, programs, radar, recon, reports, runner, scans, schedules, scope, services, settings, submissions
+from routers import apikeys, findings, imports, jobs, manual_tests, members, programs, radar, recon, reports, runner, scans, schedules, scope, services, settings, submissions
 
 ENV = os.getenv("ENV") or os.getenv("RAILWAY_ENVIRONMENT_NAME", "development")
 
@@ -68,24 +69,30 @@ app.add_middleware(
 
 # -----------------------------------------------------------------------------
 # Routers
+# Runner-accessible routers (jobs, imports, runner) do NOT get require_full_scope.
+# All other routers are restricted to full-scope keys (browser JWTs always pass).
 # -----------------------------------------------------------------------------
 
-app.include_router(apikeys.router)
-app.include_router(programs.router)
-app.include_router(scope.router)
-app.include_router(recon.router)
-app.include_router(scans.router)
-app.include_router(manual_tests.router)
-app.include_router(findings.router)
-app.include_router(reports.router)
+_full = [Depends(require_full_scope)]
+
+app.include_router(apikeys.router,     dependencies=_full)
+app.include_router(programs.router,    dependencies=_full)
+app.include_router(members.router,     dependencies=_full)
+app.include_router(scope.router,       dependencies=_full)
+app.include_router(recon.router,       dependencies=_full)
+app.include_router(scans.router,       dependencies=_full)
+app.include_router(manual_tests.router, dependencies=_full)
+app.include_router(findings.router,    dependencies=_full)
+app.include_router(reports.router,     dependencies=_full)
+app.include_router(services.router,    dependencies=_full)
+app.include_router(radar.router,       dependencies=_full)
+app.include_router(submissions.router, dependencies=_full)
+app.include_router(schedules.router,   dependencies=_full)
+app.include_router(settings.router,    dependencies=_full)
+# Runner endpoints — accessible with both full and runner-scoped keys
 app.include_router(imports.router)
 app.include_router(jobs.router)
 app.include_router(runner.router)
-app.include_router(services.router)
-app.include_router(radar.router)
-app.include_router(submissions.router)
-app.include_router(schedules.router)
-app.include_router(settings.router)
 
 # -----------------------------------------------------------------------------
 # Health / root

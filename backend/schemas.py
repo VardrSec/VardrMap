@@ -227,6 +227,7 @@ class SubmissionUpdate(BaseModel):
 
 class ApiKeyCreate(BaseModel):
     label: Optional[str] = Field(default="", max_length=100)
+    scope: Optional[Literal["full", "runner"]] = "full"
 
     @field_validator("label", mode="before")
     @classmethod

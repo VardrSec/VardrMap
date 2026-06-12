@@ -101,7 +101,7 @@ cd backend
 pytest tests -v
 ```
 
-All 302 tests should pass. (The frontend also has reducer unit tests: `cd frontend && npm test`.)
+All 329 tests should pass. (The frontend also has reducer unit tests: `cd frontend && npm test`.)
 
 ### Test coverage areas
 
@@ -116,6 +116,7 @@ All 302 tests should pass. (The frontend also has reducer unit tests: `cd fronte
 | `tests/test_apikeys.py` | Key generation, API key auth at `/me`, revocation, BOLA isolation, max-key limit |
 | `tests/test_auth.py` | JWT validation — missing, expired, wrong audience, garbage token |
 | `tests/test_sanitization.py` | XSS/injection rejection and stripping across input fields |
+| `tests/test_members.py` | Program member CRUD, BOLA isolation, ownership guards |
 
 ---
 
@@ -124,7 +125,7 @@ All 302 tests should pass. (The frontend also has reducer unit tests: `cd fronte
 Migrations use Alembic. The migration chain is:
 
 ```
-0001_baseline  →  0002_add_created_at  →  0003_add_api_keys  →  0004_add_scan_jobs  →  0005_add_runner_heartbeats  →  0006_add_job_events
+0001_baseline → 0002_add_created_at → 0003_add_api_keys → 0004_add_scan_jobs → 0005_add_runner_heartbeats → 0006_add_job_events → 0007_add_services → 0008_add_radar → 0009_submissions → 0010schednotify → 0011rbacreconscopes
 ```
 
 ### Production (Railway)
