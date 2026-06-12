@@ -253,6 +253,26 @@ def create_job_event(
     return serialize_event(event)
 
 
+@router.delete("/jobs/{job_id}")
+def delete_job(
+    job_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Permanently delete a job and its events. Useful for removing stuck jobs."""
+    job = (
+        db.query(ScanJob)
+        .filter(ScanJob.id == job_id, ScanJob.owner_github_id == current_user["github_id"])
+        .first()
+    )
+    if not job:
+        raise HTTPException(status_code=404)
+    log_action(db, current_user["github_id"], "delete", "scan_job", job_id, job.program_id)
+    db.delete(job)
+    db.commit()
+    return {"message": "Job deleted"}
+
+
 @router.get("/jobs/{job_id}/events")
 def get_job_events(
     job_id: str,

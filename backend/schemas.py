@@ -181,6 +181,50 @@ class BulkScanStatusUpdate(BaseModel):
     status: ScanStatus
 
 
+SubmissionStatus = Literal["submitted", "triaged", "accepted", "duplicate", "na", "paid", "rejected"]
+
+
+class SubmissionCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    platform: Optional[str] = Field(default="", max_length=50)
+    platform_reference: Optional[str] = Field(default="", max_length=200)
+    finding_id: Optional[str] = Field(default="", max_length=100)
+    report_id: Optional[str] = Field(default="", max_length=100)
+    severity: Optional[str] = Field(default="", max_length=20)
+    status: SubmissionStatus = "submitted"
+    payout_usd: Optional[float] = None
+    notes: Optional[str] = Field(default="", max_length=5000)
+
+    @field_validator("title", "platform", mode="before")
+    @classmethod
+    def sanitize_short(cls, v): return sanitize_identifier(v) if v else ""
+
+    @field_validator("notes", mode="before")
+    @classmethod
+    def sanitize_notes(cls, v): return strip_html(v) if v else ""
+
+
+class SubmissionUpdate(BaseModel):
+    title: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    platform: Optional[str] = Field(default=None, max_length=50)
+    platform_reference: Optional[str] = Field(default=None, max_length=200)
+    finding_id: Optional[str] = Field(default=None, max_length=100)
+    report_id: Optional[str] = Field(default=None, max_length=100)
+    severity: Optional[str] = Field(default=None, max_length=20)
+    status: Optional[SubmissionStatus] = None
+    payout_usd: Optional[float] = None
+    resolved_at: Optional[str] = None
+    notes: Optional[str] = Field(default=None, max_length=5000)
+
+    @field_validator("title", "platform", mode="before")
+    @classmethod
+    def sanitize_short(cls, v): return sanitize_identifier(v) if v is not None else v
+
+    @field_validator("notes", mode="before")
+    @classmethod
+    def sanitize_notes(cls, v): return strip_html(v) if v is not None else v
+
+
 class ApiKeyCreate(BaseModel):
     label: Optional[str] = Field(default="", max_length=100)
 

@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, Column, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, Column, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
 
 from db import Base
@@ -46,8 +46,9 @@ class Program(Base):
     recon_items = relationship("ReconItem", back_populates="program", cascade="all, delete-orphan")
     scan_items = relationship("ScanItem", back_populates="program", cascade="all, delete-orphan")
     import_records = relationship("ImportRecord", back_populates="program", cascade="all, delete-orphan")
-    scan_jobs = relationship("ScanJob", back_populates="program", cascade="all, delete-orphan")
-    services  = relationship("Service",  back_populates="program", cascade="all, delete-orphan")
+    scan_jobs   = relationship("ScanJob",    back_populates="program", cascade="all, delete-orphan")
+    services    = relationship("Service",    back_populates="program", cascade="all, delete-orphan")
+    submissions = relationship("Submission", back_populates="program", cascade="all, delete-orphan")
 
 
 class ScopeItem(Base):
@@ -279,3 +280,26 @@ class RadarProgram(Base):
     is_new = Column(String(1), default="1")  # "1" = unseen since last refresh, "0" = seen
     discovered_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     last_fetched_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+
+
+class Submission(Base):
+    __tablename__ = "submissions"
+
+    id = Column(String, primary_key=True, default=new_uuid)
+    program_id = Column(String, ForeignKey("programs.id", ondelete="CASCADE"), nullable=False, index=True)
+    owner_github_id = Column(String, nullable=False, index=True)
+    # Soft references — no FK constraints so records survive finding/report deletion
+    finding_id = Column(String, default="")
+    report_id = Column(String, default="")
+    platform = Column(String(50), default="")            # "HackerOne" | "Bugcrowd" | etc.
+    platform_reference = Column(String(200), default="") # report ID / slug on the platform
+    title = Column(String(200), default="")
+    status = Column(String(30), default="submitted")     # submitted | triaged | accepted | duplicate | na | paid | rejected
+    payout_usd = Column(Float, nullable=True)
+    severity = Column(String(20), default="")            # copied from finding for quick display
+    submitted_at = Column(DateTime, nullable=True, default=lambda: datetime.now(timezone.utc))
+    resolved_at = Column(DateTime, nullable=True)
+    notes = Column(Text, default="")
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    program = relationship("Program", back_populates="submissions")

@@ -92,7 +92,7 @@ programs
   scope_summary, severity_guidance, safe_harbor_notes
   created_at
   → scope_items, findings, reports, manual_tests,
-    recon_items, scan_items, import_records, scan_jobs, services (all cascade delete)
+    recon_items, scan_items, import_records, scan_jobs, services, submissions (all cascade delete)
 
 scope_items
   id (PK), program_id (FK), scope_type ("in"|"out")
@@ -177,6 +177,21 @@ radar_programs
   last_fetched_at (UTC datetime — updated on every POST /radar/refresh)
   Indexes: owner_github_id; (platform, platform_id)
 
+submissions
+  id (PK)
+  program_id (FK → programs.id, CASCADE DELETE, indexed)
+  owner_github_id (indexed)
+  finding_id, report_id (soft refs — no FK constraints)
+  platform (VARCHAR 50 — "HackerOne", "Bugcrowd", etc.)
+  platform_reference (VARCHAR 200 — report ID or URL)
+  title (VARCHAR 200)
+  status ("submitted"|"triaged"|"accepted"|"duplicate"|"na"|"paid"|"rejected")
+  payout_usd (nullable FLOAT)
+  severity (VARCHAR 20 — copied from finding for display)
+  submitted_at (nullable datetime), resolved_at (nullable datetime)
+  notes (TEXT)
+  created_at
+
 runner_heartbeats
   id (PK)
   owner_github_id (unique, indexed — one row per user)
@@ -208,6 +223,8 @@ audit_logs
 - `scan_jobs` are scoped to the owning user via `owner_github_id` — a user can only see/update their own jobs. Claiming a job uses `POST /jobs/{id}/claim` which atomically sets `status = "running"` only if currently `"pending"`, returning 409 otherwise.
 - `services` rows are bulk-upserted on `(host, port, protocol)` — repeated nmap scans update metadata rather than creating duplicates. `last_scanned_at` is stamped on both insert and update so freshness is always visible.
 - `radar_programs` are upserted per user on `(owner_github_id, platform, platform_id)`. New programs land with `is_new = "1"` so the Overview Radar widget can badge them; `GET /radar` marks all returned rows as seen.
+- `submissions` track the full lifecycle of a bug bounty submission. `finding_id` and `report_id` are soft references — submissions survive finding/report deletion. Transitioning `status` to a terminal state (`accepted`, `duplicate`, `na`, `paid`, `rejected`) via `PATCH` auto-stamps `resolved_at` if it was not already set.
+- Deleting a `scan_job` (via `DELETE /jobs/{id}`) also deletes all its `job_events` via CASCADE.
 - `runner_heartbeats` is a single-row-per-user upsert table. VardrRunner calls `POST /runner/heartbeat` at the start of `jobs run` (and via `vardrrunner heartbeat`). The frontend polls `GET /runner/status` which derives `online: true` if `last_seen` is within 5 minutes. Rate-limited to 60/min.
 - `job_events` are appended by VardrRunner via `POST /jobs/{id}/events` at each lifecycle stage. The frontend Terminal polls `GET /jobs/{id}/events` (3 s interval while job is pending/running, stops on terminal state). Events cascade-delete with their parent job. Rate-limited to 600/min.
 

@@ -66,9 +66,10 @@ type TerminalProps = {
   onClose: () => void;
   onRetry: (id: string) => void;
   onCancel: (id: string) => void;
+  onDelete: (id: string) => void;
 };
 
-export default function Terminal({ job, accent, onClose, onRetry, onCancel }: TerminalProps) {
+export default function Terminal({ job, accent, onClose, onRetry, onCancel, onDelete }: TerminalProps) {
   const { authFetch } = useAppContext();
   // Cache tagged with jobId — stale cache from a previous job never renders
   const [eventsCache, setEventsCache] = useState<{ jobId: string; events: JobEvent[] } | null>(null);
@@ -215,6 +216,11 @@ export default function Terminal({ job, accent, onClose, onRetry, onCancel }: Te
               re-queue
             </button>
           )}
+          <button onClick={() => onDelete(job.id)}
+            className="rounded-md border border-[#3a3a3a] px-3 py-1 font-mono text-[11px] text-[#52525b] transition hover:border-[#f87171]/50 hover:text-[#f87171]"
+            title={job.status === "running" ? "Force-delete stuck job" : "Delete job"}>
+            delete
+          </button>
         </div>
       </div>
     </div>

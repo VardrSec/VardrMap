@@ -1,0 +1,336 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import { Program, Submission } from "../types";
+import { useAppContext } from "../context/AppContext";
+
+type SubmissionStatus = "submitted" | "triaged" | "accepted" | "duplicate" | "na" | "paid" | "rejected";
+
+const STATUS_OPTIONS: SubmissionStatus[] = [
+  "submitted", "triaged", "accepted", "duplicate", "na", "paid", "rejected",
+];
+
+const STATUS_COLOR: Record<string, string> = {
+  submitted: "text-[#89b4fa] border-[#89b4fa]/30 bg-[#89b4fa]/8",
+  triaged:   "text-[#f9e2af] border-[#f9e2af]/30 bg-[#f9e2af]/8",
+  accepted:  "text-[#a6e3a1] border-[#a6e3a1]/30 bg-[#a6e3a1]/8",
+  duplicate: "text-[#7f849c] border-[#7f849c]/30 bg-[#7f849c]/8",
+  na:        "text-[#7f849c] border-[#7f849c]/30 bg-[#7f849c]/8",
+  paid:      "text-[#a6e3a1] border-[#a6e3a1]/30 bg-[#a6e3a1]/8",
+  rejected:  "text-[#f87171] border-[#f87171]/30 bg-[#f87171]/8",
+};
+
+const SEV_COLOR: Record<string, string> = {
+  critical: "text-[#f38ba8]",
+  high:     "text-[#fab387]",
+  medium:   "text-[#f9e2af]",
+  low:      "text-[#89b4fa]",
+  info:     "text-[#74c7ec]",
+};
+
+const EMPTY_FORM = {
+  title: "", platform: "", platform_reference: "", severity: "",
+  status: "submitted" as SubmissionStatus, payout_usd: "", notes: "",
+};
+
+function fmtDate(iso: string | null) {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const cls = STATUS_COLOR[status] || "text-[#52525b] border-[#52525b]/30 bg-transparent";
+  return (
+    <span className={`inline-flex items-center rounded border px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-widest ${cls}`}>
+      {status}
+    </span>
+  );
+}
+
+export default function SubmissionsSection({ program }: { program: Program }) {
+  const { authFetch, setMessage } = useAppContext();
+  const [submissions, setSubmissions] = useState<Submission[]>([]);
+  const [loading,     setLoading]     = useState(true);
+  const [showForm,    setShowForm]    = useState(false);
+  const [form,        setForm]        = useState(EMPTY_FORM);
+  const [editingId,   setEditingId]   = useState<string | null>(null);
+  const [editForm,    setEditForm]    = useState<Partial<typeof EMPTY_FORM & { payout_usd: string }>>({});
+  const [saving,      setSaving]      = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const res = await authFetch(`/programs/${program.id}/submissions`);
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      setSubmissions(Array.isArray(data?.submissions) ? data.submissions : []);
+    } catch { setMessage("Failed to load submissions."); } finally { setLoading(false); }
+  }, [program.id, authFetch, setMessage]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  async function create() {
+    if (!form.title.trim()) return;
+    setSaving(true);
+    try {
+      const body = {
+        title: form.title,
+        platform: form.platform,
+        platform_reference: form.platform_reference,
+        severity: form.severity,
+        status: form.status,
+        payout_usd: form.payout_usd ? parseFloat(form.payout_usd) : null,
+        notes: form.notes,
+      };
+      const res = await authFetch(`/programs/${program.id}/submissions`, { method: "POST", body: JSON.stringify(body) });
+      if (!res.ok) throw new Error();
+      const created: Submission = await res.json();
+      setSubmissions((p) => [created, ...p]);
+      setForm(EMPTY_FORM);
+      setShowForm(false);
+      setMessage("Submission logged.");
+    } catch { setMessage("Failed to log submission."); } finally { setSaving(false); }
+  }
+
+  async function save(id: string) {
+    setSaving(true);
+    try {
+      const body: Record<string, unknown> = {};
+      if (editForm.status)             body.status = editForm.status;
+      if (editForm.payout_usd !== undefined && editForm.payout_usd !== "")
+        body.payout_usd = parseFloat(editForm.payout_usd as string);
+      if (editForm.notes !== undefined) body.notes = editForm.notes;
+      if (editForm.platform_reference !== undefined) body.platform_reference = editForm.platform_reference;
+      const res = await authFetch(`/programs/${program.id}/submissions/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+      if (!res.ok) throw new Error();
+      const updated: Submission = await res.json();
+      setSubmissions((p) => p.map((s) => (s.id === id ? updated : s)));
+      setEditingId(null);
+      setMessage("Submission updated.");
+    } catch { setMessage("Failed to update submission."); } finally { setSaving(false); }
+  }
+
+  async function remove(id: string) {
+    try {
+      const res = await authFetch(`/programs/${program.id}/submissions/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error();
+      setSubmissions((p) => p.filter((s) => s.id !== id));
+      if (editingId === id) setEditingId(null);
+      setMessage("Submission removed.");
+    } catch { setMessage("Failed to delete submission."); }
+  }
+
+  // Stats
+  const total       = submissions.length;
+  const accepted    = submissions.filter((s) => s.status === "accepted" || s.status === "paid").length;
+  const acceptRate  = total > 0 ? Math.round((accepted / total) * 100) : 0;
+  const totalPayout = submissions.reduce((sum, s) => sum + (s.payout_usd ?? 0), 0);
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-wrap items-end justify-between gap-4 border-b border-[#2e2e2e] pb-5">
+        <div>
+          <div className="flex items-center gap-2.5">
+            <h2 className="text-2xl font-bold tracking-tight text-[#f1f5f9]">Submissions</h2>
+            <span className="rounded border border-[#2e2e2e] px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest text-[#52525b]">
+              tracker
+            </span>
+          </div>
+          <p className="mt-1.5 text-sm text-[#52525b]">
+            Track reports sent to platforms — status, payout, and lifecycle.
+          </p>
+        </div>
+        <button
+          onClick={() => { setShowForm((v) => !v); setForm(EMPTY_FORM); }}
+          className="rounded-lg bg-[#f59e0b] px-4 py-2 text-sm font-semibold text-[#161616] transition hover:bg-[#fbbf24] active:scale-[0.98]">
+          {showForm ? "Cancel" : "+ New Submission"}
+        </button>
+      </div>
+
+      {/* Stats row */}
+      <div className="grid grid-cols-3 gap-4">
+        {[
+          { label: "Total submitted", value: total },
+          { label: "Acceptance rate", value: `${acceptRate}%` },
+          { label: "Total payout", value: totalPayout > 0 ? `$${totalPayout.toLocaleString()}` : "—" },
+        ].map(({ label, value }) => (
+          <div key={label} className="rounded-xl border border-[#2e2e2e] bg-[#1a1a1a] px-4 py-3">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-[#52525b]">{label}</p>
+            <p className="mt-1 text-xl font-bold text-[#f1f5f9]">{value}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* New submission form */}
+      {showForm && (
+        <div className="rounded-2xl border border-[#2e2e2e] bg-[#1a1a1a] p-5 space-y-4">
+          <p className="text-xs font-semibold uppercase tracking-widest text-[#52525b]">Log new submission</p>
+          <div className="grid gap-3 md:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-[10px] font-semibold uppercase tracking-widest text-[#52525b]">Title *</label>
+              <input
+                className="w-full rounded-md border border-[#2e2e2e] bg-[#161616] px-3 py-2 text-sm text-[#f1f5f9] placeholder-[#3a3a3a] focus:border-[#f59e0b] focus:outline-none"
+                placeholder="Short report title"
+                value={form.title}
+                onChange={(e) => setForm({ ...form, title: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-[10px] font-semibold uppercase tracking-widest text-[#52525b]">Platform</label>
+              <input
+                className="w-full rounded-md border border-[#2e2e2e] bg-[#161616] px-3 py-2 text-sm text-[#f1f5f9] placeholder-[#3a3a3a] focus:border-[#f59e0b] focus:outline-none"
+                placeholder="HackerOne, Bugcrowd, etc."
+                value={form.platform}
+                onChange={(e) => setForm({ ...form, platform: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-[10px] font-semibold uppercase tracking-widest text-[#52525b]">Platform reference</label>
+              <input
+                className="w-full rounded-md border border-[#2e2e2e] bg-[#161616] px-3 py-2 text-sm text-[#f1f5f9] placeholder-[#3a3a3a] focus:border-[#f59e0b] focus:outline-none"
+                placeholder="Report ID or URL"
+                value={form.platform_reference}
+                onChange={(e) => setForm({ ...form, platform_reference: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-[10px] font-semibold uppercase tracking-widest text-[#52525b]">Severity</label>
+              <select
+                className="w-full rounded-md border border-[#2e2e2e] bg-[#161616] px-3 py-2 text-sm text-[#f1f5f9] focus:border-[#f59e0b] focus:outline-none"
+                value={form.severity}
+                onChange={(e) => setForm({ ...form, severity: e.target.value })}>
+                <option value="">— pick one —</option>
+                {["critical", "high", "medium", "low", "info"].map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="mb-1 block text-[10px] font-semibold uppercase tracking-widest text-[#52525b]">Notes</label>
+            <textarea
+              rows={2}
+              className="w-full rounded-md border border-[#2e2e2e] bg-[#161616] px-3 py-2 text-sm text-[#f1f5f9] placeholder-[#3a3a3a] focus:border-[#f59e0b] focus:outline-none resize-none"
+              placeholder="Optional notes"
+              value={form.notes}
+              onChange={(e) => setForm({ ...form, notes: e.target.value })}
+            />
+          </div>
+          <div className="flex justify-end">
+            <button onClick={create} disabled={saving || !form.title.trim()}
+              className="rounded-lg bg-[#f59e0b] px-5 py-2 text-sm font-semibold text-[#161616] transition hover:bg-[#fbbf24] disabled:opacity-50">
+              {saving ? "Saving…" : "Log Submission"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Table */}
+      {loading ? (
+        <p className="text-sm text-[#52525b]">Loading…</p>
+      ) : submissions.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-[#2e2e2e] p-14 text-center">
+          <p className="text-sm text-[#3a3a3a]">No submissions yet. Click &ldquo;+ New Submission&rdquo; to log your first report.</p>
+        </div>
+      ) : (
+        <div className="overflow-hidden rounded-2xl border border-[#2e2e2e]">
+          <table className="w-full text-left text-sm">
+            <thead>
+              <tr className="border-b border-[#2e2e2e] bg-[#1a1a1a]">
+                {["Title", "Platform", "Severity", "Status", "Payout", "Submitted", ""].map((h) => (
+                  <th key={h} className="px-4 py-2.5 text-[10px] font-semibold uppercase tracking-widest text-[#52525b]">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[#2e2e2e]">
+              {submissions.map((s) => (
+                <>
+                  <tr key={s.id} className="bg-[#161616] transition hover:bg-[#1a1a1a]">
+                    <td className="px-4 py-3 text-[#f1f5f9] font-medium max-w-[200px] truncate">{s.title || "—"}</td>
+                    <td className="px-4 py-3 text-[#94a3b8] font-mono text-xs">{s.platform || "—"}</td>
+                    <td className="px-4 py-3">
+                      {s.severity
+                        ? <span className={`font-mono text-xs ${SEV_COLOR[s.severity] || "text-[#52525b]"}`}>{s.severity}</span>
+                        : <span className="text-[#3a3a3a]">—</span>}
+                    </td>
+                    <td className="px-4 py-3"><StatusBadge status={s.status} /></td>
+                    <td className="px-4 py-3 font-mono text-xs text-[#a6e3a1]">
+                      {s.payout_usd != null ? `$${s.payout_usd.toLocaleString()}` : "—"}
+                    </td>
+                    <td className="px-4 py-3 font-mono text-xs text-[#52525b]">{fmtDate(s.submitted_at)}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex gap-2 justify-end">
+                        <button
+                          onClick={() => { setEditingId(s.id); setEditForm({ status: s.status as SubmissionStatus, payout_usd: s.payout_usd?.toString() ?? "", notes: s.notes, platform_reference: s.platform_reference }); }}
+                          className="rounded px-2 py-1 font-mono text-[11px] text-[#52525b] transition hover:bg-[#2e2e2e] hover:text-[#f1f5f9]">
+                          edit
+                        </button>
+                        <button
+                          onClick={() => remove(s.id)}
+                          className="rounded px-2 py-1 font-mono text-[11px] text-[#52525b] transition hover:bg-[#2e2e2e] hover:text-[#f87171]">
+                          ×
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                  {editingId === s.id && (
+                    <tr key={`edit-${s.id}`} className="bg-[#1a1a1a]">
+                      <td colSpan={7} className="px-4 py-4">
+                        <div className="grid gap-3 md:grid-cols-3">
+                          <div>
+                            <label className="mb-1 block text-[10px] font-semibold uppercase tracking-widest text-[#52525b]">Status</label>
+                            <select
+                              className="w-full rounded-md border border-[#2e2e2e] bg-[#161616] px-3 py-2 text-sm text-[#f1f5f9] focus:border-[#f59e0b] focus:outline-none"
+                              value={editForm.status ?? s.status}
+                              onChange={(e) => setEditForm({ ...editForm, status: e.target.value as SubmissionStatus })}>
+                              {STATUS_OPTIONS.map((v) => <option key={v} value={v}>{v}</option>)}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="mb-1 block text-[10px] font-semibold uppercase tracking-widest text-[#52525b]">Payout (USD)</label>
+                            <input
+                              type="number"
+                              className="w-full rounded-md border border-[#2e2e2e] bg-[#161616] px-3 py-2 text-sm text-[#f1f5f9] placeholder-[#3a3a3a] focus:border-[#f59e0b] focus:outline-none"
+                              placeholder="0.00"
+                              value={editForm.payout_usd ?? ""}
+                              onChange={(e) => setEditForm({ ...editForm, payout_usd: e.target.value })}
+                            />
+                          </div>
+                          <div>
+                            <label className="mb-1 block text-[10px] font-semibold uppercase tracking-widest text-[#52525b]">Platform ref.</label>
+                            <input
+                              className="w-full rounded-md border border-[#2e2e2e] bg-[#161616] px-3 py-2 text-sm text-[#f1f5f9] placeholder-[#3a3a3a] focus:border-[#f59e0b] focus:outline-none"
+                              placeholder="Report ID"
+                              value={editForm.platform_reference ?? ""}
+                              onChange={(e) => setEditForm({ ...editForm, platform_reference: e.target.value })}
+                            />
+                          </div>
+                          <div className="md:col-span-3">
+                            <label className="mb-1 block text-[10px] font-semibold uppercase tracking-widest text-[#52525b]">Notes</label>
+                            <textarea
+                              rows={2}
+                              className="w-full rounded-md border border-[#2e2e2e] bg-[#161616] px-3 py-2 text-sm text-[#f1f5f9] placeholder-[#3a3a3a] focus:border-[#f59e0b] focus:outline-none resize-none"
+                              value={editForm.notes ?? ""}
+                              onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
+                            />
+                          </div>
+                        </div>
+                        <div className="mt-3 flex justify-end gap-2">
+                          <button onClick={() => setEditingId(null)} className="rounded px-3 py-1.5 text-xs text-[#52525b] transition hover:text-[#94a3b8]">Cancel</button>
+                          <button onClick={() => save(s.id)} disabled={saving}
+                            className="rounded-lg bg-[#f59e0b] px-4 py-1.5 text-xs font-semibold text-[#161616] transition hover:bg-[#fbbf24] disabled:opacity-50">
+                            {saving ? "Saving…" : "Save"}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}

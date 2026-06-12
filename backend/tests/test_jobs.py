@@ -230,6 +230,41 @@ class TestClaimJob:
 # Config validation
 # ---------------------------------------------------------------------------
 
+class TestDeleteJob:
+    def test_delete_pending_job(self, client, program_id, auth_headers):
+        jid = _create_job(client, program_id, auth_headers).json()["id"]
+        res = client.delete(f"/jobs/{jid}", headers=auth_headers)
+        assert res.status_code == 200
+        ids = [j["id"] for j in client.get(f"/programs/{program_id}/jobs", headers=auth_headers).json()["jobs"]]
+        assert jid not in ids
+
+    def test_delete_stuck_running_job(self, client, program_id, auth_headers):
+        jid = _create_job(client, program_id, auth_headers).json()["id"]
+        client.patch(f"/jobs/{jid}", json={"status": "running"}, headers=auth_headers)
+        res = client.delete(f"/jobs/{jid}", headers=auth_headers)
+        assert res.status_code == 200
+
+    def test_delete_done_job(self, client, program_id, auth_headers):
+        jid = _create_job(client, program_id, auth_headers).json()["id"]
+        client.patch(f"/jobs/{jid}", json={"status": "done"}, headers=auth_headers)
+        res = client.delete(f"/jobs/{jid}", headers=auth_headers)
+        assert res.status_code == 200
+
+    def test_delete_nonexistent_returns_404(self, client, auth_headers):
+        res = client.delete("/jobs/does-not-exist", headers=auth_headers)
+        assert res.status_code == 404
+
+    def test_delete_wrong_user_returns_404(self, client, program_id, auth_headers, other_headers):
+        jid = _create_job(client, program_id, auth_headers).json()["id"]
+        res = client.delete(f"/jobs/{jid}", headers=other_headers)
+        assert res.status_code == 404
+
+    def test_delete_unauthorized(self, client, program_id, auth_headers):
+        jid = _create_job(client, program_id, auth_headers).json()["id"]
+        res = client.delete(f"/jobs/{jid}")
+        assert res.status_code == 401
+
+
 class TestJobConfigValidation:
     def test_unknown_config_key_rejected(self, client, program_id, auth_headers):
         res = _create_job(client, program_id, auth_headers,

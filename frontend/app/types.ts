@@ -107,7 +107,15 @@ export type RunnerStatus = {
   os: string | null;
   tools: Record<string, { ok: boolean; version: string | null }>;
 };
-export type Section = "dashboard" | "scope" | "overview" | "review" | "findings" | "reports" | "settings";
+export type Submission = {
+  id: string; program_id: string;
+  finding_id: string; report_id: string;
+  platform: string; platform_reference: string;
+  title: string; status: string; severity: string;
+  payout_usd: number | null; notes: string;
+  submitted_at: string | null; resolved_at: string | null; created_at: string | null;
+};
+export type Section = "dashboard" | "scope" | "overview" | "review" | "findings" | "reports" | "submissions" | "settings";
 export type AppSession = {
   user?: { name?: string | null; email?: string | null; image?: string | null; githubId?: string; username?: string };
   backendToken?: string;

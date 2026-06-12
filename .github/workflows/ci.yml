@@ -30,6 +30,19 @@ jobs:
       - name: Run tests
         run: pytest tests/ -v
 
+      - name: Dependency audit
+        run: |
+          pip install pip-audit
+          pip-audit -r requirements.txt
+
+      - name: Migration consistency check
+        run: |
+          count=$(alembic heads 2>&1 | wc -l)
+          if [ "$count" -ne 1 ]; then
+            echo "Multiple migration heads detected ($count). Run 'alembic merge heads' to resolve."
+            exit 1
+          fi
+
   runner:
     name: Runner tests
     runs-on: ubuntu-latest
@@ -81,3 +94,18 @@ jobs:
           AUTH_GITHUB_SECRET: ci-placeholder
           BACKEND_JWT_SECRET: ci-placeholder-secret-not-used-in-prod
           NEXT_PUBLIC_API_URL: http://localhost:8000
+
+      - name: Dependency audit
+        run: npm audit --audit-level=high
+
+  security:
+    name: Secret scanning
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

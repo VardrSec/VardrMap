@@ -9,8 +9,9 @@ import ScopeSection      from "./components/ScopeSection";
 import OverviewSection   from "./components/OverviewSection";
 import ReviewSection     from "./components/ReviewSection";
 import FindingsSection   from "./components/FindingsSection";
-import ReportsSection    from "./components/ReportsSection";
-import SettingsSection   from "./components/SettingsSection";
+import ReportsSection      from "./components/ReportsSection";
+import SubmissionsSection  from "./components/SubmissionsSection";
+import SettingsSection     from "./components/SettingsSection";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -22,8 +23,9 @@ const NAV_ITEMS: { section: Section; label: string; icon: string }[] = [
   { section: "review",    label: "Review",    icon: "⊹" },
   { section: "findings",  label: "Findings",  icon: "⚑" },
   { section: "overview",  label: "Overview",  icon: "⬡" },
-  { section: "reports",   label: "Reports",   icon: "◧" },
-  { section: "settings",  label: "Settings",  icon: "◆" },
+  { section: "reports",      label: "Reports",      icon: "◧" },
+  { section: "submissions",  label: "Submissions",  icon: "⊞" },
+  { section: "settings",     label: "Settings",     icon: "◆" },
 ];
 
 // ---------------------------------------------------------------------------
@@ -196,7 +198,8 @@ function AppShell() {
               {activeSection === "review"    && <ReviewSection    program={selectedProgram} />}
               {activeSection === "findings"  && <FindingsSection  program={selectedProgram} />}
               {activeSection === "overview"  && <OverviewSection  program={selectedProgram} />}
-              {activeSection === "reports"   && <ReportsSection   program={selectedProgram} />}
+              {activeSection === "reports"      && <ReportsSection      program={selectedProgram} />}
+              {activeSection === "submissions" && <SubmissionsSection  program={selectedProgram} />}
             </>
           )}
         </section>

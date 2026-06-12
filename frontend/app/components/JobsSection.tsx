@@ -218,6 +218,20 @@ export default function JobsSection({
     } catch { flash("Failed to re-queue job."); }
   }
 
+  async function deleteJob(id: string) {
+    try {
+      const res = await authFetch(`/jobs/${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const err = await res.json().catch(() => null) as { detail?: string } | null;
+        flash(`Failed to delete job${err?.detail ? `: ${err.detail}` : "."}`);
+        return;
+      }
+      setJobs((p) => p.filter((j) => j.id !== id));
+      if (activeId === id) setActiveId(null);
+      flash("Job deleted.");
+    } catch { flash("Failed to delete job."); }
+  }
+
   function runPending() {
     if (pendingCount === 0) { flash("No pending jobs."); return; }
     flash(`${pendingCount} job${pendingCount > 1 ? "s" : ""} pending — run \`vardrrunner jobs run\` to execute.`);
@@ -320,6 +334,7 @@ export default function JobsSection({
               onClose={() => pref("showTerminal", false)}
               onRetry={retry}
               onCancel={cancel}
+              onDelete={deleteJob}
             />
           ) : (
             <button

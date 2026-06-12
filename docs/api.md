@@ -873,3 +873,55 @@ Fetch program listings from platform APIs and upsert into the database. Programs
 **Errors**
 - `400` — unknown platform name
 - `502` — upstream platform API request failed
+
+
+## Submissions
+
+Tracks the full lifecycle of a bug bounty submission from filed to resolved. Statuses: `submitted` → `triaged` → `accepted` | `duplicate` | `na` | `paid` | `rejected`.
+
+### `GET /programs/{program_id}/submissions`
+List all submissions for a program, ordered newest-first.
+
+**Response**
+```json
+{ "submissions": [ <submission_object>, ... ], "total": 5 }
+```
+
+### `POST /programs/{program_id}/submissions`
+Log a new submission.
+
+**Request body**
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `title` | string | yes | Short report title |
+| `platform` | string | no | Platform name (e.g. `HackerOne`, `Bugcrowd`) |
+| `platform_reference` | string | no | Report ID or URL on the platform |
+| `finding_id` | string | no | Soft reference to a finding |
+| `report_id` | string | no | Soft reference to a report |
+| `severity` | string | no | `critical`, `high`, `medium`, `low`, or `info` |
+| `status` | string | no | Initial status (default: `submitted`) |
+| `payout_usd` | number | no | Payout amount in USD |
+| `notes` | string | no | Free-form notes |
+
+### `PATCH /programs/{program_id}/submissions/{submission_id}`
+Update a submission. Partial update — only provided fields are changed. When `status` transitions to a terminal state (`accepted`, `duplicate`, `na`, `paid`, `rejected`) and `resolved_at` is not set, it is auto-stamped to the current UTC time.
+
+**Errors**
+- `404` — submission not found or belongs to another user
+- `400` — malformed `resolved_at` datetime
+
+### `DELETE /programs/{program_id}/submissions/{submission_id}`
+Permanently delete a submission.
+
+**Errors**
+- `404` — submission not found or belongs to another user
+
+---
+
+## Scan Jobs (updated)
+
+### `DELETE /jobs/{job_id}`
+Permanently delete a job and all its events. Intended for removing stuck jobs that a crashed runner left in `running` state. Any job status is accepted.
+
+**Errors**
+- `404` — job not found or belongs to another user
