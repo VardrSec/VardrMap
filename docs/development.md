@@ -211,6 +211,32 @@ vardrrunner heartbeat
 
 This reports your hostname, OS, runner version, and per-tool availability to VardrMap. The Bridge in the Jobs section shows the runner as online (green) for 5 minutes after the last heartbeat. Running `vardrrunner jobs run` sends a heartbeat automatically before processing any jobs.
 
+### Daemon (continuous background worker)
+
+Instead of running `vardrrunner jobs run` manually, start the daemon to continuously poll for jobs and send heartbeats in the background:
+
+```bash
+# Foreground (Ctrl+C to stop)
+vardrrunner daemon start
+
+# Background — writes PID to ~/.vardrrunner.pid, logs to ~/.vardrrunner.log
+vardrrunner daemon start --detach
+
+# Custom intervals
+vardrrunner daemon start --poll-interval 10 --heartbeat-interval 30
+
+# Log to a custom file
+vardrrunner daemon start --detach --log-file /var/log/vardrrunner.log
+
+# Check if running
+vardrrunner daemon status
+
+# Stop the background daemon
+vardrrunner daemon stop
+```
+
+The daemon polls for pending jobs every 5 seconds (configurable) and sends a heartbeat every 60 seconds on a separate thread — heartbeats continue even during long-running jobs. On SIGINT/SIGTERM (Ctrl+C or `daemon stop`) the daemon finishes the current job and then exits cleanly.
+
 ### Run tests
 
 ```bash
