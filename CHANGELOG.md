@@ -4,6 +4,7 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 | Version | Date | Summary |
 |---|---|---|
+| [v0.17.1](changelog/v0.17.1.md) | 2026-06-12 | Daemon Windows fixes (status was killing the daemon), Postgres pool pre-ping |
 | [v0.17.0](changelog/v0.17.0.md) | 2026-06-12 | VardrRunner daemon — continuous background worker |
 | [v0.16.0](changelog/v0.16.0.md) | 2026-06-11 | Submission tracker, delete stuck job, CI hardening |
 | [v0.15.0](changelog/v0.15.0.md) | 2026-06-11 | Target Radar, AI triage, service deep-links, rate limits, nmap URL normalization |

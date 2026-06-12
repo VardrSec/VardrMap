@@ -235,7 +235,9 @@ vardrrunner daemon status
 vardrrunner daemon stop
 ```
 
-The daemon polls for pending jobs every 5 seconds (configurable) and sends a heartbeat every 60 seconds on a separate thread — heartbeats continue even during long-running jobs. On SIGINT/SIGTERM (Ctrl+C or `daemon stop`) the daemon finishes the current job and then exits cleanly.
+The daemon polls for pending jobs every 5 seconds (configurable) and sends a heartbeat every 60 seconds on a separate thread — heartbeats continue even during long-running jobs.
+
+**Shutdown:** `daemon stop` removes the PID file, which the daemon checks every poll cycle — it finishes the current job and exits within one poll interval. This works identically on Windows and Linux/macOS (on POSIX, SIGTERM is also sent so an idle daemon exits immediately). Ctrl+C works in foreground mode on all platforms. Starting a second daemon while one is running is refused.
 
 ### Run tests
 
@@ -249,7 +251,7 @@ cd runner
 pytest tests -v
 ```
 
-104 tests should pass. Tests mock all subprocess and HTTP calls — no tools or backend required.
+113 tests should pass. Tests mock all subprocess and HTTP calls — no tools or backend required.
 
 ### Prerequisites for `run` commands
 

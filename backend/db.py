@@ -21,7 +21,9 @@ if _is_postgres:
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+psycopg://", 1)
 
 _connect_args = {"sslmode": "require"} if _is_postgres else {}
-engine = create_engine(DATABASE_URL, connect_args=_connect_args)
+# pool_pre_ping validates connections before use — Railway closes idle Postgres
+# connections, and without this the first request after a quiet period 500s.
+engine = create_engine(DATABASE_URL, connect_args=_connect_args, pool_pre_ping=True)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
