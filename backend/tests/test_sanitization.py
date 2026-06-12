@@ -1,4 +1,24 @@
 """Input sanitization — XSS, injection patterns, and null bytes are blocked or stripped."""
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+from security import strip_html, sanitize_identifier
+
+
+def test_strip_html_none_returns_empty():
+    assert strip_html(None) == ""
+
+
+def test_strip_html_empty_string_returns_empty():
+    assert strip_html("") == ""
+
+
+def test_sanitize_identifier_none_returns_empty():
+    assert sanitize_identifier(None) == ""
+
+
+def test_sanitize_identifier_empty_string_returns_empty():
+    assert sanitize_identifier("") == ""
 
 
 def test_script_tag_in_program_name_rejected(client, auth_headers):

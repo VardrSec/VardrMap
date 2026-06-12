@@ -64,3 +64,30 @@ def test_delete_own_program(client, auth_headers):
     del_res = client.delete(f"/programs/{pid}", headers=auth_headers)
     assert del_res.status_code == 200
     assert client.get(f"/programs/{pid}", headers=auth_headers).status_code == 404
+
+
+def test_auth_sync_creates_user(client, auth_headers):
+    res = client.post("/auth/sync", headers=auth_headers)
+    assert res.status_code == 200
+    data = res.json()
+    assert data["github_id"] == "gh_user1"
+    assert data["username"] == "user1"
+
+
+def test_auth_sync_updates_existing_user(client, auth_headers):
+    client.post("/auth/sync", headers=auth_headers)
+    res = client.post("/auth/sync", headers=auth_headers)
+    assert res.status_code == 200
+    assert res.json()["username"] == "user1"
+
+
+def test_program_findings_by_severity_populated(client, auth_headers, program_id):
+    client.post(f"/programs/{program_id}/findings", json={"title": "High Finding", "severity": "high", "asset": "example.com", "status": "new"}, headers=auth_headers)
+    client.post(f"/programs/{program_id}/findings", json={"title": "Low Finding", "severity": "low", "asset": "example.com", "status": "triaged"}, headers=auth_headers)
+    res = client.get(f"/programs/{program_id}", headers=auth_headers)
+    assert res.status_code == 200
+    data = res.json()
+    assert data["findings_by_severity"]["high"] >= 1
+    assert data["findings_by_severity"]["low"] >= 1
+    assert data["findings_by_status"]["new"] >= 1
+    assert data["findings_by_status"]["triaged"] >= 1
