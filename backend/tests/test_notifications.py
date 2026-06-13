@@ -1,6 +1,7 @@
 """Webhook notifications: helper units + job-failure and nuclei-import triggers."""
 import io
 import json
+import logging
 import socket
 from unittest.mock import patch
 
@@ -126,6 +127,14 @@ class TestSendWebhookSSRF:
         with patch("notifications.httpx.post") as mock_post:
             assert send_webhook("http://example.com/h", "hi") is False
             mock_post.assert_not_called()
+
+    def test_blocked_host_is_logged(self, caplog):
+        """A blocked webhook is no longer a silent swallow — it logs a warning."""
+        with patch("notifications.socket.getaddrinfo", return_value=self._addrinfo("10.0.0.5")), \
+             patch("notifications.httpx.post"):
+            with caplog.at_level(logging.WARNING, logger="vardrmap.notifications"):
+                assert send_webhook("https://sneaky.example/h", "hi") is False
+        assert any("did not resolve to a public address" in r.message for r in caplog.records)
 
 
 # ---------------------------------------------------------------------------

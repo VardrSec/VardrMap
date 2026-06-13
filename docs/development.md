@@ -67,6 +67,9 @@ The app is now at `http://localhost:3000`.
 | `ENV` | No | Environment name. Set to `development` locally. Railway sets `RAILWAY_ENVIRONMENT_NAME` automatically. Controls whether HSTS is sent. |
 | `MAX_UPLOAD_BYTES` | No | Max file size for tool imports in bytes. Default: `2097152` (2 MB). |
 | `ANTHROPIC_API_KEY` | No | Anthropic API key. Required for `POST /programs/{id}/findings/{id}/suggest` (AI triage). If absent, the endpoint returns `503`. Obtain at [console.anthropic.com](https://console.anthropic.com). |
+| `LOG_LEVEL` | No | Logging verbosity — `DEBUG`/`INFO`/`WARNING`/`ERROR`. Default: `INFO`. Logs are written to stdout (Railway captures stdout as the service log). An unrecognized value falls back to `INFO`. |
+| `SENTRY_DSN` | No | If set, unhandled errors are reported to Sentry for aggregation and alerting. Unset disables Sentry (stdout logging still applies). `sentry-sdk` ships in `requirements.txt`; it is only imported when this is set. |
+| `SENTRY_TRACES_SAMPLE_RATE` | No | Sentry performance-tracing sample rate, `0.0`–`1.0`. Default: `0.0` (error reporting only, no tracing). Only used when `SENTRY_DSN` is set. |
 
 ### Frontend (`frontend/.env.local`)
 
