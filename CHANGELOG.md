@@ -4,6 +4,7 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 | Version | Date | Summary |
 |---|---|---|
+| [v0.19.3](changelog/v0.19.3.md) | 2026-06-13 | Webhook SSRF hardening — resolve + block private/metadata addresses at send time |
 | [v0.19.2](changelog/v0.19.2.md) | 2026-06-13 | Dependabot — automated weekly dependency + GitHub Actions updates |
 | [v0.19.1](changelog/v0.19.1.md) | 2026-06-12 | Frontend dependency security (next 16.2.9, 0 audit vulns), Node 24 CI readiness (matrix + action runtimes) |
 | [v0.19.0](changelog/v0.19.0.md) | 2026-06-12 | RBAC program members, recon dedup + new-asset alerts, API key scopes, submissions analytics |
