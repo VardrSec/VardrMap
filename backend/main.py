@@ -10,9 +10,14 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from db import Base, engine
 from deps import require_full_scope
 from limiter import limiter
+from logging_config import configure_logging
 from routers import apikeys, findings, imports, jobs, manual_tests, members, programs, radar, recon, reports, runner, scans, schedules, scope, services, settings, submissions
 
 ENV = os.getenv("ENV") or os.getenv("RAILWAY_ENVIRONMENT_NAME", "development")
+
+# Route logs to stdout (and Sentry, if SENTRY_DSN is set) before anything else
+# runs, so startup and import-time problems are captured too.
+configure_logging()
 
 # In production, schema migrations are handled by Alembic (start.sh runs
 # `alembic upgrade head` before uvicorn). create_all is kept for local dev

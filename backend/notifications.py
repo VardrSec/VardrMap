@@ -23,11 +23,14 @@ attacker-controlled request target. Two layers guard it:
      unresolvable host means the request is never made.
 """
 import ipaddress
+import logging
 import socket
 import urllib.parse
 from typing import Optional
 
 import httpx
+
+logger = logging.getLogger("vardrmap.notifications")
 
 _WEBHOOK_TIMEOUT = 5  # seconds
 
@@ -124,11 +127,18 @@ def send_webhook(url: str, message: str) -> bool:
     outbound request is actually made: re-validating and re-resolving immediately
     before sending blocks names that point — or have been re-pointed — at private
     or metadata addresses.
+
+    Failures are logged: delivery is dispatched from a background task, so the
+    caller never inspects the return value, and a silent swallow here would make
+    a misconfigured or blocked webhook invisible.
     """
-    if validate_webhook_url(url) is not None:
+    error = validate_webhook_url(url)
+    if error is not None:
+        logger.warning("webhook not sent — rejected by validation: %s", error)
         return False
     host = urllib.parse.urlparse(url).hostname or ""
     if not _host_resolves_safely(host):
+        logger.warning("webhook not sent — host %r did not resolve to a public address", host)
         return False
     try:
         httpx.post(
@@ -137,6 +147,8 @@ def send_webhook(url: str, message: str) -> bool:
             timeout=_WEBHOOK_TIMEOUT,
             follow_redirects=False,
         )
+        logger.debug("webhook delivered to %s", host)
         return True
-    except Exception:
+    except Exception as exc:
+        logger.warning("webhook delivery to %s failed: %s", host, exc)
         return False

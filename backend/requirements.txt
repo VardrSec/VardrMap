@@ -11,4 +11,5 @@ slowapi
 alembic
 anthropic
 httpx
+sentry-sdk
 pytest-cov
