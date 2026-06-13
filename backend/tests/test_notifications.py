@@ -1,11 +1,12 @@
 """Webhook notifications: helper units + job-failure and nuclei-import triggers."""
 import io
 import json
+import socket
 from unittest.mock import patch
 
 import pytest
 
-from notifications import severity_meets_threshold, validate_webhook_url
+from notifications import send_webhook, severity_meets_threshold, validate_webhook_url
 
 _WEBHOOK = "https://discord.com/api/webhooks/123/abc"
 
@@ -65,6 +66,66 @@ class TestValidateWebhookUrl:
 
     def test_localhost_rejected(self):
         assert validate_webhook_url("https://localhost/h") is not None
+
+
+class TestSendWebhookSSRF:
+    """send_webhook resolves the host at send time and refuses any target that
+    points at a private/internal address — the layer that defeats a hostname
+    (or DNS rebind) aimed at an internal or cloud-metadata IP."""
+
+    @staticmethod
+    def _addrinfo(*ips):
+        # Mimic socket.getaddrinfo's 5-tuples; the guard reads only sockaddr[0].
+        out = []
+        for ip in ips:
+            family = socket.AF_INET6 if ":" in ip else socket.AF_INET
+            out.append((family, socket.SOCK_STREAM, 6, "", (ip, 0)))
+        return out
+
+    def test_public_host_is_sent(self):
+        with patch("notifications.socket.getaddrinfo", return_value=self._addrinfo("93.184.216.34")), \
+             patch("notifications.httpx.post") as mock_post:
+            assert send_webhook("https://example.com/h", "hi") is True
+            mock_post.assert_called_once()
+
+    def test_host_resolving_to_private_is_blocked(self):
+        with patch("notifications.socket.getaddrinfo", return_value=self._addrinfo("10.0.0.5")), \
+             patch("notifications.httpx.post") as mock_post:
+            assert send_webhook("https://sneaky.example/h", "hi") is False
+            mock_post.assert_not_called()
+
+    def test_host_resolving_to_metadata_ip_is_blocked(self):
+        with patch("notifications.socket.getaddrinfo", return_value=self._addrinfo("169.254.169.254")), \
+             patch("notifications.httpx.post") as mock_post:
+            assert send_webhook("https://metadata.example/h", "hi") is False
+            mock_post.assert_not_called()
+
+    def test_unresolvable_host_is_blocked(self):
+        with patch("notifications.socket.getaddrinfo", side_effect=socket.gaierror), \
+             patch("notifications.httpx.post") as mock_post:
+            assert send_webhook("https://nope.example/h", "hi") is False
+            mock_post.assert_not_called()
+
+    def test_any_private_leg_blocks_mixed_resolution(self):
+        # A name resolving to both a public and a private address is refused —
+        # the private leg is the SSRF vector.
+        with patch("notifications.socket.getaddrinfo",
+                   return_value=self._addrinfo("93.184.216.34", "10.0.0.5")), \
+             patch("notifications.httpx.post") as mock_post:
+            assert send_webhook("https://dual.example/h", "hi") is False
+            mock_post.assert_not_called()
+
+    def test_private_ip_literal_blocked_without_dns(self):
+        with patch("notifications.socket.getaddrinfo") as mock_resolve, \
+             patch("notifications.httpx.post") as mock_post:
+            assert send_webhook("https://10.0.0.1/h", "hi") is False
+            mock_resolve.assert_not_called()  # literal short-circuits DNS
+            mock_post.assert_not_called()
+
+    def test_http_scheme_blocked_before_send(self):
+        with patch("notifications.httpx.post") as mock_post:
+            assert send_webhook("http://example.com/h", "hi") is False
+            mock_post.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
