@@ -54,6 +54,7 @@ A personal bug bounty workflow tool. Manage target programs, track scope, log fi
 - Rate limiting — 200 requests/minute per IP (slowapi)
 - Security headers — CSP, HSTS (production only), X-Frame-Options, Referrer-Policy, Permissions-Policy
 - File upload validation — extension allowlist (`.json`, `.jsonl`), content-type check, 2 MB limit
+- Webhook SSRF guard — outbound notification URLs require HTTPS; the host is resolved and re-checked at send time and blocked from private/loopback/link-local/metadata addresses (rebinding-resistant), with redirects disabled
 
 ---
 
