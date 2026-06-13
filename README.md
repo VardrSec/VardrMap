@@ -90,6 +90,7 @@ npm run dev
 | [docs/api.md](docs/api.md) | Full API endpoint reference |
 | [docs/development.md](docs/development.md) | Local setup, env vars, migrations, tests |
 | [docs/security-testing.md](docs/security-testing.md) | Manual security testing record — BOLA, XSS, SQLi |
+| [docs/roadmap.md](docs/roadmap.md) | Forward-looking backlog (next milestone) |
 | [CHANGELOG.md](CHANGELOG.md) | Version history |
 
 ---
