@@ -3,7 +3,7 @@
 ## Prerequisites
 
 - Python 3.12+
-- Node.js 20+
+- Node.js 20 or 24 (CI tests both; 20 matches the Vercel / `.nvmrc` production runtime)
 - PostgreSQL (or use Railway for a hosted instance)
 - A GitHub OAuth App for local login
 

@@ -14,9 +14,9 @@ jobs:
       run:
         working-directory: backend
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
@@ -50,9 +50,9 @@ jobs:
       run:
         working-directory: runner
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
@@ -67,15 +67,24 @@ jobs:
   frontend:
     name: Frontend lint + build
     runs-on: ubuntu-latest
+    strategy:
+      # Run every Node leg to completion so one version's failure does not mask
+      # the other's result.
+      fail-fast: false
+      matrix:
+        # 20 = current production runtime (.nvmrc / Vercel); 24 = the new
+        # GitHub-hosted runner default after the 2026-06-16 flip. Testing both
+        # catches a Node-version regression before it reaches production.
+        node-version: ["20", "24"]
     defaults:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
-          node-version: "20"
+          node-version: ${{ matrix.node-version }}
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
@@ -102,10 +111,10 @@ jobs:
     name: Secret scanning
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
-      - uses: gitleaks/gitleaks-action@v2
+      - uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

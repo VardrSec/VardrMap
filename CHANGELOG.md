@@ -4,6 +4,7 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 | Version | Date | Summary |
 |---|---|---|
+| [v0.19.1](changelog/v0.19.1.md) | 2026-06-12 | Frontend dependency security (next 16.2.9, 0 audit vulns), Node 24 CI readiness (matrix + action runtimes) |
 | [v0.19.0](changelog/v0.19.0.md) | 2026-06-12 | RBAC program members, recon dedup + new-asset alerts, API key scopes, submissions analytics |
 | [v0.18.0](changelog/v0.18.0.md) | 2026-06-12 | Scheduled scans, webhook notifications, multi-runner, Radar → Program tracking |
 | [v0.17.1](changelog/v0.17.1.md) | 2026-06-12 | Daemon Windows fixes (status was killing the daemon), Postgres pool pre-ping |
