@@ -1,0 +1,48 @@
+# Dependabot keeps dependencies and GitHub Actions current so security
+# advisories arrive as routine, reviewable PRs instead of surfacing when the
+# CI `npm audit` / `pip-audit` gate fails (cf. the v0.19.1 next/postcss bump).
+#
+# Routine minor/patch bumps are grouped into one PR per ecosystem per week to
+# keep noise down; major bumps open individually so breaking changes get their
+# own review. Security updates are always raised regardless of grouping.
+version: 2
+updates:
+  # Frontend — Next.js / npm
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      frontend-minor-patch:
+        update-types: [minor, patch]
+
+  # Backend — FastAPI / pip (requirements.txt + requirements-dev.txt)
+  - package-ecosystem: pip
+    directory: /backend
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      backend-minor-patch:
+        update-types: [minor, patch]
+
+  # VardrRunner CLI — pip / pyproject.toml
+  - package-ecosystem: pip
+    directory: /runner
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      runner-minor-patch:
+        update-types: [minor, patch]
+
+  # GitHub Actions — keeps workflow action pins current (checkout, setup-node,
+  # setup-python, gitleaks) so the next runtime deprecation is caught early.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions-minor-patch:
+        update-types: [minor, patch]
