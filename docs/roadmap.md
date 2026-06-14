@@ -54,6 +54,38 @@ the dependency audit. These need a production smoke pass on Railway + Vercel:
       [jorge-aquino/VardrRunner](https://github.com/jorge-aquino/VardrRunner), with full
       history; removed from this repo. Integrates over the HTTP API only.
 
+## Next up — full-repo assessment (2026-06-14)
+
+Backend is mature (343 tests, ~97% coverage, solid auth/BOLA, logging + optional
+Sentry + hardened webhook SSRF guard). The gaps are concentrated in the frontend
+and a little tech debt. Sequenced by value / effort:
+
+- [ ] **Frontend `Section` component tests (highest value).** Only `ui.tsx` (15)
+      and the reducer (32) are covered; every `Section` (Composer → job dispatch,
+      FindingsSection mutations, SubmissionsSection, the JWT-mint auth path) is
+      untested. Needs an `AppContext` + `fetch` mocking harness on top of the RTL
+      setup added in the frontend-tests work.
+- [ ] **`react-hooks/set-state-in-effect` cleanup pass.** `eslint-plugin-react-hooks@7.1.1`
+      flags two repo-wide patterns — `void loadData()` fetch effects and
+      `if (x) setState(x)` prop→state sync. Clean them up, then adopt the rule to
+      lock it in. Do this *with* the component tests so the refactor is safe.
+- [ ] **TypeScript 6 migration (unblocks Dependabot #8).** Build passes on TS 6,
+      but ts-jest fails: TS 6 makes `tsconfig.test.json`'s `moduleResolution:
+      node10` + `baseUrl` hard errors (TS5101/5107) and adds a `rootDir`
+      requirement (TS5011). Migrate the test tsconfig, then re-bump TS.
+- [ ] **ESLint 10 (Dependabot #9) — upstream-blocked.** `eslint-config-next@16.2.9`'s
+      bundled `eslint-plugin-react` calls the removed `context.getFilename()`.
+      Wait for an ESLint-10-ready `eslint-config-next`; nothing to do here yet.
+- [ ] **Wire Sentry in production.** Logging + Sentry are plumbed but inert until
+      `SENTRY_DSN` is set on Railway. Optionally add an unhandled-exception
+      handler for structured request-error context.
+- [ ] **RBAC depth** — read-only viewer role + audit-log membership changes
+      (also tracked above).
+
+Smaller, non-urgent: API-key `last_used_at` writes on every authenticated request
+(write amplification at scale); the webhook guard's documented residual
+(IPv4-mapped IPv6 / resolve→connect TOCTOU) if this ever goes multi-tenant.
+
 ---
 
 ## Conventions
