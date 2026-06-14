@@ -104,7 +104,12 @@ cd backend
 pytest tests -v
 ```
 
-All 329 tests should pass. (The frontend also has reducer unit tests: `cd frontend && npm test`.)
+All 329 tests should pass.
+
+The frontend has its own Jest suite — run it with `cd frontend && npm test`. It
+covers the global reducer (`app/context/__tests__/`) and React components
+(`app/components/__tests__/`, rendered with React Testing Library under a jsdom
+environment).
 
 ### Test coverage areas
 
