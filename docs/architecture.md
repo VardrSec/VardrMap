@@ -7,11 +7,15 @@ VardrMap is part of the VardrSec product family. Each product is a separate depl
 | Product | Purpose | Status |
 |---|---|---|
 | VardrMap | Web app — stores programs, scope, findings, reports, recon, scans | Active |
-| VardrRunner | Local CLI runner — runs tools on the user's machine, uploads results | v1 — `runner/` in this repo |
+| VardrRunner | Local CLI runner — runs tools on the user's machine, uploads results | Separate repo: [jorge-aquino/VardrRunner](https://github.com/jorge-aquino/VardrRunner) |
 | VardrVault | Secrets management for VardrSec products | Planned |
 | VardrScanner | Purpose-built scanning engine | Planned |
 
-VardrRunner currently lives in `runner/` and will be extracted to a separate repo (`VardrSec/VardrRunner`) when it matures.
+VardrRunner was extracted from this monorepo into its own repository,
+[jorge-aquino/VardrRunner](https://github.com/jorge-aquino/VardrRunner). It integrates with
+VardrMap purely over the HTTP API using a `vmap_` key — there is no runner code in this
+repo. The section below documents the **integration contract** (how the runner consumes
+VardrMap's API); install, CLI, and runner internals are documented in the VardrRunner repo.
 
 ---
 
@@ -340,7 +344,7 @@ User's machine
   │
   │  vardrrunner run nuclei --program <id> --from-recon
   ▼
-runner/ (Python CLI)
+VardrRunner (separate repo)
   │  1. fetch recon targets from VardrMap API
   │     GET /programs/{id}/recon?limit=100&status_code=200
   │
@@ -361,22 +365,14 @@ VardrMap frontend (Vercel)
   │  display in Scanning section review queue
 ```
 
-**Key design constraints:**
-- Tool execution uses an allowlist (`ALLOWED_TOOLS` in `runner.py`) — `httpx`, `nuclei`, `subfinder`, and `nmap`; nmap uses a safe profile only (`--top-ports N -sV --version-intensity 2 -T{0-4} --open`; never `-A`, `-O`, `-p-`, `--script`, or `-T5`)
-- `strip_url_to_host(url)` normalizes recon targets (e.g. `https://app.example.com/path` → `app.example.com`) before passing them to nmap, which requires hostnames/IPs rather than full URLs
-- `subprocess.run` is always called with an argument list, never `shell=True`
-- Wildcard scope entries (`*.example.com`) are skipped by `run httpx/nuclei`; use `vardrrunner run subfinder --program <id>` to enumerate subdomains first, then re-run against recon results
-- Config at `~/.vardrmap/config.json` stores the `vmap_` API key in plaintext — documented clearly and file permissions restricted on Unix
-- Raw outputs are always saved locally before upload; if upload fails, the data is not lost
+**Key design constraints** (enforced in the VardrRunner repo):
+- Scan traffic always originates from the user's machine — tools never run on Railway.
+- Tool execution uses an allowlist and safe profiles only (e.g. nmap never uses `-A`, `-O`, `-p-`, `--script`, or `-T5`); subprocesses are always invoked with an argument list, never `shell=True`.
+- Recon targets are normalized to host form before nmap; the `vmap_` API key is stored locally (`~/.vardrmap/config.json`, restricted permissions on Unix).
+- Raw tool output is saved locally before upload, so a failed upload never loses data.
 
-**Target sources for `run` commands:**
-
-| Flag | Source |
-|---|---|
-| `--scope` | In-scope items from `GET /programs/{id}` (wildcards skipped) |
-| `--from-recon` | Live recon items from `GET /programs/{id}/recon` with optional `--limit` and `--status-code` filters |
-| `--target <url>` | Single inline target |
-| `--targets <file>` | Local plaintext file, one target per line |
+For the full tool allowlist, target-resolution flags, and CLI reference, see the
+[VardrRunner docs](https://github.com/jorge-aquino/VardrRunner/tree/main/docs).
 
 ### Job Queue Flow
 
@@ -391,7 +387,7 @@ Railway (FastAPI) — stores ScanJob row, status = "pending"
 User's machine
   │  vardrrunner jobs run
   ▼
-runner/
+VardrRunner (separate repo)
   │  1. GET /jobs/pending  — fetch pending jobs for this user
   │  2. POST  /jobs/{id}/claim      — atomically claim; 409 if already claimed
   │  3. POST  /jobs/{id}/events     — kind = "started"

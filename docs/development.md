@@ -173,112 +173,28 @@ Tests use SQLite and rebuild the schema from scratch on every run via `drop_all(
 
 ## VardrRunner Setup
 
-VardrRunner is the local CLI that runs tools on your machine and uploads results to VardrMap. It lives in `runner/` and is installed separately from the backend.
+VardrRunner is the local CLI that runs tools on your machine and uploads results to
+VardrMap. **It now lives in its own repository:
+[jorge-aquino/VardrRunner](https://github.com/jorge-aquino/VardrRunner).** Install, CLI,
+daemon, and tool-prerequisite instructions are documented there — see its
+[README](https://github.com/jorge-aquino/VardrRunner#readme) and
+[docs/](https://github.com/jorge-aquino/VardrRunner/tree/main/docs).
 
 > **Naming:** the CLI command is `vardrrunner`. API keys use the `vmap_` prefix — these are different things.
 
-### Install
+To connect a runner to this VardrMap instance:
 
-```bash
-cd runner
-python -m venv venv
+1. Create a `vmap_` API key in **Settings → API Keys** (use a `runner`-scoped key for a VPS).
+2. On the runner, run `vardrrunner login vardrmap` and enter your VardrMap URL + the key.
+   Config is saved to `~/.vardrmap/config.json` (plaintext key — restrict with
+   `chmod 600` on Unix).
+3. Run `vardrrunner heartbeat`. The Bridge in the Jobs section shows the runner online
+   (green) for 5 minutes after the last heartbeat.
 
-# Windows
-.\venv\Scripts\Activate.ps1
-
-# macOS / Linux
-source venv/bin/activate
-
-pip install -e .
-```
-
-After install, the `vardrrunner` command is available in the activated venv.
-
-### Authenticate
-
-```bash
-vardrrunner login vardrmap
-# Enter your VardrMap URL (e.g. https://your-railway-app.up.railway.app)
-# Enter a vmap_ API key from Settings → API Keys
-```
-
-Config is saved to `~/.vardrmap/config.json`. The file stores the API key in plaintext — restrict access with `chmod 600 ~/.vardrmap/config.json` on Unix.
-
-After logging in, run `vardrrunner status` to verify the setup:
-
-```bash
-vardrrunner status
-```
-
-This checks that the config file is present, the API key is valid, the backend is reachable, and that httpx/nuclei/subfinder are installed on PATH.
-
-Send a heartbeat to mark the runner as online in the Bridge:
-
-```bash
-vardrrunner heartbeat
-```
-
-This reports your hostname, OS, runner version, and per-tool availability to VardrMap. The Bridge in the Jobs section shows the runner as online (green) for 5 minutes after the last heartbeat. Running `vardrrunner jobs run` sends a heartbeat automatically before processing any jobs.
-
-### Daemon (continuous background worker)
-
-Instead of running `vardrrunner jobs run` manually, start the daemon to continuously poll for jobs and send heartbeats in the background:
-
-```bash
-# Foreground (Ctrl+C to stop)
-vardrrunner daemon start
-
-# Background — writes PID to ~/.vardrrunner.pid, logs to ~/.vardrrunner.log
-vardrrunner daemon start --detach
-
-# Custom intervals
-vardrrunner daemon start --poll-interval 10 --heartbeat-interval 30
-
-# Log to a custom file
-vardrrunner daemon start --detach --log-file /var/log/vardrrunner.log
-
-# Check if running
-vardrrunner daemon status
-
-# Stop the background daemon
-vardrrunner daemon stop
-```
-
-The daemon polls for pending jobs every 5 seconds (configurable) and sends a heartbeat every 60 seconds on a separate thread — heartbeats continue even during long-running jobs.
-
-**Shutdown:** `daemon stop` removes the PID file, which the daemon checks every poll cycle — it finishes the current job and exits within one poll interval. This works identically on Windows and Linux/macOS (on POSIX, SIGTERM is also sent so an idle daemon exits immediately). Ctrl+C works in foreground mode on all platforms. Starting a second daemon while one is running is refused.
-
-### Run tests
-
-```bash
-cd runner
-
-# Windows
-.\venv\Scripts\pytest.exe tests -v
-
-# macOS / Linux
-pytest tests -v
-```
-
-113 tests should pass. Tests mock all subprocess and HTTP calls — no tools or backend required.
-
-### Prerequisites for `run` commands
-
-VardrRunner invokes tools via PATH. Install them with Go (requires Go 1.21+):
-
-```bash
-go install -v github.com/projectdiscovery/httpx/cmd/httpx@latest
-go install -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest
-go install -v github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest
-```
-
-Or download pre-built binaries from the GitHub releases pages:
-
-- **httpx** — https://github.com/projectdiscovery/httpx
-- **nuclei** — https://github.com/projectdiscovery/nuclei
-- **subfinder** — https://github.com/projectdiscovery/subfinder (required for `vardrrunner run subfinder`)
-
-After installing, run `vardrrunner heartbeat` to verify that VardrMap can see which tools are available.
+The runner polls `GET /jobs/pending`, claims jobs atomically, executes tools locally
+(scan traffic always originates from your machine, never Railway), and posts results and
+lifecycle events back over HTTP. See [architecture.md](architecture.md#job-queue-flow) for
+the full integration contract.
 
 ---
 
