@@ -1,5 +1,48 @@
 # VardrMap — Claude Instructions
 
+## Engineering Charter — shared across all VardrSec repos
+<!-- This section is identical in VardrMap, VardrRunner, and VardrVault.
+     Edit it in one repo, then mirror the change to the other two. -->
+
+Every VardrSec repo is built to a product-grade bar: **revolutionary in intent, clean in
+execution, lean in performance, and fully documented at every step.** Treat nothing here
+as "just a script."
+
+### 1. Organization — a place for everything
+- One concern per module, one responsibility per function. No god files.
+- Fixed homes: source, tests, docs, changelog, and ADRs each live in a predictable place.
+- No stray files at the repo root. Experiments go in `scratch/` (gitignored) or are deleted.
+- Dead code, commented-out blocks, and unused dependencies are removed, not parked.
+- Every public symbol explains *why* it exists, not just *what* it does.
+
+### 2. Track everything
+- `CHANGELOG.md` follows Keep a Changelog + SemVer; updated with every behavior change.
+- Every non-trivial design decision gets an ADR in `docs/adr/` (use the template).
+- No undocumented releases; every version is dated and described.
+- Committed TODOs reference a tracked issue, or they don't get committed.
+
+### 3. Tests are non-negotiable — on every repo
+- Every behavior-changing change ships with tests in the **same commit**.
+- The suite is always green. Never commit failing or skipped tests without a written reason.
+- Cover logic, edge cases, and failure paths — coverage of meaning, not line-count vanity.
+- CI runs the full suite on every push; a red build blocks merge.
+
+### 4. Clean code
+- Clear names over clever ones. Small functions. Early returns over deep nesting.
+- No premature abstraction and no copy-paste — refactor at the third duplication.
+- Errors are handled explicitly and surfaced with context, never silently swallowed.
+- Match surrounding style; run the formatter and linter before every commit.
+
+### 5. Lean & smooth performance
+- Measure before optimizing. Keep hot paths allocation-light and I/O batched.
+- Prefer streaming/pagination over loading everything into memory.
+- Dependencies are a liability — each new one must earn its place.
+- Build, startup, and test times are part of the product; watch for regressions.
+
+### 6. Full software lifecycle, every time
+Plan → design (ADR if non-trivial) → implement **with** tests → document → review →
+release (changelog + tag) → maintain. No step is skipped, even for small changes.
+
 ## What this project is
 Personal bug bounty workflow tool. FastAPI backend (Railway) + Next.js 16 frontend (Vercel) + PostgreSQL (Railway). Users log in with GitHub OAuth; the frontend mints a short-lived HS256 JWT for backend requests.
 
