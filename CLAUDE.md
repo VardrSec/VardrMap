@@ -18,7 +18,6 @@ Personal bug bounty workflow tool. FastAPI backend (Railway) + Next.js 16 fronte
 
 ## Hard rules — never break these
 - Never add "Co-Authored-By: Claude" to commits
-- Never push directly to `main`. Ship every change on a branch and open a pull request — even small, docs-only, or autonomous changes. Open the PR, let CI run on it, and leave merging to the user.
 - Run `npm run lint` and `npm run build` in `frontend/` before committing frontend changes
 - Every behavior-changing code change needs matching documentation (see Documentation rules below)
 
