@@ -53,9 +53,7 @@ Personal bug bounty workflow tool. FastAPI backend (Railway) + Next.js 16 fronte
 - `frontend/app/` — Next.js App Router pages and components
 - `frontend/app/components/` — one component per section (FindingsSection, ReportsSection, JobsSection, etc.)
 - `frontend/app/context/` — AppContext.tsx + appReducer.ts (global state)
-- `runner/` — VardrRunner v1 local CLI; separate venv, installable via `pip install -e ./runner`
-- `runner/vardrrunner/` — Python package: config, api client, subprocess runner, command modules
-- `runner/tests/` — 113 tests; all subprocess and HTTP calls are mocked
+- VardrRunner (the local CLI) now lives in its own repo: [jorge-aquino/VardrRunner](https://github.com/jorge-aquino/VardrRunner). It integrates with VardrMap purely over the HTTP API with a `vmap_` key — no code in this repo.
 - `docs/` — architecture, API reference, development setup, security testing record
 - `CHANGELOG.md` — version history, updated with every change
 
@@ -93,12 +91,6 @@ Frontend changes:
 cd frontend
 npm run lint
 npm run build
-```
-
-Runner changes:
-```
-cd runner
-.\venv\Scripts\pytest.exe tests -v
 ```
 
 ## Running locally
@@ -187,4 +179,6 @@ Shipped (v0.18.0):
 
 Remaining:
 - RBAC / multi-user support
-- VardrRunner: extract to separate repo (VardrSec/VardrRunner) when API stabilizes
+
+Done:
+- VardrRunner extracted to its own repo ([jorge-aquino/VardrRunner](https://github.com/jorge-aquino/VardrRunner)) with full history; `runner/` removed from this repo. Integrates over the HTTP API only.

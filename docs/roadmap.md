@@ -39,7 +39,7 @@ the dependency audit. These need a production smoke pass on Railway + Vercel:
       (Vercel reads it) and verify a Vercel **preview** deploy before promoting
       to production.
 - [ ] **Automate dependency freshness.** Add Dependabot (or Renovate) for
-      `frontend/`, `backend/`, and `runner/` so security bumps like v0.19.1 are
+      `frontend/` and `backend/` so security bumps like v0.19.1 are
       opened as PRs proactively rather than discovered when CI's audit gate
       fails. Group patch/minor updates to keep noise down.
 - [ ] **Track the `glob@7` deprecation warning.** Surfaced on `npm ci`;
@@ -50,9 +50,9 @@ the dependency audit. These need a production smoke pass on Railway + Vercel:
 
 - [ ] **RBAC depth** — roles beyond owner/member (e.g. a read-only viewer);
       record membership changes in the audit log.
-- [ ] **VardrRunner repo extraction** — split `runner/` into
-      `VardrSec/VardrRunner` once the job / heartbeat / scope API is stable
-      (carried over from `CLAUDE.md`).
+- [x] **VardrRunner repo extraction** — `runner/` split into its own repository,
+      [jorge-aquino/VardrRunner](https://github.com/jorge-aquino/VardrRunner), with full
+      history; removed from this repo. Integrates over the HTTP API only.
 
 ---
 

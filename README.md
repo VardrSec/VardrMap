@@ -35,7 +35,7 @@ A personal bug bounty workflow tool. Manage target programs, track scope, log fi
 - Composer zone — tool picker (subfinder, httpx, nuclei) with per-tool config; queues a job with one click
 - Job Board + Terminal — three board views (Stream, Pipeline, Table); selecting a job opens a terminal that polls live lifecycle events (started → running → done/failed) every 3 s
 
-**VardrRunner** — local CLI companion (`runner/`):
+**VardrRunner** — local CLI companion ([jorge-aquino/VardrRunner](https://github.com/jorge-aquino/VardrRunner), its own repo):
 - Authenticate with `vardrrunner login vardrmap` using a `vmap_` API key
 - `vardrrunner status` — verify config, API connectivity, and local tool availability
 - `vardrrunner heartbeat` — report hostname, OS, version, and per-tool availability to VardrMap; auto-sent at start of `jobs run`
@@ -103,4 +103,4 @@ npm run dev
 - RBAC / multi-user support
 - Opportunities / Target Radar — surface new programs or recently changed scopes
 - AI-assisted finding triage and report drafting
-- VardrRunner: extract to separate repo (VardrSec/VardrRunner) when API stabilizes
+- ✅ VardrRunner: extracted to its own repo ([jorge-aquino/VardrRunner](https://github.com/jorge-aquino/VardrRunner))

@@ -27,16 +27,6 @@ updates:
       backend-minor-patch:
         update-types: [minor, patch]
 
-  # VardrRunner CLI — pip / pyproject.toml
-  - package-ecosystem: pip
-    directory: /runner
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
-    groups:
-      runner-minor-patch:
-        update-types: [minor, patch]
-
   # GitHub Actions — keeps workflow action pins current (checkout, setup-node,
   # setup-python, gitleaks) so the next runtime deprecation is caught early.
   - package-ecosystem: github-actions
