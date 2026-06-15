@@ -12,6 +12,30 @@ def test_generate_api_key(client, auth_headers):
     client.delete(f"/auth/apikeys/{data['id']}", headers=auth_headers)
 
 
+def test_create_api_key_logs_audit(client, auth_headers):
+    from unittest.mock import patch
+    with patch("routers.apikeys.log_action") as mock_log:
+        res = client.post("/auth/apikeys", json={"label": "k"}, headers=auth_headers)
+    assert res.status_code == 200
+    mock_log.assert_called_once()
+    args = mock_log.call_args[0]
+    assert args[2] == "create" and args[3] == "apikey"
+    assert args[4] == res.json()["id"]
+    client.delete(f"/auth/apikeys/{res.json()['id']}", headers=auth_headers)
+
+
+def test_revoke_api_key_logs_audit(client, auth_headers):
+    from unittest.mock import patch
+    key_id = client.post("/auth/apikeys", json={}, headers=auth_headers).json()["id"]
+    with patch("routers.apikeys.log_action") as mock_log:
+        res = client.delete(f"/auth/apikeys/{key_id}", headers=auth_headers)
+    assert res.status_code == 200
+    mock_log.assert_called_once()
+    args = mock_log.call_args[0]
+    assert args[2] == "revoke" and args[3] == "apikey"
+    assert args[4] == key_id
+
+
 def test_api_key_authenticates(client, auth_headers):
     res = client.post("/auth/apikeys", json={}, headers=auth_headers)
     token  = res.json()["token"]

@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from db import get_db
-from deps import get_current_user
+from deps import get_current_user, log_action
 from models import ApiKey, User
 from schemas import ApiKeyCreate
 
@@ -47,6 +47,8 @@ def create_api_key(
         scope=payload.scope or "full",
     )
     db.add(key)
+    db.flush()  # populate key.id before audit-logging its creation
+    log_action(db, current_user["github_id"], "create", "apikey", key.id)
     db.commit()
     db.refresh(key)
 
@@ -96,6 +98,7 @@ def revoke_api_key(
     ).first()
     if not key:
         raise HTTPException(status_code=404, detail="API key not found")
+    log_action(db, current_user["github_id"], "revoke", "apikey", key.id)
     db.delete(key)
     db.commit()
     return {"message": "API key revoked"}

@@ -251,20 +251,47 @@ def claim_job(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Atomically claim a pending job. Returns 409 if the job is not in 'pending' state."""
+    """Atomically claim a pending job. Returns 409 if the job is not in 'pending'
+    state, 404 if it does not exist or is not owned by the caller.
+
+    The transition is a single conditional UPDATE (... WHERE status = 'pending'),
+    so when two runners race for the same job exactly one wins — the database,
+    not application-level read-then-write, enforces it. The affected row count
+    tells us whether this caller made the transition.
+    """
+    now = datetime.now(timezone.utc)
+    claimed = (
+        db.query(ScanJob)
+        .filter(
+            ScanJob.id == job_id,
+            ScanJob.owner_github_id == current_user["github_id"],
+            ScanJob.status == "pending",
+        )
+        .update(
+            {ScanJob.status: "running", ScanJob.started_at: now},
+            synchronize_session=False,
+        )
+    )
+    db.commit()
+
+    if claimed == 0:
+        # We didn't win the transition. Read once to distinguish "not found / not
+        # mine" (404) from "exists but no longer pending" (409). The read stays
+        # scoped to the owner so a non-owner's job is reported as 404, not 403.
+        job = (
+            db.query(ScanJob)
+            .filter(ScanJob.id == job_id, ScanJob.owner_github_id == current_user["github_id"])
+            .first()
+        )
+        if not job:
+            raise HTTPException(status_code=404)
+        raise HTTPException(status_code=409, detail=f"job is already {job.status}")
+
     job = (
         db.query(ScanJob)
         .filter(ScanJob.id == job_id, ScanJob.owner_github_id == current_user["github_id"])
         .first()
     )
-    if not job:
-        raise HTTPException(status_code=404)
-    if job.status != "pending":
-        raise HTTPException(status_code=409, detail=f"job is already {job.status}")
-    job.status = "running"
-    job.started_at = datetime.now(timezone.utc)
-    db.commit()
-    db.refresh(job)
     return serialize_job(job)
 
 
