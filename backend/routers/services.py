@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from db import get_db
-from deps import get_current_user, get_program_or_404
+from deps import get_current_user, get_program_or_404, log_action
 from models import Service
 
 router = APIRouter(tags=["services"])
@@ -109,6 +109,9 @@ def bulk_create_services(
             ))
             created += 1
 
+    # One audit entry per bulk upsert (not per service) to record who changed the
+    # program's service inventory, without flooding the log.
+    log_action(db, current_user["github_id"], "upsert", "service", program_id, program_id=program_id)
     db.commit()
     return {"created": created, "updated": updated}
 
@@ -127,6 +130,7 @@ def delete_service(
     ).first()
     if not svc:
         raise HTTPException(status_code=404, detail="Service not found")
+    log_action(db, current_user["github_id"], "delete", "service", service_id, program_id=program_id)
     db.delete(svc)
     db.commit()
     return {"message": "Service deleted"}

@@ -28,6 +28,32 @@ def _bulk_create(client, program_id, headers, services=None):
 
 
 # ---------------------------------------------------------------------------
+# Audit logging
+# ---------------------------------------------------------------------------
+
+def test_bulk_upsert_logs_audit(client, program_id, auth_headers):
+    from unittest.mock import patch
+    with patch("routers.services.log_action") as mock_log:
+        res = _bulk_create(client, program_id, auth_headers)
+    assert res.status_code == 201
+    mock_log.assert_called_once()
+    args = mock_log.call_args[0]
+    assert args[2] == "upsert" and args[3] == "service"
+
+
+def test_delete_service_logs_audit(client, program_id, auth_headers):
+    from unittest.mock import patch
+    _bulk_create(client, program_id, auth_headers)
+    sid = client.get(f"/programs/{program_id}/services", headers=auth_headers).json()["services"][0]["id"]
+    with patch("routers.services.log_action") as mock_log:
+        res = client.delete(f"/programs/{program_id}/services/{sid}", headers=auth_headers)
+    assert res.status_code == 200
+    mock_log.assert_called_once()
+    args = mock_log.call_args[0]
+    assert args[2] == "delete" and args[3] == "service"
+
+
+# ---------------------------------------------------------------------------
 # GET /programs/{id}/services
 # ---------------------------------------------------------------------------
 
