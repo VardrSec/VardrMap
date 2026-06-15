@@ -6,6 +6,9 @@ __pycache__/
 venv/
 .venv/
 
+# Dependencies (never tracked; installed from lockfiles)
+node_modules/
+
 # Test artefacts
 test_vardrmap.db
 .pytest_cache/
