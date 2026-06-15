@@ -21,17 +21,13 @@ VardrMap's API); install, CLI, and runner internals are documented in the VardrR
 
 ## VardrMap Overview
 
-VardrMap is a two-service application. The frontend is a Next.js app deployed on Vercel. The backend is a FastAPI app deployed on Railway, backed by a Railway-hosted PostgreSQL database. They communicate over HTTPS; the frontend proxies all `/api/backend/*` requests to the backend URL so the browser never talks to the backend directly.
+VardrMap is a two-service application. The frontend is a Next.js app deployed on Vercel. The backend is a FastAPI app deployed on Railway, backed by a Railway-hosted PostgreSQL database. The browser (running the Vercel-served Next.js app) calls the backend **directly** at `NEXT_PUBLIC_API_URL` over HTTPS, sending the short-lived HS256 JWT — minted by the frontend after GitHub OAuth — in the `Authorization` header. (Routing these calls through a server-side proxy to keep the token out of browser-side JavaScript is a candidate future hardening; today the calls are direct.)
 
 ```
-Browser
+Browser (runs the Next.js app served by Vercel)
   │
-  │  HTTPS
-  ▼
-Vercel (Next.js 16)
-  │  proxy.ts middleware rewrites /api/backend/* → NEXT_PUBLIC_API_URL/*
-  │
-  │  HTTPS + Authorization: Bearer <token>
+  │  API calls: HTTPS directly to NEXT_PUBLIC_API_URL
+  │  Authorization: Bearer <HS256 JWT>
   ▼
 Railway (FastAPI)
   │
