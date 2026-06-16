@@ -1,4 +1,6 @@
 import re
+import urllib.parse
+
 import bleach
 
 # Raw injection patterns checked BEFORE any stripping.
@@ -49,3 +51,35 @@ def sanitize_identifier(value: str | None) -> str:
     if _INJECT_RE.search(raw) or _EVENT_HANDLER_RE.search(raw):
         raise ValueError("Invalid characters in field")
     return bleach.clean(raw, tags=[], attributes={}, strip=True).strip()
+
+
+_ALLOWED_URL_SCHEMES = {"http", "https"}
+# Any ASCII control char or whitespace can obfuscate a scheme (e.g. "java\tscript:")
+# or smuggle log/header injection — reject it before parsing the URL.
+_URL_BAD_CHARS_RE = re.compile(r"[\x00-\x20\x7f-\x9f]")
+
+
+def validate_safe_url(value: str | None) -> str:
+    """Return a cleaned URL if it is a safe http(s) link, else raise ValueError.
+
+    Use this for any field that is rendered as a clickable link (program_url,
+    Radar program URLs, future platform references). `strip_html` is *not* enough
+    for URLs: it leaves `javascript:`, `data:`, and `vbscript:` schemes intact,
+    which become live XSS the moment the value lands in an `href`. This allows
+    only http/https, rejects every other scheme, and rejects control-character /
+    whitespace obfuscation such as ``java\\tscript:`` or `` javascript:``. Empty
+    input is allowed and returned as ``""``.
+    """
+    if not value:
+        return ""
+    cleaned = _remove_null_bytes(value).strip()
+    if not cleaned:
+        return ""
+    if _URL_BAD_CHARS_RE.search(cleaned):
+        raise ValueError("URL must not contain control characters or whitespace")
+    parsed = urllib.parse.urlparse(cleaned)
+    if parsed.scheme.lower() not in _ALLOWED_URL_SCHEMES:
+        raise ValueError("URL must use http:// or https://")
+    if not parsed.netloc:
+        raise ValueError("URL must include a host")
+    return cleaned

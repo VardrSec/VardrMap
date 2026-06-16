@@ -2,7 +2,7 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
-from security import sanitize_identifier, strip_html
+from security import sanitize_identifier, strip_html, validate_safe_url
 
 Severity = Literal["info", "low", "medium", "high", "critical"]
 FindingStatus = Literal["new", "candidate", "triaged", "in_progress", "closed"]
@@ -25,9 +25,13 @@ class ProgramCreate(BaseModel):
     @classmethod
     def sanitize_short(cls, v): return sanitize_identifier(v)
 
-    @field_validator("program_url", "scope_summary", "severity_guidance", "safe_harbor_notes", mode="before")
+    @field_validator("scope_summary", "severity_guidance", "safe_harbor_notes", mode="before")
     @classmethod
     def sanitize_long(cls, v): return strip_html(v)
+
+    @field_validator("program_url", mode="before")
+    @classmethod
+    def sanitize_url(cls, v): return validate_safe_url(v)
 
 
 class ProgramUpdate(BaseModel):
@@ -42,9 +46,13 @@ class ProgramUpdate(BaseModel):
     @classmethod
     def sanitize_short(cls, v): return sanitize_identifier(v) if v is not None else v
 
-    @field_validator("program_url", "scope_summary", "severity_guidance", "safe_harbor_notes", mode="before")
+    @field_validator("scope_summary", "severity_guidance", "safe_harbor_notes", mode="before")
     @classmethod
     def sanitize_long(cls, v): return strip_html(v) if v is not None else v
+
+    @field_validator("program_url", mode="before")
+    @classmethod
+    def sanitize_url(cls, v): return validate_safe_url(v) if v is not None else v
 
 
 class ScopeItemCreate(BaseModel):

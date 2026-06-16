@@ -17,8 +17,20 @@ from sqlalchemy.orm import Session
 from db import get_db
 from deps import get_current_user
 from models import RadarProgram
+from security import validate_safe_url
 
 router = APIRouter(tags=["radar"])
+
+
+def _safe_radar_url(raw: str | None, fallback: str) -> str:
+    """Neutralize untrusted platform URLs. Radar ingests third-party data that is
+    rendered as a clickable link in the UI, so a hostile ``javascript:`` / ``data:``
+    URL in a platform response must never reach an href. Returns the cleaned URL if
+    it is a safe http(s) link, otherwise the constructed platform fallback."""
+    try:
+        return validate_safe_url(raw) or fallback
+    except ValueError:
+        return fallback
 
 _SOURCES = {
     "bugcrowd":  "https://bugcrowd.com/programs.json",
@@ -39,7 +51,7 @@ def _parse_bugcrowd(data: dict | list) -> list[dict]:
         result.append({
             "platform_id": str(code),
             "name":        str(name)[:300],
-            "url":         p.get("program_url") or f"https://bugcrowd.com/{code}",
+            "url":         _safe_radar_url(p.get("program_url"), f"https://bugcrowd.com/{code}"),
             "max_payout":  p.get("max_payout") or p.get("maximum_payout"),
         })
     return result
@@ -58,7 +70,7 @@ def _parse_hackerone(data: dict | list) -> list[dict]:
         result.append({
             "platform_id": str(handle),
             "name":        str(name)[:300],
-            "url":         attrs.get("url") or f"https://hackerone.com/{handle}",
+            "url":         _safe_radar_url(attrs.get("url"), f"https://hackerone.com/{handle}"),
             "max_payout":  attrs.get("maximum_bounty") or attrs.get("max_payout"),
         })
     return result
