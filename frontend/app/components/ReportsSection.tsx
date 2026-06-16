@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { safeMarkdownUrl } from "../lib/safeUrl";
 import { Program, Finding, Report, ReportFormState } from "../types";
 import { useAppContext } from "../context/AppContext";
 import { Panel, Input, Textarea, SelectField, PrimaryButton, DangerButton, StatusBadge, SectionHeader } from "./ui";
@@ -259,7 +260,7 @@ export default function ReportsSection({ program }: { program: Program }) {
           <div className="min-h-[140px] rounded-lg border border-[#2e2e2e] bg-[#161616] p-4">
             {form.title ? (
               <div className={MD_CLASSES}>
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{mdPreview}</ReactMarkdown>
+                <ReactMarkdown remarkPlugins={[remarkGfm]} urlTransform={safeMarkdownUrl} disallowedElements={["img"]}>{mdPreview}</ReactMarkdown>
               </div>
             ) : (
               <p className="text-xs text-[#3a3a3a] italic">Fill in the draft to see a preview.</p>

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { safeMarkdownUrl } from "../lib/safeUrl";
 
 export function SeverityBadge({ severity }: { severity: string }) {
   const s = severity?.toLowerCase();
@@ -116,7 +117,7 @@ export function Textarea({ label, value, onChange }: { label: string; value: str
               [&_li]:text-[#6b7280]
               [&_blockquote]:border-l-2 [&_blockquote]:border-[#f59e0b]/30 [&_blockquote]:pl-3 [&_blockquote]:text-[#52525b]
               [&_hr]:border-[#2e2e2e]">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{value}</ReactMarkdown>
+              <ReactMarkdown remarkPlugins={[remarkGfm]} urlTransform={safeMarkdownUrl} disallowedElements={["img"]}>{value}</ReactMarkdown>
             </div>
           ) : (
             <p className="text-xs text-[#3a3a3a] italic">Nothing to preview.</p>
