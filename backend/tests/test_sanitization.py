@@ -81,6 +81,22 @@ def test_radar_parser_drops_hostile_program_url():
     assert out[0]["url"] == "https://bugcrowd.com/evil"
 
 
+def test_heartbeat_rejects_overlong_hostname(client, auth_headers):
+    res = client.post("/runner/heartbeat", json={"hostname": "a" * 201}, headers=auth_headers)
+    assert res.status_code == 422
+
+
+def test_settings_rejects_overlong_webhook_url(client, auth_headers):
+    res = client.patch("/settings", json={"webhook_url": "https://x.com/" + "a" * 600}, headers=auth_headers)
+    assert res.status_code == 422
+
+
+def test_submission_rejects_xss_platform_reference(client, auth_headers, program_id):
+    res = client.post(f"/programs/{program_id}/submissions",
+                      json={"title": "ref test", "platform_reference": "javascript:alert(1)"}, headers=auth_headers)
+    assert res.status_code == 422
+
+
 def test_event_handler_in_scope_value_rejected(client, auth_headers, program_id):
     res = client.post(
         f"/programs/{program_id}/scope/in",

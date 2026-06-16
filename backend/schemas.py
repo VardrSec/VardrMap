@@ -203,7 +203,7 @@ class SubmissionCreate(BaseModel):
     payout_usd: Optional[float] = None
     notes: Optional[str] = Field(default="", max_length=5000)
 
-    @field_validator("title", "platform", mode="before")
+    @field_validator("title", "platform", "platform_reference", "finding_id", "report_id", "severity", mode="before")
     @classmethod
     def sanitize_short(cls, v): return sanitize_identifier(v) if v else ""
 
@@ -224,7 +224,7 @@ class SubmissionUpdate(BaseModel):
     resolved_at: Optional[str] = None
     notes: Optional[str] = Field(default=None, max_length=5000)
 
-    @field_validator("title", "platform", mode="before")
+    @field_validator("title", "platform", "platform_reference", "finding_id", "report_id", "severity", mode="before")
     @classmethod
     def sanitize_short(cls, v): return sanitize_identifier(v) if v is not None else v
 

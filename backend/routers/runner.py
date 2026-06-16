@@ -5,13 +5,14 @@ real connectivity, hostname, version, and tool availability in the Bridge.
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from db import get_db
 from deps import get_current_user
 from limiter import limiter
 from models import RunnerHeartbeat
+from security import strip_html
 
 router = APIRouter(tags=["runner"])
 
@@ -40,10 +41,14 @@ def _serialize(hb: RunnerHeartbeat) -> dict:
 
 
 class HeartbeatPayload(BaseModel):
-    hostname: str = ""
-    version:  str = ""
-    os:       str = ""
-    tools:    dict = {}  # {"httpx": {"ok": true, "version": "v1.6.9"}, ...}
+    hostname: str = Field(default="", max_length=200)
+    version:  str = Field(default="", max_length=100)
+    os:       str = Field(default="", max_length=200)
+    tools:    dict[str, dict] = Field(default_factory=dict)  # {"httpx": {"ok": true, "version": "v1.6.9"}, ...}
+
+    @field_validator("hostname", "version", "os", mode="before")
+    @classmethod
+    def sanitize(cls, v): return strip_html(v) if v else ""
 
 
 @router.post("/runner/heartbeat")

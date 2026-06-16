@@ -5,7 +5,7 @@ The webhook URL is stored in plaintext (it must be usable, unlike API keys
 which are hashed) and is only ever returned to its owner.
 """
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from db import get_db
@@ -19,8 +19,12 @@ _DEFAULTS = {"webhook_url": "", "notify_min_severity": "high"}
 
 
 class SettingsUpdate(BaseModel):
-    webhook_url: str | None = None          # "" clears the webhook
+    webhook_url: str | None = Field(default=None, max_length=500)  # "" clears the webhook
     notify_min_severity: str | None = None  # info|low|medium|high|critical
+
+    @field_validator("webhook_url", mode="before")
+    @classmethod
+    def trim_url(cls, v): return v.strip() if isinstance(v, str) else v
 
 
 def _serialize(user: User) -> dict:
