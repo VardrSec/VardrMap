@@ -4,6 +4,7 @@ from typing import Any
 from fastapi import HTTPException
 
 from models import ReconItem, ScanItem
+from security import strip_html
 
 
 # Try JSONL first (newline-delimited, what most tools produce with -jsonl flags),
@@ -48,13 +49,13 @@ def parse_ffuf(items: list[dict[str, Any]], program_id: str) -> list[ReconItem]:
         out.append(ReconItem(
             program_id=program_id,
             source="ffuf",
-            url=url,
-            path=str(item.get("input", {}).get("FUZZ", "")),
+            url=strip_html(url),
+            path=strip_html(str(item.get("input", {}).get("FUZZ", ""))),
             status_code=item.get("status"),
             length=item.get("length"),
             words=item.get("words"),
             lines=item.get("lines"),
-            content_type=item.get("content-type") or item.get("content_type") or "",
+            content_type=strip_html(item.get("content-type") or item.get("content_type") or ""),
         ))
     return out
 
@@ -67,14 +68,14 @@ def parse_httpx(items: list[dict[str, Any]], program_id: str) -> list[ReconItem]
         out.append(ReconItem(
             program_id=program_id,
             source="httpx",
-            url=item.get("url") or "",
-            host=item.get("host") or "",
-            title=item.get("title") or "",
+            url=strip_html(item.get("url") or ""),
+            host=strip_html(item.get("host") or ""),
+            title=strip_html(item.get("title") or ""),
             status_code=item.get("status-code") or item.get("status_code"),
-            webserver=item.get("webserver") or "",
+            webserver=strip_html(item.get("webserver") or ""),
             port=str(item.get("port") or ""),
-            tech=tech_str,
-            content_type=item.get("content-type") or item.get("content_type") or "",
+            tech=strip_html(tech_str),
+            content_type=strip_html(item.get("content-type") or item.get("content_type") or ""),
         ))
     return out
 
@@ -87,15 +88,15 @@ def parse_nuclei(items: list[dict[str, Any]], program_id: str) -> list[ScanItem]
         out.append(ScanItem(
             program_id=program_id,
             source="nuclei",
-            template_id=item.get("template-id") or item.get("templateID") or "",
-            title=info.get("name") or item.get("matcher-name") or "Untitled Finding",
-            severity=info.get("severity") or "info",
-            asset=item.get("matched-at") or item.get("host") or "",
-            matched_at=item.get("matched-at") or "",
-            type=item.get("type") or "",
-            description=info.get("description") or "",
+            template_id=strip_html(item.get("template-id") or item.get("templateID") or ""),
+            title=strip_html(info.get("name") or item.get("matcher-name") or "Untitled Finding"),
+            severity=strip_html(info.get("severity") or "info"),
+            asset=strip_html(item.get("matched-at") or item.get("host") or ""),
+            matched_at=strip_html(item.get("matched-at") or ""),
+            type=strip_html(item.get("type") or ""),
+            description=strip_html(info.get("description") or ""),
             status="new",
-            cwe=",".join(classification.get("cwe-id")) if isinstance(classification.get("cwe-id"), list) else str(classification.get("cwe-id") or ""),
-            cvss=str(classification.get("cvss-score") or ""),
+            cwe=strip_html(",".join(classification.get("cwe-id")) if isinstance(classification.get("cwe-id"), list) else str(classification.get("cwe-id") or "")),
+            cvss=strip_html(str(classification.get("cvss-score") or "")),
         ))
     return out

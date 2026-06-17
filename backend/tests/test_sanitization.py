@@ -97,6 +97,18 @@ def test_submission_rejects_xss_platform_reference(client, auth_headers, program
     assert res.status_code == 422
 
 
+def test_parsers_strip_html_from_imported_tool_output():
+    from parsers import parse_httpx, parse_nuclei
+    recon = parse_httpx(
+        [{"url": "https://x.com", "title": "<script>alert(1)</script>Login", "webserver": "<b>nginx</b>"}], "p")
+    assert "<" not in recon[0].title and "Login" in recon[0].title
+    assert recon[0].webserver == "nginx"
+    scan = parse_nuclei(
+        [{"info": {"name": "<img src=x onerror=alert(1)>RCE", "severity": "high", "description": "<b>d</b>"}}], "p")
+    assert "<" not in scan[0].title and "RCE" in scan[0].title
+    assert "<" not in scan[0].description
+
+
 def test_event_handler_in_scope_value_rejected(client, auth_headers, program_id):
     res = client.post(
         f"/programs/{program_id}/scope/in",
