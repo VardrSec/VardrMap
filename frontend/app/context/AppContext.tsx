@@ -51,7 +51,7 @@ async function getFrontendSession(): Promise<AppSession | null> {
   } catch { return null; }
 }
 
-type AppContextValue = {
+export type AppContextValue = {
   state: AppState;
   selectedProgram: Program | null;
   authFetch: AuthFetch;
@@ -68,7 +68,7 @@ type AppContextValue = {
   dispatch: React.Dispatch<AppAction>;
 };
 
-const AppContext = createContext<AppContextValue | null>(null);
+export const AppContext = createContext<AppContextValue | null>(null);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [state, dispatch] = useReducer(appReducer, initialState);
