@@ -1,7 +1,7 @@
 import re
 import urllib.parse
 
-import bleach
+import nh3
 
 # Raw injection patterns checked BEFORE any stripping.
 # Detecting on raw input (not post-strip) catches obfuscated payloads
@@ -28,14 +28,16 @@ def _remove_null_bytes(value: str) -> str:
 
 
 def strip_html(value: str | None) -> str:
-    """Strip all HTML tags using bleach. Safe for long-form markdown fields.
+    """Strip all HTML tags using nh3. Safe for long-form markdown fields.
     Allows no tags — markdown syntax (**, `code`, #) is plain text and passes
-    through untouched. bleach handles obfuscated/nested tags that fool regex.
+    through untouched. nh3 (a maintained, Rust-based sanitizer; bleach is archived)
+    handles obfuscated/nested tags and also drops the *content* of dangerous tags
+    such as <script>/<style>, not just the markup.
     """
     if not value:
         return value or ""
     value = _remove_null_bytes(value)
-    return bleach.clean(value, tags=[], attributes={}, strip=True).strip()
+    return nh3.clean(value, tags=set()).strip()
 
 
 def sanitize_identifier(value: str | None) -> str:
@@ -50,7 +52,7 @@ def sanitize_identifier(value: str | None) -> str:
     raw = _remove_null_bytes(value)
     if _INJECT_RE.search(raw) or _EVENT_HANDLER_RE.search(raw):
         raise ValueError("Invalid characters in field")
-    return bleach.clean(raw, tags=[], attributes={}, strip=True).strip()
+    return nh3.clean(raw, tags=set()).strip()
 
 
 _ALLOWED_URL_SCHEMES = {"http", "https"}

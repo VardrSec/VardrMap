@@ -6,7 +6,7 @@ python-jose[cryptography]==3.5.0
 sqlalchemy==2.0.48
 psycopg[binary]==3.3.3
 python-dotenv==1.2.2
-bleach==6.3.0
+nh3==0.3.5
 slowapi==0.1.9
 alembic==1.18.4
 anthropic==0.109.2
