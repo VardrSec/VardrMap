@@ -12,6 +12,40 @@ def _upload(client, auth_headers, program_id, content: bytes, filename: str, too
     )
 
 
+def _httpx(client, auth_headers, program_id, items):
+    return _upload(client, auth_headers, program_id, json.dumps(items).encode(), "httpx.json", "httpx")
+
+
+def test_httpx_enriches_existing_host_not_duplicate(client, auth_headers, program_id):
+    # Subfinder-style discovery: a bare host with no live data.
+    r1 = _httpx(client, auth_headers, program_id, [{"url": "sub.example.com"}])
+    assert r1.status_code == 200
+    assert r1.json()["new_count"] == 1
+    assert r1.json()["updated_count"] == 0
+    # httpx live probe of the SAME host (full URL + live fields) — enrich, not duplicate.
+    r2 = _httpx(client, auth_headers, program_id,
+                [{"url": "https://sub.example.com", "status-code": 200, "title": "Login", "webserver": "nginx"}])
+    body = r2.json()
+    assert body["new_count"] == 0
+    assert body["updated_count"] == 1
+    assert body["program"]["recon_count"] == 1  # one asset, enriched — not two rows
+
+
+def test_httpx_new_host_inserts(client, auth_headers, program_id):
+    r = _httpx(client, auth_headers, program_id, [{"url": "https://fresh.example.com", "status-code": 200}])
+    assert r.json()["new_count"] == 1
+    assert r.json()["updated_count"] == 0
+
+
+def test_ffuf_paths_not_host_merged(client, auth_headers, program_id):
+    payload = json.dumps([
+        {"url": "https://example.com/admin", "status": 200},
+        {"url": "https://example.com/login", "status": 200},
+    ]).encode()
+    r = _upload(client, auth_headers, program_id, payload, "ffuf.json", "ffuf")
+    assert r.json()["new_count"] == 2  # ffuf paths are distinct assets, not collapsed by host
+
+
 def test_bad_extension_rejected(client, auth_headers, program_id):
     res = _upload(client, auth_headers, program_id, b'[]', "results.csv", "nuclei")
     assert res.status_code == 400
@@ -95,19 +129,18 @@ def test_httpx_dedup_new_items(client, auth_headers, program_id):
     assert data["new_count"] == 2
 
 
-def test_httpx_dedup_skips_seen_urls(client, auth_headers, program_id):
-    lines = "\n".join([
-        json.dumps({"url": "https://dedup-seen.example.com", "host": "dedup-seen.example.com", "status-code": 200}),
-    ])
+def test_httpx_reprobe_enriches_seen_host(client, auth_headers, program_id):
+    line = json.dumps({"url": "https://dedup-seen.example.com", "host": "dedup-seen.example.com", "status-code": 200})
     # First import — new
-    _upload(client, auth_headers, program_id, lines.encode(), "httpx.jsonl", "httpx", "application/x-ndjson")
+    _upload(client, auth_headers, program_id, line.encode(), "httpx.jsonl", "httpx", "application/x-ndjson")
 
-    # Second import of same URL — should be deduplicated
-    res = _upload(client, auth_headers, program_id, lines.encode(), "httpx.jsonl", "httpx", "application/x-ndjson")
+    # Second import of the same host — enriched in place, not duplicated.
+    res = _upload(client, auth_headers, program_id, line.encode(), "httpx.jsonl", "httpx", "application/x-ndjson")
     assert res.status_code == 200
     data = res.json()
     assert data["new_count"] == 0
-    assert data["imported_count"] == 0
+    assert data["updated_count"] == 1
+    assert data["imported_count"] == 1
 
 
 def test_httpx_dedup_partial_overlap(client, auth_headers, program_id):
@@ -117,13 +150,14 @@ def test_httpx_dedup_partial_overlap(client, auth_headers, program_id):
     # Seed existing
     _upload(client, auth_headers, program_id, existing_line.encode(), "httpx.json", "httpx", "application/json")
 
-    # Import mix — only the new URL should count
+    # Import mix — the new host is inserted, the seen host is enriched.
     combined = "\n".join([existing_line, new_line])
     res = _upload(client, auth_headers, program_id, combined.encode(), "httpx.jsonl", "httpx", "application/x-ndjson")
     assert res.status_code == 200
     data = res.json()
-    assert data["new_count"] == 1
-    assert data["imported_count"] == 1
+    assert data["new_count"] == 1       # dedup-new inserted
+    assert data["updated_count"] == 1   # dedup-old enriched in place
+    assert data["imported_count"] == 2
 
 
 def test_nuclei_import_returns_new_count_zero(client, auth_headers, program_id):

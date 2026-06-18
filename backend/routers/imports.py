@@ -68,6 +68,71 @@ def _dedup_recon(
     return new_items, len(new_items)
 
 
+def _host_of(value: str | None) -> str:
+    """Normalize a recon URL or bare hostname down to its host, so a host
+    discovered as ``sub.example.com`` and the same host later probed as
+    ``https://sub.example.com:443/`` map to one asset. Lowercased; scheme,
+    userinfo, port, and path stripped."""
+    s = (value or "").strip().lower()
+    if not s:
+        return ""
+    if "://" in s:
+        s = s.split("://", 1)[1]
+    s = s.split("/", 1)[0]   # drop path/query/fragment
+    s = s.split("@")[-1]     # drop userinfo
+    if s.startswith("["):    # IPv6 literal e.g. [::1]:443
+        return s.split("]", 1)[0] + "]"
+    return s.split(":", 1)[0]  # drop port
+
+
+# Live fields an httpx probe enriches on an existing recon row. Only non-empty
+# incoming values overwrite, so a re-probe never blanks out an already-set field.
+_HTTPX_ENRICH_FIELDS = ("url", "host", "title", "webserver", "port", "tech", "content_type")
+
+
+def _upsert_recon_httpx(
+    db: Session, incoming: list[ReconItem], program_id: str,
+) -> tuple[int, int]:
+    """Insert genuinely-new httpx hosts and ENRICH existing ones in place — matched
+    by normalized host — with live probe data, instead of inserting a duplicate
+    blank-ish row. This is what turns a subfinder-discovered host into an enriched
+    live row rather than a second entry. Returns (new_count, updated_count)."""
+    if not incoming:
+        return 0, 0
+
+    by_host: dict[str, ReconItem] = {}
+    for row in db.query(ReconItem).filter(
+        ReconItem.program_id == program_id,
+        ReconItem.source == "httpx",
+    ).all():
+        h = _host_of(row.host or row.url)
+        if h:
+            by_host.setdefault(h, row)
+
+    now = datetime.now(timezone.utc)
+    new_count = 0
+    updated_count = 0
+    for item in incoming:
+        host = _host_of(item.host or item.url)
+        target = by_host.get(host) if host else None
+        if target is not None and target is not item:
+            for field in _HTTPX_ENRICH_FIELDS:
+                value = getattr(item, field)
+                if value:
+                    setattr(target, field, value)
+            if item.status_code is not None:
+                target.status_code = item.status_code
+            updated_count += 1
+        else:
+            item.first_seen_at = now
+            db.add(item)
+            if host:
+                by_host[host] = item  # so later rows in this batch enrich, not duplicate
+            new_count += 1
+
+    return new_count, updated_count
+
+
 @router.post("/programs/{program_id}/imports")
 async def import_results(
     program_id: str,
@@ -94,6 +159,7 @@ async def import_results(
     items = normalize_to_list(parsed)
     imported_count = 0
     new_count = 0
+    updated_count = 0
 
     if tool_type == "ffuf":
         recon_items = parse_ffuf(items, program_id)
@@ -104,10 +170,8 @@ async def import_results(
 
     elif tool_type == "httpx":
         recon_items = parse_httpx(items, program_id)
-        new_items, new_count = _dedup_recon(db, recon_items, program_id, "httpx")
-        for r in new_items:
-            db.add(r)
-        imported_count = len(new_items)
+        new_count, updated_count = _upsert_recon_httpx(db, recon_items, program_id)
+        imported_count = new_count + updated_count
 
     elif tool_type == "nuclei":
         scan_items = parse_nuclei(items, program_id)
@@ -155,6 +219,7 @@ async def import_results(
         "message":       "Import complete",
         "imported_count": imported_count,
         "new_count":      new_count,
+        "updated_count":  updated_count,
         "import_record":  serialize_import_record(record),
         "program":        serialize_program(program, db),
     }
