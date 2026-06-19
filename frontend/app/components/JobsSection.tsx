@@ -75,7 +75,6 @@ export default function JobsSection({
 }: { programId: string; defaultTool?: string; prefillEpoch?: number; hideHeader?: boolean }) {
   const { authFetch, selectedProgram } = useAppContext();
   const scopeCount  = selectedProgram?.scope.in.length ?? 0;
-  const reconCount  = selectedProgram?.recon_count     ?? 0;
   const programName = selectedProgram?.name            ?? "Active Program";
 
   const [prefs, setPrefs] = useState<Prefs>(loadPrefs);
@@ -96,8 +95,13 @@ export default function JobsSection({
   const [activeId,      setActiveId]      = useState<string | null>(null);
   const [pulseKey,      setPulseKey]      = useState(0);
   const [toast,         setToast]         = useState<Toast | null>(null);
+  const [liveRecon,     setLiveRecon]     = useState<number | null>(null);
 
   const runnerOnline = runnerStatus?.online ?? false;
+  // Live recon count for the Composer's queue card — refreshed every poll so it
+  // reflects assets the runner just imported, not a stale program snapshot.
+  const reconCount = liveRecon ?? selectedProgram?.recon_count ?? 0;
+  useEffect(() => { setLiveRecon(null); }, [programId]);
 
   function flash(text: string) { setToast({ text, id: Date.now() }); }
   useEffect(() => {
@@ -111,9 +115,10 @@ export default function JobsSection({
 
   const loadJobs = useCallback(async () => {
     try {
-      const [jobsRes, statusRes] = await Promise.all([
+      const [jobsRes, statusRes, reconRes] = await Promise.all([
         authFetch(`/programs/${programId}/jobs`),
         authFetch(`/runner/status`),
+        authFetch(`/programs/${programId}/recon?limit=1`),
       ]);
       if (jobsRes.ok) {
         const data = await jobsRes.json();
@@ -125,6 +130,10 @@ export default function JobsSection({
       if (statusRes.ok) {
         const rs: RunnerStatus = await statusRes.json();
         setRunnerStatus(rs);
+      }
+      if (reconRes.ok) {
+        const rd = await reconRes.json();
+        setLiveRecon(rd.total ?? 0);
       }
       setLastPoll(new Date().toISOString());
       setPulseKey((k) => k + 1);

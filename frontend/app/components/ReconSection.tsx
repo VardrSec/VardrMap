@@ -113,7 +113,7 @@ export default function ReconSection({ programId, hideHeader }: { programId: str
                   <div className="text-sm font-medium text-[#f1f5f9]">{item.url || item.host || "Unknown"}</div>
                   <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-[#52525b]">
                     <span>Server: <span className="text-[#6b7280]">{item.webserver || "—"}</span></span>
-                    <span>Tech: <span className="text-[#6b7280]">{Array.isArray(item.tech) ? item.tech.join(", ") || "—" : "—"}</span></span>
+                    <span>Tech: <span className="text-[#6b7280]">{Array.isArray(item.tech) ? (item.tech.join(", ") || "—") : (item.tech || "—")}</span></span>
                     <span>L/W/Li: <span className="font-mono text-[#6b7280]">{item.length || 0}/{item.words || 0}/{item.lines || 0}</span></span>
                   </div>
                 </div>

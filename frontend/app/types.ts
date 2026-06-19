@@ -3,7 +3,7 @@ export type ImportRecord = { id: string; tool_type: string; filename: string; im
 export type ReconItem = {
   id: string; source: string; url?: string; path?: string; host?: string;
   title?: string; status_code?: number; webserver?: string; port?: string | number;
-  tech?: string[]; length?: number; words?: number; lines?: number;
+  tech?: string | string[]; length?: number; words?: number; lines?: number;
   content_type?: string; notes?: string;
 };
 export type ScanItem = {

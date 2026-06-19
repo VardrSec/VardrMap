@@ -46,6 +46,15 @@ def test_ffuf_paths_not_host_merged(client, auth_headers, program_id):
     assert r.json()["new_count"] == 2  # ffuf paths are distinct assets, not collapsed by host
 
 
+def test_recon_lists_enriched_rows_first(client, auth_headers, program_id):
+    # A bare discovered host (no status) and a probed host (has status).
+    _httpx(client, auth_headers, program_id, [{"url": "bare.example.com"}])
+    _httpx(client, auth_headers, program_id,
+           [{"url": "https://live.example.com", "host": "live.example.com", "status-code": 200}])
+    rows = client.get(f"/programs/{program_id}/recon", headers=auth_headers).json()["recon"]
+    assert rows[0]["status_code"] == 200  # enriched/live row surfaced first
+
+
 def test_bad_extension_rejected(client, auth_headers, program_id):
     res = _upload(client, auth_headers, program_id, b'[]', "results.csv", "nuclei")
     assert res.status_code == 400

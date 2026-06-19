@@ -43,9 +43,16 @@ export default function DashboardSection({ program }: { program: Program }) {
     try {
       const res = await authFetch(`/programs/${program.id}/imports`, { method: "POST", body: formData });
       if (!res.ok) throw new Error();
+      const data = await res.json().catch(() => ({}));
       setImportFile(null);
       await refreshSelectedProgram(program.id);
-      setMessage("Import complete.");
+      const newCount = data.new_count ?? 0;
+      const updatedCount = data.updated_count ?? 0;
+      setMessage(
+        toolType === "httpx"
+          ? `Import complete — ${newCount} new, ${updatedCount} enriched.`
+          : `Import complete — ${data.imported_count ?? 0} imported.`,
+      );
     } catch { setMessage("Import failed."); } finally { setImporting(false); }
   }
 

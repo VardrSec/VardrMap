@@ -35,5 +35,12 @@ def get_recon(
     if status_code is not None:
         query = query.filter(ReconItem.status_code == status_code)
     total = query.count()
-    items = query.order_by(ReconItem.id).offset(offset).limit(limit).all()
+    # Surface enriched/live rows first: a probed host (has a status_code) outranks a
+    # bare discovered host, so the Review page doesn't lead with blank rows.
+    items = (
+        query.order_by(ReconItem.status_code.is_(None), ReconItem.id)
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
     return {"recon": [serialize_recon_item(r) for r in items], "total": total, "offset": offset, "limit": limit}
