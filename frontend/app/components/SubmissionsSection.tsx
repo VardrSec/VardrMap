@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useState } from "react";
-import { Program, Submission } from "../types";
+import { Finding, Program, Submission } from "../types";
 import { useAppContext } from "../context/AppContext";
 
 type SubmissionStatus = "submitted" | "triaged" | "accepted" | "duplicate" | "na" | "paid" | "rejected";
@@ -49,7 +49,7 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 export default function SubmissionsSection({ program }: { program: Program }) {
-  const { authFetch, setMessage, state: { submissionPrefill }, dispatch } = useAppContext();
+  const { authFetch, setMessage, navigate, state: { submissionPrefill }, dispatch } = useAppContext();
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loading,     setLoading]     = useState(true);
   const [showForm,    setShowForm]    = useState(false);
@@ -57,6 +57,7 @@ export default function SubmissionsSection({ program }: { program: Program }) {
   const [editingId,   setEditingId]   = useState<string | null>(null);
   const [editForm,    setEditForm]    = useState<Partial<typeof EMPTY_FORM & { payout_usd: string }>>({});
   const [saving,      setSaving]      = useState(false);
+  const [findings,    setFindings]    = useState<Finding[]>([]);
 
   const load = useCallback(async () => {
     try {
@@ -82,6 +83,14 @@ export default function SubmissionsSection({ program }: { program: Program }) {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [submissionPrefill]);
+
+  // Load findings lazily the first time the form opens so the picker is populated.
+  useEffect(() => {
+    if (!showForm || findings.length > 0) return;
+    void authFetch(`/programs/${program.id}/findings?limit=200&offset=0`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (d?.findings) setFindings(d.findings as Finding[]); });
+  }, [showForm, findings.length, authFetch, program.id]);
 
   async function create() {
     if (!form.title.trim()) return;
@@ -313,6 +322,18 @@ export default function SubmissionsSection({ program }: { program: Program }) {
                 ))}
               </select>
             </div>
+            <div>
+              <label className="mb-1 block text-[10px] font-semibold uppercase tracking-widest text-[#52525b]">Linked Finding</label>
+              <select
+                className="w-full rounded-md border border-[#2e2e2e] bg-[#161616] px-3 py-2 text-sm text-[#f1f5f9] focus:border-[#f59e0b] focus:outline-none"
+                value={form.finding_id}
+                onChange={(e) => setForm({ ...form, finding_id: e.target.value })}>
+                <option value="">— none —</option>
+                {findings.map((f) => (
+                  <option key={f.id} value={f.id}>{f.title} ({f.severity})</option>
+                ))}
+              </select>
+            </div>
           </div>
           <div>
             <label className="mb-1 block text-[10px] font-semibold uppercase tracking-widest text-[#52525b]">Notes</label>
@@ -354,7 +375,16 @@ export default function SubmissionsSection({ program }: { program: Program }) {
               {submissions.map((s) => (
                 <Fragment key={s.id}>
                   <tr className="bg-[#161616] transition hover:bg-[#1a1a1a]">
-                    <td className="px-4 py-3 text-[#f1f5f9] font-medium max-w-[200px] truncate">{s.title || "—"}</td>
+                    <td className="px-4 py-3 max-w-[200px]">
+                      <div className="font-medium text-[#f1f5f9] truncate">{s.title || "—"}</div>
+                      {s.finding_id && (
+                        <button
+                          onClick={() => navigate("findings")}
+                          className="mt-0.5 font-mono text-[10px] text-[#f59e0b] hover:underline">
+                          ↗ finding
+                        </button>
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-[#94a3b8] font-mono text-xs">{s.platform || "—"}</td>
                     <td className="px-4 py-3">
                       {s.severity

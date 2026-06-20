@@ -4,6 +4,7 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 | Version | Date | Summary |
 |---|---|---|
+| [v0.19.9](changelog/v0.19.9.md) | 2026-06-20 | Submissions: linked finding picker in form, ↗ finding badge in table row |
 | [v0.19.8](changelog/v0.19.8.md) | 2026-06-20 | Frontend section tests — FindingsSection (5), SubmissionsSection (5), JobsSection (4); 70 tests total |
 | [v0.19.7](changelog/v0.19.7.md) | 2026-06-20 | TypeScript 6 upgrade — fix tsconfig.test.json rootDir + ignoreDeprecations, migrate jest.config globals→transform |
 | [v0.19.6](changelog/v0.19.6.md) | 2026-06-20 | Runner-scoped service uploads, settings scope/last-used display, React key fix, docs corrections |
