@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ReconItem } from "../types";
 import { useAppContext } from "../context/AppContext";
 import { Panel, SectionHeader } from "./ui";
+import HostDetailPanel from "./HostDetailPanel";
 
 const PAGE_SIZE = 100;
 
@@ -18,6 +19,7 @@ export default function ReconSection({ programId, hideHeader }: { programId: str
   const [loading,      setLoading]      = useState(false);
   const [search,       setSearch]       = useState("");
   const [searchInput,  setSearchInput]  = useState("");
+  const [detailItem,   setDetailItem]   = useState<ReconItem | null>(null);
 
   // replace=true on initial load or program/search change; false for "Load more"
   const load = useCallback(async (off: number, replace: boolean, q: string) => {
@@ -47,6 +49,14 @@ export default function ReconSection({ programId, hideHeader }: { programId: str
 
   return (
     <div className="space-y-7">
+      {detailItem && (
+        <HostDetailPanel
+          key={detailItem.id}
+          programId={programId}
+          item={detailItem}
+          onClose={() => setDetailItem(null)}
+        />
+      )}
       {!hideHeader && <SectionHeader title="Recon" description="Review discovered subdomains, endpoints, paths, and technologies." />}
 
       <form onSubmit={handleSearch} className="flex gap-2">
@@ -84,7 +94,10 @@ export default function ReconSection({ programId, hideHeader }: { programId: str
                   </thead>
                   <tbody>
                     {items.map((item, i) => (
-                      <tr key={item.id} className={`border-b border-[#161616] ${i % 2 === 0 ? "" : "bg-[#1a1a1a]/40"}`}>
+                      <tr
+                        key={item.id}
+                        onClick={() => setDetailItem(item)}
+                        className={`cursor-pointer border-b border-[#161616] transition hover:bg-[#1f1f1f] ${i % 2 === 0 ? "" : "bg-[#1a1a1a]/40"}`}>
                         <td className="py-2.5 pr-4 font-mono text-[#52525b]">{item.source}</td>
                         <td className="py-2.5 pr-4 max-w-[180px] truncate text-[#f1f5f9]">{item.url || item.host || "—"}</td>
                         <td className="py-2.5 pr-4 max-w-[160px] truncate text-[#6b7280]">{item.path || item.title || "—"}</td>
