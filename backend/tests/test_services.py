@@ -6,6 +6,7 @@ Coverage:
 - Delete — success, wrong-user 404, nonexistent 404
 - BOLA: unauthorized 401, wrong-user 404 on all endpoints
 - Cascade: services are deleted when program is deleted
+- Scope: runner-scoped key can POST, cannot GET or DELETE
 """
 
 import pytest
@@ -187,6 +188,45 @@ class TestLastScannedAt:
 
         # Timestamps should differ — upsert stamps a new value
         assert second_ts >= first_ts
+
+
+# ---------------------------------------------------------------------------
+# Scope enforcement — runner-scoped keys
+# ---------------------------------------------------------------------------
+
+class TestRunnerScopeServices:
+    def _runner_headers(self, client, auth_headers):
+        res = client.post("/auth/apikeys", json={"scope": "runner"}, headers=auth_headers)
+        return res.json()["token"], res.json()["id"]
+
+    def test_runner_key_can_post_services(self, client, program_id, auth_headers):
+        token, key_id = self._runner_headers(client, auth_headers)
+        try:
+            res = _bulk_create(client, program_id, {"Authorization": f"Bearer {token}"})
+            assert res.status_code == 201
+        finally:
+            client.delete(f"/auth/apikeys/{key_id}", headers=auth_headers)
+
+    def test_runner_key_cannot_get_services(self, client, program_id, auth_headers):
+        token, key_id = self._runner_headers(client, auth_headers)
+        try:
+            res = client.get(f"/programs/{program_id}/services",
+                             headers={"Authorization": f"Bearer {token}"})
+            assert res.status_code == 403
+        finally:
+            client.delete(f"/auth/apikeys/{key_id}", headers=auth_headers)
+
+    def test_runner_key_cannot_delete_service(self, client, program_id, auth_headers):
+        _bulk_create(client, program_id, auth_headers)
+        svc_id = client.get(f"/programs/{program_id}/services",
+                            headers=auth_headers).json()["services"][0]["id"]
+        token, key_id = self._runner_headers(client, auth_headers)
+        try:
+            res = client.delete(f"/programs/{program_id}/services/{svc_id}",
+                                headers={"Authorization": f"Bearer {token}"})
+            assert res.status_code == 403
+        finally:
+            client.delete(f"/auth/apikeys/{key_id}", headers=auth_headers)
 
 
 # ---------------------------------------------------------------------------

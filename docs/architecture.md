@@ -288,7 +288,7 @@ Each section component fetches its own full data set with a separate request whe
 
 ### Navigation Model
 
-The sidebar exposes **7 top-level sections** mapped to the bug bounty workflow:
+The sidebar exposes **8 top-level sections** mapped to the bug bounty workflow:
 
 | Section | `Section` value | What it shows |
 |---|---|---|
@@ -298,9 +298,10 @@ The sidebar exposes **7 top-level sections** mapped to the bug bounty workflow:
 | Review | `"review"` | Recon / Scans / Manual / Services tab switcher |
 | Findings | `"findings"` | Finding log with severity, status, promote-to-report flow |
 | Reports | `"reports"` | Report drafting and PDF export |
-| Settings | `"settings"` | API key management |
+| Submissions | `"submissions"` | Bug bounty submission tracker with payout analytics |
+| Settings | `"settings"` | API key management and webhook notifications |
 
-`DashboardSection` and `ReviewSection` are thin tab containers. They render child section components (`JobsSection`, `ReconSection`, etc.) with `hideHeader={true}` to suppress duplicate section headings. The `Section` type union in `frontend/app/types.ts` has exactly these 7 values.
+`DashboardSection` and `ReviewSection` are thin tab containers. They render child section components (`JobsSection`, `ReconSection`, etc.) with `hideHeader={true}` to suppress duplicate section headings. The `Section` type union in `frontend/app/types.ts` has exactly these 8 values.
 
 **Deep-link navigation** — the Overview quick-action buttons dispatch `NAVIGATE_TO_DASHBOARD` which sets `state.dashboardPrefill = { tool?, tab? }` and navigates to `"dashboard"`. `DashboardSection` consumes the prefill via `useEffect`, increments `prefillEpoch` (so `Composer` remounts even when the same tool is clicked twice), sets the active tab and forwards `defaultTool` to `JobsSection` → `Composer`, then dispatches `DASHBOARD_PREFILL_CONSUMED`.
 

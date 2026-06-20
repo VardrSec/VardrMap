@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from db import get_db
-from deps import get_current_user, get_program_or_404, log_action
+from deps import get_current_user, get_program_or_404, log_action, require_full_scope
 from models import Service
 
 router = APIRouter(tags=["services"])
@@ -47,7 +47,7 @@ def serialize_service(s: Service) -> dict:
 @router.get("/programs/{program_id}/services")
 def list_services(
     program_id: str,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_full_scope),
     db: Session = Depends(get_db),
 ):
     get_program_or_404(program_id, current_user, db)
@@ -120,7 +120,7 @@ def bulk_create_services(
 def delete_service(
     program_id: str,
     service_id: str,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_full_scope),
     db: Session = Depends(get_db),
 ):
     get_program_or_404(program_id, current_user, db)

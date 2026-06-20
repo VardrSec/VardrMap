@@ -753,6 +753,8 @@ Frontend polls this to stream job lifecycle events into the Terminal. Returns al
 
 Open ports and services discovered by nmap. All endpoints are BOLA-scoped: the program must belong to the authenticated user.
 
+**Scope requirements:** `POST /services` accepts runner-scoped API keys (VardrRunner posts nmap results here). `GET` and `DELETE` require a full-scope key or browser JWT.
+
 A service object looks like:
 ```json
 {

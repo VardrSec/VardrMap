@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import { Program, Submission } from "../types";
 import { useAppContext } from "../context/AppContext";
 
@@ -352,8 +352,8 @@ export default function SubmissionsSection({ program }: { program: Program }) {
             </thead>
             <tbody className="divide-y divide-[#2e2e2e]">
               {submissions.map((s) => (
-                <>
-                  <tr key={s.id} className="bg-[#161616] transition hover:bg-[#1a1a1a]">
+                <Fragment key={s.id}>
+                  <tr className="bg-[#161616] transition hover:bg-[#1a1a1a]">
                     <td className="px-4 py-3 text-[#f1f5f9] font-medium max-w-[200px] truncate">{s.title || "—"}</td>
                     <td className="px-4 py-3 text-[#94a3b8] font-mono text-xs">{s.platform || "—"}</td>
                     <td className="px-4 py-3">
@@ -433,7 +433,7 @@ export default function SubmissionsSection({ program }: { program: Program }) {
                       </td>
                     </tr>
                   )}
-                </>
+                </Fragment>
               ))}
             </tbody>
           </table>

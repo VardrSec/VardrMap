@@ -187,11 +187,25 @@ export default function SettingsSection() {
             {keys.map((key) => (
               <div key={key.id} className="flex items-center justify-between rounded-lg border border-[#2e2e2e] bg-[#161616] px-4 py-3">
                 <div>
-                  <div className="text-sm text-[#f1f5f9]">
-                    {key.label || <span className="italic text-[#52525b]">unlabeled</span>}
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-[#f1f5f9]">
+                      {key.label || <span className="italic text-[#52525b]">unlabeled</span>}
+                    </span>
+                    <span className={`rounded px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-widest ${
+                      key.scope === "runner"
+                        ? "bg-[#f59e0b12] text-[#f59e0b]"
+                        : "bg-[#6b7280]/10 text-[#6b7280]"
+                    }`}>
+                      {key.scope === "runner" ? "runner" : "full"}
+                    </span>
                   </div>
                   <div className="mt-0.5 font-mono text-xs text-[#52525b]">
                     Created {key.created_at ? new Date(key.created_at).toLocaleDateString() : "—"}
+                    {key.last_used_at && (
+                      <span className="ml-3">
+                        Last used {new Date(key.last_used_at).toLocaleDateString()}
+                      </span>
+                    )}
                   </div>
                 </div>
                 <DangerButton onClick={() => revoke(key.id)} label="Revoke" small />
