@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from db import get_db
@@ -33,20 +33,25 @@ def serialize(s: Submission) -> dict:
 @router.get("/programs/{program_id}/submissions")
 def list_submissions(
     program_id: str,
+    status: str = Query(default=""),
+    platform: str = Query(default=""),
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     # Use program.owner_github_id so members see the owner's submissions too
     program = get_program_or_404(program_id, current_user, db)
-    rows = (
+    query = (
         db.query(Submission)
         .filter(
             Submission.program_id == program_id,
             Submission.owner_github_id == program.owner_github_id,
         )
-        .order_by(Submission.created_at.desc())
-        .all()
     )
+    if status:
+        query = query.filter(Submission.status == status)
+    if platform:
+        query = query.filter(Submission.platform.ilike(f"%{platform}%"))
+    rows = query.order_by(Submission.created_at.desc()).all()
     return {"submissions": [serialize(s) for s in rows], "total": len(rows)}
 
 

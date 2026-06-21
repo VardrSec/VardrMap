@@ -28,23 +28,38 @@ function FindingForm({ value, onChange }: { value: FindingFormState; onChange: (
 
 export default function FindingsSection({ program }: { program: Program }) {
   const {
-    authFetch, setMessage, refreshSelectedProgram, promoteToReport,
+    authFetch, setMessage, refreshSelectedProgram, promoteToReport, navigate,
     state: { findingPrefill }, dispatch,
   } = useAppContext();
-  const [findings,    setFindings]    = useState<Finding[]>([]);
-  const [total,       setTotal]       = useState(0);
-  const [offset,      setOffset]      = useState(0);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [form,        setForm]        = useState<FindingFormState>(EMPTY);
-  const [editingId,   setEditingId]   = useState<string | null>(null);
-  const [editForm,    setEditForm]    = useState<FindingFormState>(EMPTY);
-  const [suggesting,  setSuggesting]  = useState<string | null>(null);
+
+  function logSubmission(finding: Finding) {
+    dispatch({ type: "PROMOTE_TO_SUBMISSION", prefill: { title: finding.title, report_id: "", finding_id: finding.id } });
+    navigate("submissions");
+  }
+  const [findings,      setFindings]      = useState<Finding[]>([]);
+  const [total,         setTotal]         = useState(0);
+  const [offset,        setOffset]        = useState(0);
+  const [loadingMore,   setLoadingMore]   = useState(false);
+  const [form,          setForm]          = useState<FindingFormState>(EMPTY);
+  const [editingId,     setEditingId]     = useState<string | null>(null);
+  const [editForm,      setEditForm]      = useState<FindingFormState>(EMPTY);
+  const [suggesting,    setSuggesting]    = useState<string | null>(null);
+  const [searchInput,   setSearchInput]   = useState("");
+  const [search,        setSearch]        = useState("");
+  const [severityFilter, setSeverityFilter] = useState("");
 
   const PAGE = 50;
 
-  const loadFindings = useCallback(async () => {
+  function buildParams(off: number, q: string, sev: string) {
+    const p = new URLSearchParams({ limit: String(PAGE), offset: String(off) });
+    if (q)   p.set("search",   q);
+    if (sev) p.set("severity", sev);
+    return p.toString();
+  }
+
+  const loadFindings = useCallback(async (q: string, sev: string) => {
     try {
-      const res = await authFetch(`/programs/${program.id}/findings?limit=${PAGE}&offset=0`);
+      const res = await authFetch(`/programs/${program.id}/findings?${buildParams(0, q, sev)}`);
       if (!res.ok) throw new Error();
       const data = await res.json();
       setFindings(Array.isArray(data?.findings) ? data.findings : []);
@@ -57,7 +72,7 @@ export default function FindingsSection({ program }: { program: Program }) {
     const next = offset + PAGE;
     setLoadingMore(true);
     try {
-      const res = await authFetch(`/programs/${program.id}/findings?limit=${PAGE}&offset=${next}`);
+      const res = await authFetch(`/programs/${program.id}/findings?${buildParams(next, search, severityFilter)}`);
       if (!res.ok) throw new Error();
       const data = await res.json();
       setFindings((prev) => [...prev, ...(Array.isArray(data?.findings) ? data.findings : [])]);
@@ -65,7 +80,7 @@ export default function FindingsSection({ program }: { program: Program }) {
     } catch { setMessage("Failed to load more findings."); } finally { setLoadingMore(false); }
   }
 
-  useEffect(() => { void loadFindings(); }, [loadFindings]);
+  useEffect(() => { void loadFindings(search, severityFilter); }, [loadFindings, search, severityFilter]);
 
   // Apply the prefill from a promoted scan, then immediately clear it from the
   // reducer. If we didn't clear it, navigating away and back would re-apply the
@@ -83,7 +98,7 @@ export default function FindingsSection({ program }: { program: Program }) {
       const res = await authFetch(`/programs/${program.id}/findings`, { method: "POST", body: JSON.stringify(form) });
       if (!res.ok) throw new Error();
       setForm(EMPTY);
-      await loadFindings();
+      await loadFindings(search, severityFilter);
       await refreshSelectedProgram(program.id);
       setMessage("Finding added.");
     } catch { setMessage("Failed to add finding."); }
@@ -92,7 +107,7 @@ export default function FindingsSection({ program }: { program: Program }) {
   async function deleteFinding(findingId: string) {
     try {
       await authFetch(`/programs/${program.id}/findings/${findingId}`, { method: "DELETE" });
-      await loadFindings();
+      await loadFindings(search, severityFilter);
       await refreshSelectedProgram(program.id);
       setMessage("Finding deleted.");
     } catch { setMessage("Failed to delete finding."); }
@@ -108,7 +123,7 @@ export default function FindingsSection({ program }: { program: Program }) {
       const res = await authFetch(`/programs/${program.id}/findings/${findingId}`, { method: "PATCH", body: JSON.stringify(editForm) });
       if (!res.ok) throw new Error();
       setEditingId(null);
-      await loadFindings();
+      await loadFindings(search, severityFilter);
       await refreshSelectedProgram(program.id);
       setMessage("Finding updated.");
     } catch { setMessage("Failed to update finding."); }
@@ -150,8 +165,36 @@ export default function FindingsSection({ program }: { program: Program }) {
           </div>
         </Panel>
         <Panel title={`Finding Tracker${total > 0 ? ` (${total})` : ""}`}>
+          <form
+            onSubmit={(e) => { e.preventDefault(); setSearch(searchInput); }}
+            className="mb-4 flex gap-2">
+            <input
+              className="flex-1 rounded-md border border-[#2e2e2e] bg-[#161616] px-3 py-2 text-sm text-[#f1f5f9] placeholder-[#3a3a3a] focus:border-[#f59e0b] focus:outline-none"
+              placeholder="Search title or asset…"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+            />
+            <select
+              className="rounded-md border border-[#2e2e2e] bg-[#161616] px-3 py-2 text-sm text-[#f1f5f9] focus:border-[#f59e0b] focus:outline-none"
+              value={severityFilter}
+              onChange={(e) => { setSeverityFilter(e.target.value); }}>
+              <option value="">All severities</option>
+              {["critical", "high", "medium", "low", "info"].map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+            <button type="submit" className="rounded-md border border-[#2e2e2e] px-4 py-2 text-xs text-[#52525b] transition hover:text-[#94a3b8]">
+              Search
+            </button>
+            {(search || severityFilter) && (
+              <button type="button" onClick={() => { setSearch(""); setSearchInput(""); setSeverityFilter(""); }}
+                className="rounded-md border border-[#2e2e2e] px-4 py-2 text-xs text-[#52525b] transition hover:text-[#94a3b8]">
+                Clear
+              </button>
+            )}
+          </form>
           {findings.length === 0 ? (
-            <p className="text-sm text-[#3a3a3a]">No findings yet.</p>
+            <p className="text-sm text-[#3a3a3a]">{search || severityFilter ? "No findings match that filter." : "No findings yet."}</p>
           ) : (
             <div className="space-y-3">
               {findings.map((finding) =>
@@ -188,6 +231,9 @@ export default function FindingsSection({ program }: { program: Program }) {
                           title="Use Claude AI to draft CVSS, impact, and remediation"
                           className="rounded-md border border-[#2e2e2e] px-2.5 py-1 text-xs text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#a6e3a1] disabled:opacity-40">
                           {suggesting === finding.id ? "…" : "AI Suggest"}
+                        </button>
+                        <button onClick={() => logSubmission(finding)} className="rounded-md border border-[#2e2e2e] px-2.5 py-1 text-xs text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#a6e3a1]">
+                          Log Submission →
                         </button>
                         <button onClick={() => promoteToReport(finding)} className="rounded-md border border-[#2e2e2e] px-2.5 py-1 text-xs text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#94a3b8]">
                           Draft Report →

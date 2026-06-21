@@ -4,6 +4,7 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 | Version | Date | Summary |
 |---|---|---|
+| [v0.20.1](changelog/v0.20.1.md) | 2026-06-20 | Dashboard stats, findings search+severity filter, submissions status+platform filter, finding→submission promotion |
 | [v0.20.0](changelog/v0.20.0.md) | 2026-06-20 | Recon host detail panel — services, vulnerabilities, findings joined by host |
 | [v0.19.9](changelog/v0.19.9.md) | 2026-06-20 | Submissions: linked finding picker in form, ↗ finding badge in table row |
 | [v0.19.8](changelog/v0.19.8.md) | 2026-06-20 | Frontend section tests — FindingsSection (5), SubmissionsSection (5), JobsSection (4); 70 tests total |

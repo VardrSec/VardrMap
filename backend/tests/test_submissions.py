@@ -129,3 +129,22 @@ def test_list_unauthorized(client, program_id):
 def test_create_unauthorized(client, program_id):
     res = client.post(f"/programs/{program_id}/submissions", json=_SUB)
     assert res.status_code == 401
+
+
+def test_list_submissions_status_filter(client, auth_headers, program_id):
+    client.post(f"/programs/{program_id}/submissions", json=_SUB, headers=auth_headers)
+    client.post(f"/programs/{program_id}/submissions", json={**_SUB, "status": "accepted"}, headers=auth_headers)
+    res = client.get(f"/programs/{program_id}/submissions?status=accepted", headers=auth_headers)
+    assert res.status_code == 200
+    data = res.json()
+    assert all(s["status"] == "accepted" for s in data["submissions"])
+    assert not any(s["status"] == "submitted" for s in data["submissions"])
+
+
+def test_list_submissions_platform_filter(client, auth_headers, program_id):
+    client.post(f"/programs/{program_id}/submissions", json=_SUB, headers=auth_headers)
+    client.post(f"/programs/{program_id}/submissions", json={**_SUB, "platform": "Bugcrowd"}, headers=auth_headers)
+    res = client.get(f"/programs/{program_id}/submissions?platform=bugcrowd", headers=auth_headers)
+    assert res.status_code == 200
+    data = res.json()
+    assert all("bugcrowd" in s["platform"].lower() for s in data["submissions"])

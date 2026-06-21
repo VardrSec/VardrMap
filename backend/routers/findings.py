@@ -18,11 +18,18 @@ def get_findings(
     program_id: str,
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
+    search: str = Query(default=""),
+    severity: str = Query(default=""),
     current_user: dict[str, str] = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     get_program_or_404(program_id, current_user, db)
     query = db.query(Finding).filter(Finding.program_id == program_id)
+    if search:
+        like = f"%{search}%"
+        query = query.filter(Finding.title.ilike(like) | Finding.asset.ilike(like))
+    if severity:
+        query = query.filter(Finding.severity == severity)
     total = query.count()
     findings = query.order_by(Finding.created_at.desc()).offset(offset).limit(limit).all()
     return {"findings": [serialize_finding(f) for f in findings], "total": total, "offset": offset, "limit": limit}

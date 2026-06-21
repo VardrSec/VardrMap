@@ -8,11 +8,21 @@ import JobsSection from "./JobsSection";
 
 type RunTab = "jobs" | "import";
 
+type Stats = {
+  findings_total: number;
+  findings_by_severity: Record<string, number>;
+  submissions_total: number;
+  submissions_accepted: number;
+  submissions_paid: number;
+  recon_total: number;
+};
+
 export default function DashboardSection({ program }: { program: Program }) {
-  const { state, dispatch, authFetch, setMessage, refreshSelectedProgram } = useAppContext();
+  const { state, dispatch, authFetch, setMessage, refreshSelectedProgram, navigate } = useAppContext();
 
   const [activeTab,   setActiveTab]   = useState<RunTab>("jobs");
   const [prefillTool, setPrefillTool] = useState<string | undefined>(undefined);
+  const [stats,       setStats]       = useState<Stats | null>(null);
   const [prefillEpoch, setPrefillEpoch] = useState(0);
 
   useEffect(() => {
@@ -28,6 +38,30 @@ export default function DashboardSection({ program }: { program: Program }) {
     }
     dispatch({ type: "DASHBOARD_PREFILL_CONSUMED" });
   }, [state.dashboardPrefill, dispatch]);
+
+  useEffect(() => {
+    void Promise.all([
+      authFetch(`/programs/${program.id}/findings?limit=1&offset=0`),
+      authFetch(`/programs/${program.id}/submissions`),
+      authFetch(`/programs/${program.id}/recon?limit=1`),
+    ]).then(async ([fRes, sRes, rRes]) => {
+      const fData = fRes.ok ? await fRes.json() : null;
+      const sData = sRes.ok ? await sRes.json() : null;
+      const rData = rRes.ok ? await rRes.json() : null;
+      const subs: { severity: string }[] = fData?.findings ?? [];
+      const allSubs: { status: string }[] = sData?.submissions ?? [];
+      const bySev: Record<string, number> = {};
+      subs.forEach((f) => { bySev[f.severity] = (bySev[f.severity] ?? 0) + 1; });
+      setStats({
+        findings_total:        fData?.total ?? 0,
+        findings_by_severity:  bySev,
+        submissions_total:     sData?.total ?? allSubs.length,
+        submissions_accepted:  allSubs.filter((s) => s.status === "accepted" || s.status === "paid").length,
+        submissions_paid:      allSubs.filter((s) => s.status === "paid").length,
+        recon_total:           rData?.total ?? 0,
+      });
+    });
+  }, [program.id, authFetch]);
 
   const [toolType,    setToolType]    = useState("ffuf");
   const [importFile,  setImportFile]  = useState<File | null>(null);
@@ -80,6 +114,45 @@ export default function DashboardSection({ program }: { program: Program }) {
           ))}
         </div>
       </div>
+
+      {/* Program stats */}
+      {stats && (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {[
+            { label: "Recon assets",  value: stats.recon_total,          section: "review"      as const },
+            { label: "Findings",      value: stats.findings_total,        section: "findings"    as const },
+            { label: "Accepted",      value: stats.submissions_accepted,  section: "submissions" as const },
+            { label: "Paid",          value: stats.submissions_paid,      section: "submissions" as const },
+          ].map(({ label, value, section }) => (
+            <button
+              key={label}
+              onClick={() => navigate(section)}
+              className="group flex flex-col items-start rounded-xl border border-[#2e2e2e] bg-[#161616] px-4 py-3 text-left transition hover:border-[#3a3a3a]">
+              <span className="font-mono text-2xl font-bold text-[#f1f5f9]">{value}</span>
+              <span className="mt-0.5 text-[10px] font-semibold uppercase tracking-widest text-[#52525b] group-hover:text-[#6b7280]">{label}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {stats && stats.findings_total > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {["critical", "high", "medium", "low", "info"]
+            .filter((sev) => stats.findings_by_severity[sev])
+            .map((sev) => {
+              const COLOR: Record<string, string> = { critical: "text-[#f38ba8]", high: "text-[#fab387]", medium: "text-[#f9e2af]", low: "text-[#89b4fa]", info: "text-[#74c7ec]" };
+              return (
+                <button
+                  key={sev}
+                  onClick={() => navigate("findings")}
+                  className="flex items-center gap-1.5 rounded-full border border-[#2e2e2e] bg-[#161616] px-3 py-1 text-xs transition hover:border-[#3a3a3a]">
+                  <span className={`font-mono font-semibold ${COLOR[sev]}`}>{stats.findings_by_severity[sev]}</span>
+                  <span className="text-[#52525b]">{sev}</span>
+                </button>
+              );
+            })}
+        </div>
+      )}
 
       {activeTab === "jobs" && (
         <JobsSection programId={program.id} defaultTool={prefillTool} prefillEpoch={prefillEpoch} hideHeader />

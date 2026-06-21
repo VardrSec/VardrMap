@@ -51,6 +51,25 @@ def test_list_findings_for_own_program(client, auth_headers, program_id):
     assert any(f["title"] == _FINDING["title"] for f in data["findings"])
 
 
+def test_findings_search_filter(client, auth_headers, program_id):
+    client.post(f"/programs/{program_id}/findings", json=_FINDING, headers=auth_headers)
+    client.post(f"/programs/{program_id}/findings", json={**_FINDING, "title": "SQL Injection"}, headers=auth_headers)
+    res = client.get(f"/programs/{program_id}/findings?search=SQL", headers=auth_headers)
+    assert res.status_code == 200
+    data = res.json()
+    assert all("SQL" in f["title"] or "sql" in f["title"].lower() for f in data["findings"])
+    assert not any(f["title"] == "XSS in search" for f in data["findings"])
+
+
+def test_findings_severity_filter(client, auth_headers, program_id):
+    client.post(f"/programs/{program_id}/findings", json=_FINDING, headers=auth_headers)
+    client.post(f"/programs/{program_id}/findings", json={**_FINDING, "severity": "critical"}, headers=auth_headers)
+    res = client.get(f"/programs/{program_id}/findings?severity=critical", headers=auth_headers)
+    assert res.status_code == 200
+    data = res.json()
+    assert all(f["severity"] == "critical" for f in data["findings"])
+
+
 def test_update_nonexistent_finding_returns_404(client, auth_headers, program_id):
     res = client.patch(f"/programs/{program_id}/findings/nonexistent", json={"status": "triaged"}, headers=auth_headers)
     assert res.status_code == 404

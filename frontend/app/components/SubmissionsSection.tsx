@@ -50,25 +50,31 @@ function StatusBadge({ status }: { status: string }) {
 
 export default function SubmissionsSection({ program }: { program: Program }) {
   const { authFetch, setMessage, navigate, state: { submissionPrefill }, dispatch } = useAppContext();
-  const [submissions, setSubmissions] = useState<Submission[]>([]);
-  const [loading,     setLoading]     = useState(true);
-  const [showForm,    setShowForm]    = useState(false);
-  const [form,        setForm]        = useState(EMPTY_FORM);
-  const [editingId,   setEditingId]   = useState<string | null>(null);
-  const [editForm,    setEditForm]    = useState<Partial<typeof EMPTY_FORM & { payout_usd: string }>>({});
-  const [saving,      setSaving]      = useState(false);
-  const [findings,    setFindings]    = useState<Finding[]>([]);
+  const [submissions,    setSubmissions]    = useState<Submission[]>([]);
+  const [loading,        setLoading]        = useState(true);
+  const [showForm,       setShowForm]       = useState(false);
+  const [form,           setForm]           = useState(EMPTY_FORM);
+  const [editingId,      setEditingId]      = useState<string | null>(null);
+  const [editForm,       setEditForm]       = useState<Partial<typeof EMPTY_FORM & { payout_usd: string }>>({});
+  const [saving,         setSaving]         = useState(false);
+  const [findings,       setFindings]       = useState<Finding[]>([]);
+  const [statusFilter,   setStatusFilter]   = useState("");
+  const [platformFilter, setPlatformFilter] = useState("");
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (status: string, platform: string) => {
     try {
-      const res = await authFetch(`/programs/${program.id}/submissions`);
+      const p = new URLSearchParams();
+      if (status)   p.set("status",   status);
+      if (platform) p.set("platform", platform);
+      const qs = p.toString() ? `?${p.toString()}` : "";
+      const res = await authFetch(`/programs/${program.id}/submissions${qs}`);
       if (!res.ok) throw new Error();
       const data = await res.json();
       setSubmissions(Array.isArray(data?.submissions) ? data.submissions : []);
     } catch { setMessage("Failed to load submissions."); } finally { setLoading(false); }
   }, [program.id, authFetch, setMessage]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { void load(statusFilter, platformFilter); }, [load, statusFilter, platformFilter]);
 
   useEffect(() => {
     if (submissionPrefill) {
@@ -353,6 +359,32 @@ export default function SubmissionsSection({ program }: { program: Program }) {
           </div>
         </div>
       )}
+
+      {/* Filters */}
+      <div className="flex flex-wrap gap-2">
+        <select
+          className="rounded-md border border-[#2e2e2e] bg-[#161616] px-3 py-2 text-sm text-[#f1f5f9] focus:border-[#f59e0b] focus:outline-none"
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}>
+          <option value="">All statuses</option>
+          {["submitted", "triaged", "accepted", "duplicate", "na", "paid", "rejected"].map((s) => (
+            <option key={s} value={s}>{s}</option>
+          ))}
+        </select>
+        <input
+          className="rounded-md border border-[#2e2e2e] bg-[#161616] px-3 py-2 text-sm text-[#f1f5f9] placeholder-[#3a3a3a] focus:border-[#f59e0b] focus:outline-none"
+          placeholder="Filter by platform…"
+          value={platformFilter}
+          onChange={(e) => setPlatformFilter(e.target.value)}
+        />
+        {(statusFilter || platformFilter) && (
+          <button
+            onClick={() => { setStatusFilter(""); setPlatformFilter(""); }}
+            className="rounded-md border border-[#2e2e2e] px-4 py-2 text-xs text-[#52525b] transition hover:text-[#94a3b8]">
+            Clear
+          </button>
+        )}
+      </div>
 
       {/* Table */}
       {loading ? (
