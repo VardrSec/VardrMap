@@ -36,6 +36,7 @@ function normalizeProgram(raw: unknown): Program {
     findings_by_severity: asRecord(p.findings_by_severity),
     findings_by_status:   asRecord(p.findings_by_status),
     reports_count:        n(p.reports_count),
+    services_count:       n(p.services_count),
   };
 }
 

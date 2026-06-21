@@ -1,17 +1,39 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { ReconItem } from "../types";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { ReconItem, ScopeItem } from "../types";
 import { useAppContext } from "../context/AppContext";
 import { Panel, SectionHeader } from "./ui";
 import HostDetailPanel from "./HostDetailPanel";
 
 const PAGE_SIZE = 100;
 
+function hostOf(value: string | undefined): string {
+  let s = (value || "").trim().toLowerCase();
+  if (!s) return "";
+  if (s.includes("://")) s = s.split("://")[1];
+  s = s.split("/")[0].split("@").pop()!;
+  if (s.startsWith("[")) return s.split("]")[0] + "]";
+  return s.split(":")[0];
+}
+
+function isInScope(item: ReconItem, scopeItems: ScopeItem[]): boolean {
+  const host = hostOf(item.host || item.url);
+  if (!host) return false;
+  return scopeItems.some((s) => {
+    const val = s.value.toLowerCase().replace(/^\*\./, "");
+    return host === val || host.endsWith(`.${val}`);
+  });
+}
+
 // Recon and scans are fetched independently (not embedded in the program object)
 // because a real ffuf/httpx run can return thousands of rows — we don't want
 // all of that coming down on every program refresh.
-export default function ReconSection({ programId, hideHeader }: { programId: string; hideHeader?: boolean }) {
+export default function ReconSection({
+  programId, hideHeader, scopeItems,
+}: {
+  programId: string; hideHeader?: boolean; scopeItems?: ScopeItem[];
+}) {
   const { authFetch, setMessage } = useAppContext();
   const [items,        setItems]        = useState<ReconItem[]>([]);
   const [total,        setTotal]        = useState(0);
@@ -19,6 +41,7 @@ export default function ReconSection({ programId, hideHeader }: { programId: str
   const [loading,      setLoading]      = useState(false);
   const [search,       setSearch]       = useState("");
   const [searchInput,  setSearchInput]  = useState("");
+  const [scopeOnly,    setScopeOnly]    = useState(false);
   const [detailItem,   setDetailItem]   = useState<ReconItem | null>(null);
 
   // replace=true on initial load or program/search change; false for "Load more"
@@ -53,6 +76,11 @@ export default function ReconSection({ programId, hideHeader }: { programId: str
     setSearchInput("");
   }
 
+  const visibleItems = useMemo(() => {
+    if (!scopeOnly || !scopeItems?.length) return items;
+    return items.filter((item) => isInScope(item, scopeItems));
+  }, [items, scopeOnly, scopeItems]);
+
   return (
     <div className="space-y-7">
       {detailItem && (
@@ -65,28 +93,42 @@ export default function ReconSection({ programId, hideHeader }: { programId: str
       )}
       {!hideHeader && <SectionHeader title="Recon" description="Review discovered subdomains, endpoints, paths, and technologies." />}
 
-      <form onSubmit={handleSearch} className="flex gap-2">
-        <input
-          className="flex-1 rounded-md border border-[#2e2e2e] bg-[#161616] px-3 py-2 text-sm text-[#f1f5f9] placeholder-[#3a3a3a] transition focus:border-[#f59e0b] focus:outline-none"
-          placeholder="Search URLs, hosts, paths, titles…"
-          value={searchInput}
-          onChange={(e) => setSearchInput(e.target.value)}
-        />
-        <button type="submit" className="rounded-md border border-[#2e2e2e] px-4 py-2 text-xs text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#94a3b8]">
-          Search
-        </button>
-        {search && (
-          <button type="button" onClick={clearSearch}
-            className="rounded-md border border-[#2e2e2e] px-4 py-2 text-xs text-[#52525b] transition hover:text-[#94a3b8]">
-            Clear
+      <div className="flex flex-wrap items-center gap-2">
+        <form onSubmit={handleSearch} className="flex flex-1 gap-2">
+          <input
+            className="flex-1 rounded-md border border-[#2e2e2e] bg-[#161616] px-3 py-2 text-sm text-[#f1f5f9] placeholder-[#3a3a3a] transition focus:border-[#f59e0b] focus:outline-none"
+            placeholder="Search URLs, hosts, paths, titles…"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+          />
+          <button type="submit" className="rounded-md border border-[#2e2e2e] px-4 py-2 text-xs text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#94a3b8]">
+            Search
+          </button>
+          {search && (
+            <button type="button" onClick={clearSearch}
+              className="rounded-md border border-[#2e2e2e] px-4 py-2 text-xs text-[#52525b] transition hover:text-[#94a3b8]">
+              Clear
+            </button>
+          )}
+        </form>
+        {scopeItems && scopeItems.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setScopeOnly((v) => !v)}
+            className="flex items-center gap-1.5 rounded-md border px-3 py-2 text-xs transition"
+            style={scopeOnly
+              ? { borderColor: "#f59e0b55", color: "#f59e0b", backgroundColor: "#f59e0b0d" }
+              : { borderColor: "#2e2e2e", color: "#52525b" }}>
+            <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: scopeOnly ? "#f59e0b" : "#3a3a3a" }} />
+            In scope only
           </button>
         )}
-      </form>
+      </div>
 
       <div className="grid gap-5 xl:grid-cols-2">
-        <Panel title={`Discovered Assets (${total})`}>
-          {items.length === 0 && !loading ? (
-            <p className="text-sm text-[#3a3a3a]">{search ? "No results for that search." : "No recon data imported yet."}</p>
+        <Panel title={`Discovered Assets (${scopeOnly ? visibleItems.length : total}${scopeOnly ? " in scope" : ""})`}>
+          {visibleItems.length === 0 && !loading ? (
+            <p className="text-sm text-[#3a3a3a]">{search ? "No results for that search." : scopeOnly ? "No in-scope assets found." : "No recon data imported yet."}</p>
           ) : (
             <>
               <div className="overflow-x-auto">
@@ -99,7 +141,7 @@ export default function ReconSection({ programId, hideHeader }: { programId: str
                     </tr>
                   </thead>
                   <tbody>
-                    {items.map((item, i) => (
+                    {visibleItems.map((item, i) => (
                       <tr
                         key={item.id}
                         onClick={() => setDetailItem(item)}
@@ -113,7 +155,7 @@ export default function ReconSection({ programId, hideHeader }: { programId: str
                   </tbody>
                 </table>
               </div>
-              {items.length < total && (
+              {!scopeOnly && items.length < total && (
                 <button onClick={() => load(offset + PAGE_SIZE, false, search)} disabled={loading}
                   className="mt-4 rounded-md border border-[#2e2e2e] px-4 py-2 text-xs text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#94a3b8] disabled:opacity-50">
                   {loading ? "Loading…" : `Load more (${total - items.length} remaining)`}

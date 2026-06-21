@@ -1,7 +1,7 @@
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from models import Finding, ImportRecord, ManualTest, Program, ReconItem, Report, ScanItem, ScopeItem
+from models import Finding, ImportRecord, ManualTest, Program, ReconItem, Report, ScanItem, ScopeItem, Service
 
 
 def serialize_scope_item(item: ScopeItem) -> dict:
@@ -114,6 +114,7 @@ def serialize_program(p: Program, db: Session) -> dict:
         (ManualTest,  "manual"),
         (Finding,     "findings"),
         (Report,      "reports"),
+        (Service,     "services"),
     ]:
         row = db.query(func.count(model.id)).filter(model.program_id == p.id).scalar()  # type: ignore[attr-defined]
         counts[key] = row or 0
@@ -161,4 +162,5 @@ def serialize_program(p: Program, db: Session) -> dict:
         "findings_by_severity": findings_by_severity,
         "findings_by_status":   findings_by_status,
         "reports_count":        counts["reports"],
+        "services_count":       counts["services"],
     }

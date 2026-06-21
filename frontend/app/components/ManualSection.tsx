@@ -27,7 +27,7 @@ export default function ManualSection({
   program: Program; hideHeader?: boolean;
   prefill?: { data: ManualFormState; epoch: number };
 }) {
-  const { authFetch, setMessage, refreshSelectedProgram } = useAppContext();
+  const { authFetch, setMessage, refreshSelectedProgram, navigate, dispatch } = useAppContext();
   const [manualTests, setManualTests] = useState<ManualTest[]>([]);
   const [form,        setForm]        = useState<ManualFormState>(EMPTY);
   const [editingId,   setEditingId]   = useState<string | null>(null);
@@ -64,6 +64,7 @@ export default function ManualSection({
   }
 
   async function deleteManualTest(testId: string) {
+    if (!confirm("Delete this manual test? This cannot be undone.")) return;
     try {
       await authFetch(`/programs/${program.id}/manual-tests/${testId}`, { method: "DELETE" });
       await loadManualTests();
@@ -75,6 +76,23 @@ export default function ManualSection({
   function startEdit(test: ManualTest) {
     setEditingId(test.id);
     setEditForm({ title: test.title, hypothesis: test.hypothesis, payload: test.payload, evidence: test.evidence, status: test.status });
+  }
+
+  function promoteToFinding(test: ManualTest) {
+    dispatch({
+      type: "PROMOTE_TO_FINDING",
+      prefill: {
+        title: test.title,
+        severity: "medium",
+        asset: "",
+        status: "candidate",
+        summary: test.hypothesis || "",
+        steps: test.payload || "",
+        impact: test.evidence || "",
+        remediation: "",
+      },
+    });
+    navigate("findings");
   }
 
   async function saveEdit(testId: string) {
@@ -122,6 +140,10 @@ export default function ManualSection({
                         <div className="mt-1"><StatusBadge status={test.status} /></div>
                       </div>
                       <div className="flex gap-2">
+                        <button onClick={() => promoteToFinding(test)}
+                          className="rounded-md border border-[#2e2e2e] px-2.5 py-1 text-xs text-[#52525b] transition hover:border-[#a6e3a1]/40 hover:text-[#a6e3a1]">
+                          → Finding
+                        </button>
                         <button onClick={() => startEdit(test)} className="rounded-md border border-[#2e2e2e] px-2.5 py-1 text-xs text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#94a3b8]">
                           Edit
                         </button>

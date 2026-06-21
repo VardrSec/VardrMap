@@ -10,11 +10,11 @@ import ScanningSection from "./ScanningSection";
 import ManualSection from "./ManualSection";
 import ServicesSection from "./ServicesSection";
 
-const TABS: { id: ReviewTab; label: string }[] = [
-  { id: "recon",    label: "Recon"    },
-  { id: "scans",    label: "Scans"    },
-  { id: "manual",   label: "Manual"   },
-  { id: "services", label: "Services" },
+const TABS: { id: ReviewTab; label: string; countKey: keyof import("../types").Program }[] = [
+  { id: "recon",    label: "Recon",    countKey: "recon_count"        },
+  { id: "scans",    label: "Scans",    countKey: "scans_count"        },
+  { id: "manual",   label: "Manual",   countKey: "manual_tests_count" },
+  { id: "services", label: "Services", countKey: "services_count"     },
 ];
 
 export default function ReviewSection({ program }: { program: Program }) {
@@ -48,18 +48,27 @@ export default function ReviewSection({ program }: { program: Program }) {
           </p>
         </div>
         <div className="flex rounded-lg border border-[#2e2e2e] bg-[#1a1a1a] p-0.5">
-          {TABS.map((t) => (
-            <button key={t.id} onClick={() => setActiveTab(t.id)}
-              className="rounded-md px-5 py-1.5 font-mono text-[11px] uppercase tracking-wider transition"
-              style={activeTab === t.id ? { backgroundColor: "#2e2e2e", color: "#f1f5f9" } : { color: "#52525b" }}>
-              {t.label}
-            </button>
-          ))}
+          {TABS.map((t) => {
+            const count = program[t.countKey] as number;
+            return (
+              <button key={t.id} onClick={() => setActiveTab(t.id)}
+                className="flex items-center gap-1.5 rounded-md px-4 py-1.5 font-mono text-[11px] uppercase tracking-wider transition"
+                style={activeTab === t.id ? { backgroundColor: "#2e2e2e", color: "#f1f5f9" } : { color: "#52525b" }}>
+                {t.label}
+                {count > 0 && (
+                  <span className="rounded bg-[#2e2e2e] px-1 py-0.5 font-mono text-[9px] leading-none"
+                    style={{ color: activeTab === t.id ? "#f1f5f9" : "#52525b", backgroundColor: activeTab === t.id ? "#3a3a3a" : "#242424" }}>
+                    {count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      {activeTab === "recon"    && <ReconSection    programId={program.id} hideHeader />}
-      {activeTab === "scans"    && <ScanningSection programId={program.id} hideHeader />}
+      {activeTab === "recon"    && <ReconSection    programId={program.id} hideHeader scopeItems={program.scope.in} />}
+      {activeTab === "scans"    && <ScanningSection programId={program.id} hideHeader scopeItems={program.scope.in} />}
       {activeTab === "manual"   && (
         <ManualSection
           program={program}

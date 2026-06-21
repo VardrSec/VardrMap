@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { ScanItem } from "../types";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { ScanItem, ScopeItem } from "../types";
 import { useAppContext } from "../context/AppContext";
 import { Panel, SeverityBadge, StatusBadge, SectionHeader } from "./ui";
 
@@ -9,7 +9,19 @@ const PAGE_SIZE = 100;
 const STATUS_FILTERS = ["new", "reviewed", "false_positive", "promoted", "all"] as const;
 type StatusFilter = typeof STATUS_FILTERS[number];
 
-export default function ScanningSection({ programId, hideHeader }: { programId: string; hideHeader?: boolean }) {
+function assetMatchesScope(asset: string, scopeItems: ScopeItem[]): boolean {
+  const host = asset.toLowerCase().split("/")[0].split(":")[0];
+  return scopeItems.some((s) => {
+    const val = s.value.toLowerCase().replace(/^\*\./, "");
+    return host === val || host.endsWith(`.${val}`);
+  });
+}
+
+export default function ScanningSection({
+  programId, hideHeader, scopeItems,
+}: {
+  programId: string; hideHeader?: boolean; scopeItems?: ScopeItem[];
+}) {
   const { authFetch, setMessage, promoteScanToFinding } = useAppContext();
   const [items,        setItems]        = useState<ScanItem[]>([]);
   const [total,        setTotal]        = useState(0);
@@ -17,6 +29,7 @@ export default function ScanningSection({ programId, hideHeader }: { programId: 
   const [loading,      setLoading]      = useState(false);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("new");
   const [selected,     setSelected]     = useState<Set<string>>(new Set());
+  const [scopeOnly,    setScopeOnly]    = useState(false);
 
   const load = useCallback(async (off: number, replace: boolean, filter: StatusFilter) => {
     setLoading(true);
@@ -82,19 +95,35 @@ export default function ScanningSection({ programId, hideHeader }: { programId: 
     promoteScanToFinding(scan);
   }
 
-  const allSelected = items.length > 0 && selected.size === items.length;
+  const visibleItems = useMemo(() => {
+    if (!scopeOnly || !scopeItems?.length) return items;
+    return items.filter((s) => assetMatchesScope(s.asset || "", scopeItems));
+  }, [items, scopeOnly, scopeItems]);
+
+  const allSelected = visibleItems.length > 0 && visibleItems.every((i) => selected.has(i.id));
 
   return (
     <div className="space-y-7">
       {!hideHeader && <SectionHeader title="Scanning" description="Review candidate vulnerabilities from imported scan results." />}
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         {STATUS_FILTERS.map((f) => (
           <button key={f} onClick={() => setStatusFilter(f)}
             className={`rounded-md border px-3 py-1.5 text-xs font-semibold transition ${statusFilter === f ? "border-[#f59e0b]/40 bg-[#f59e0b]/10 text-[#f59e0b]" : "border-[#2e2e2e] text-[#52525b] hover:text-[#94a3b8]"}`}>
             {f === "all" ? "All" : f.replace(/_/g, " ")}
           </button>
         ))}
+        {scopeItems && scopeItems.length > 0 && (
+          <button
+            onClick={() => setScopeOnly((v) => !v)}
+            className="flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-semibold transition"
+            style={scopeOnly
+              ? { borderColor: "#f59e0b55", color: "#f59e0b", backgroundColor: "#f59e0b0d" }
+              : { borderColor: "#2e2e2e", color: "#52525b" }}>
+            <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: scopeOnly ? "#f59e0b" : "#3a3a3a" }} />
+            In scope only
+          </button>
+        )}
       </div>
 
       {selected.size > 0 && (
@@ -121,14 +150,14 @@ export default function ScanningSection({ programId, hideHeader }: { programId: 
         </div>
       )}
 
-      <Panel title={`Scan Results (${total})`}>
-        {items.length === 0 && !loading ? (
+      <Panel title={`Scan Results (${scopeOnly ? visibleItems.length : total}${scopeOnly ? " in scope" : ""})`}>
+        {visibleItems.length === 0 && !loading ? (
           <p className="text-sm text-[#3a3a3a]">
-            {statusFilter === "all" ? "No scan results imported yet." : `No ${statusFilter.replace(/_/g, " ")} results.`}
+            {scopeOnly ? "No in-scope scan results." : statusFilter === "all" ? "No scan results imported yet." : `No ${statusFilter.replace(/_/g, " ")} results.`}
           </p>
         ) : (
           <div className="space-y-3">
-            {items.length > 0 && (
+            {visibleItems.length > 0 && (
               <div className="flex items-center gap-2 border-b border-[#2e2e2e] pb-2">
                 <input type="checkbox" checked={allSelected} onChange={toggleSelectAll}
                   className="h-3.5 w-3.5 cursor-pointer accent-[#f59e0b]" />
@@ -137,7 +166,7 @@ export default function ScanningSection({ programId, hideHeader }: { programId: 
                 </span>
               </div>
             )}
-            {items.map((scan) => (
+            {visibleItems.map((scan) => (
               <div key={scan.id}
                 className={`flex gap-3 rounded-xl border p-4 transition ${selected.has(scan.id) ? "border-[#f59e0b]/25 bg-[#f59e0b]/[0.04]" : "border-[#2e2e2e] bg-[#161616]"}`}>
                 <input type="checkbox"
@@ -180,7 +209,7 @@ export default function ScanningSection({ programId, hideHeader }: { programId: 
                 </div>
               </div>
             ))}
-            {items.length < total && (
+            {!scopeOnly && items.length < total && (
               <button onClick={() => load(offset + PAGE_SIZE, false, statusFilter)} disabled={loading}
                 className="w-full rounded-md border border-[#2e2e2e] px-4 py-2 text-xs text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#94a3b8] disabled:opacity-50">
                 {loading ? "Loading…" : `Load more (${total - items.length} remaining)`}
