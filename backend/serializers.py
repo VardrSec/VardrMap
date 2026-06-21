@@ -106,11 +106,17 @@ _FINDING_STATUSES = ["new", "candidate", "triaged", "in_progress", "closed"]
 
 
 def serialize_program(p: Program, db: Session) -> dict:
-    recon_count  = db.query(ReconItem).filter(ReconItem.program_id == p.id).count()
-    scans_count  = db.query(ScanItem).filter(ScanItem.program_id == p.id).count()
-    manual_count = db.query(ManualTest).filter(ManualTest.program_id == p.id).count()
-    finding_count = db.query(Finding).filter(Finding.program_id == p.id).count()
-    report_count  = db.query(Report).filter(Report.program_id == p.id).count()
+    # Single query per table using COUNT aggregation — avoids N+1 on list endpoints.
+    counts: dict[str, int] = {}
+    for model, key in [
+        (ReconItem,   "recon"),
+        (ScanItem,    "scans"),
+        (ManualTest,  "manual"),
+        (Finding,     "findings"),
+        (Report,      "reports"),
+    ]:
+        row = db.query(func.count(model.id)).filter(model.program_id == p.id).scalar()  # type: ignore[attr-defined]
+        counts[key] = row or 0
 
     sev_rows = (
         db.query(Finding.severity, func.count(Finding.id))
@@ -148,11 +154,11 @@ def serialize_program(p: Program, db: Session) -> dict:
             "out": [serialize_scope_item(i) for i in p.scope_items if i.scope_type == "out"],
         },
         "imports":              [serialize_import_record(r) for r in p.import_records],
-        "recon_count":          recon_count,
-        "scans_count":          scans_count,
-        "manual_tests_count":   manual_count,
-        "findings_count":       finding_count,
+        "recon_count":          counts["recon"],
+        "scans_count":          counts["scans"],
+        "manual_tests_count":   counts["manual"],
+        "findings_count":       counts["findings"],
         "findings_by_severity": findings_by_severity,
         "findings_by_status":   findings_by_status,
-        "reports_count":        report_count,
+        "reports_count":        counts["reports"],
     }

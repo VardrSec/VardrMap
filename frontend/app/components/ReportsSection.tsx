@@ -204,6 +204,7 @@ export default function ReportsSection({ program }: { program: Program }) {
   }
 
   async function deleteReport(reportId: string) {
+    if (!confirm("Delete this report? This cannot be undone.")) return;
     try {
       await authFetch(`/programs/${program.id}/reports/${reportId}`, { method: "DELETE" });
       await loadReports();

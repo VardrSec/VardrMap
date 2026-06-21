@@ -34,33 +34,45 @@ def _dedup_recon(
 ) -> tuple[list[ReconItem], int]:
     """Filter incoming recon items down to only those not yet seen for this program+source.
 
-    Dedup key: (program_id, source, url). Sets first_seen_at on each new item.
+    Dedup key: url when present, else host. Sets first_seen_at on each new item.
     Returns (new_items, new_count).
     """
     if not incoming:
         return [], 0
 
-    urls = [r.url for r in incoming if r.url]
-    if not urls:
-        # No URL to dedup on — insert everything as new
-        now = datetime.now(timezone.utc)
-        for item in incoming:
-            item.first_seen_at = now
-        return incoming, len(incoming)
+    urls  = [r.url  for r in incoming if r.url]
+    hosts = [r.host for r in incoming if r.host and not r.url]
 
-    existing_urls: set[str] = set(
-        row[0]
-        for row in db.query(ReconItem.url).filter(
-            ReconItem.program_id == program_id,
-            ReconItem.source == source,
-            ReconItem.url.in_(urls),
-        ).all()
-    )
+    existing_urls: set[str] = set()
+    existing_hosts: set[str] = set()
+
+    if urls:
+        existing_urls = set(
+            row[0]
+            for row in db.query(ReconItem.url).filter(
+                ReconItem.program_id == program_id,
+                ReconItem.source == source,
+                ReconItem.url.in_(urls),
+            ).all()
+        )
+
+    if hosts:
+        existing_hosts = set(
+            row[0]
+            for row in db.query(ReconItem.host).filter(
+                ReconItem.program_id == program_id,
+                ReconItem.source == source,
+                ReconItem.host.in_(hosts),
+                ReconItem.url.is_(None),
+            ).all()
+        )
 
     now = datetime.now(timezone.utc)
     new_items = []
     for item in incoming:
         if item.url and item.url in existing_urls:
+            continue
+        if not item.url and item.host and item.host in existing_hosts:
             continue
         item.first_seen_at = now
         new_items.append(item)

@@ -122,10 +122,10 @@ def create_job(
         config=body.config or {},
     )
     db.add(job)
-    db.commit()
-    db.refresh(job)
+    db.flush()  # assigns job.id without committing
     log_action(db, current_user["github_id"], "create", "scan_job", job.id, program_id)
     db.commit()
+    db.refresh(job)
     return serialize_job(job)
 
 

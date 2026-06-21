@@ -61,20 +61,34 @@ export default function SubmissionsSection({ program }: { program: Program }) {
   const [statusFilter,   setStatusFilter]   = useState("");
   const [platformFilter, setPlatformFilter] = useState("");
 
-  const load = useCallback(async (status: string, platform: string) => {
+  const [platformInput,  setPlatformInput]  = useState("");
+
+  const load = useCallback(async (status: string, platform: string, signal?: AbortSignal) => {
     try {
       const p = new URLSearchParams();
       if (status)   p.set("status",   status);
       if (platform) p.set("platform", platform);
       const qs = p.toString() ? `?${p.toString()}` : "";
-      const res = await authFetch(`/programs/${program.id}/submissions${qs}`);
+      const res = await authFetch(`/programs/${program.id}/submissions${qs}`, { signal });
       if (!res.ok) throw new Error();
       const data = await res.json();
       setSubmissions(Array.isArray(data?.submissions) ? data.submissions : []);
-    } catch { setMessage("Failed to load submissions."); } finally { setLoading(false); }
+    } catch (e) {
+      if ((e as { name?: string }).name !== "AbortError") setMessage("Failed to load submissions.");
+    } finally { setLoading(false); }
   }, [program.id, authFetch, setMessage]);
 
-  useEffect(() => { void load(statusFilter, platformFilter); }, [load, statusFilter, platformFilter]);
+  useEffect(() => {
+    const ctrl = new AbortController();
+    void load(statusFilter, platformFilter, ctrl.signal);
+    return () => ctrl.abort();
+  }, [load, statusFilter, platformFilter]);
+
+  // Debounce the platform text input — only commit to filter state after 400 ms idle.
+  useEffect(() => {
+    const t = setTimeout(() => setPlatformFilter(platformInput), 400);
+    return () => clearTimeout(t);
+  }, [platformInput]);
 
   useEffect(() => {
     if (submissionPrefill) {
@@ -142,6 +156,7 @@ export default function SubmissionsSection({ program }: { program: Program }) {
   }
 
   async function remove(id: string) {
+    if (!confirm("Delete this submission? This cannot be undone.")) return;
     try {
       const res = await authFetch(`/programs/${program.id}/submissions/${id}`, { method: "DELETE" });
       if (!res.ok) throw new Error();
@@ -374,12 +389,12 @@ export default function SubmissionsSection({ program }: { program: Program }) {
         <input
           className="rounded-md border border-[#2e2e2e] bg-[#161616] px-3 py-2 text-sm text-[#f1f5f9] placeholder-[#3a3a3a] focus:border-[#f59e0b] focus:outline-none"
           placeholder="Filter by platform…"
-          value={platformFilter}
-          onChange={(e) => setPlatformFilter(e.target.value)}
+          value={platformInput}
+          onChange={(e) => setPlatformInput(e.target.value)}
         />
-        {(statusFilter || platformFilter) && (
+        {(statusFilter || platformInput) && (
           <button
-            onClick={() => { setStatusFilter(""); setPlatformFilter(""); }}
+            onClick={() => { setStatusFilter(""); setPlatformInput(""); setPlatformFilter(""); }}
             className="rounded-md border border-[#2e2e2e] px-4 py-2 text-xs text-[#52525b] transition hover:text-[#94a3b8]">
             Clear
           </button>

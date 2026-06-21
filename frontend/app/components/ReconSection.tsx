@@ -22,20 +22,26 @@ export default function ReconSection({ programId, hideHeader }: { programId: str
   const [detailItem,   setDetailItem]   = useState<ReconItem | null>(null);
 
   // replace=true on initial load or program/search change; false for "Load more"
-  const load = useCallback(async (off: number, replace: boolean, q: string) => {
+  const load = useCallback(async (off: number, replace: boolean, q: string, signal?: AbortSignal) => {
     setLoading(true);
     try {
       const params = `limit=${PAGE_SIZE}&offset=${off}${q ? `&search=${encodeURIComponent(q)}` : ""}`;
-      const res = await authFetch(`/programs/${programId}/recon?${params}`);
+      const res = await authFetch(`/programs/${programId}/recon?${params}`, { signal });
       if (!res.ok) throw new Error();
       const data = await res.json();
       setTotal(data.total ?? 0);
       setItems((prev) => replace ? data.recon : [...prev, ...data.recon]);
       setOffset(off);
-    } catch { setMessage("Failed to load recon."); } finally { setLoading(false); }
+    } catch (e) {
+      if ((e as { name?: string }).name !== "AbortError") setMessage("Failed to load recon.");
+    } finally { setLoading(false); }
   }, [programId, authFetch, setMessage]);
 
-  useEffect(() => { void load(0, true, search); }, [load, search]);
+  useEffect(() => {
+    const ctrl = new AbortController();
+    void load(0, true, search, ctrl.signal);
+    return () => ctrl.abort();
+  }, [load, search]);
 
   function handleSearch(e: React.FormEvent) {
     e.preventDefault();

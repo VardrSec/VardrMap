@@ -9,12 +9,12 @@ import JobsSection from "./JobsSection";
 type RunTab = "jobs" | "import";
 
 type Stats = {
-  findings_total: number;
+  recon_count: number;
+  scans_count: number;
+  findings_count: number;
   findings_by_severity: Record<string, number>;
-  submissions_total: number;
-  submissions_accepted: number;
-  submissions_paid: number;
-  recon_total: number;
+  submissions_count: number;
+  submissions_by_status: Record<string, number>;
 };
 
 export default function DashboardSection({ program }: { program: Program }) {
@@ -40,28 +40,18 @@ export default function DashboardSection({ program }: { program: Program }) {
   }, [state.dashboardPrefill, dispatch]);
 
   useEffect(() => {
-    void Promise.all([
-      authFetch(`/programs/${program.id}/findings?limit=1&offset=0`),
-      authFetch(`/programs/${program.id}/submissions`),
-      authFetch(`/programs/${program.id}/recon?limit=1`),
-    ]).then(async ([fRes, sRes, rRes]) => {
-      const fData = fRes.ok ? await fRes.json() : null;
-      const sData = sRes.ok ? await sRes.json() : null;
-      const rData = rRes.ok ? await rRes.json() : null;
-      const subs: { severity: string }[] = fData?.findings ?? [];
-      const allSubs: { status: string }[] = sData?.submissions ?? [];
-      const bySev: Record<string, number> = {};
-      subs.forEach((f) => { bySev[f.severity] = (bySev[f.severity] ?? 0) + 1; });
-      setStats({
-        findings_total:        fData?.total ?? 0,
-        findings_by_severity:  bySev,
-        submissions_total:     sData?.total ?? allSubs.length,
-        submissions_accepted:  allSubs.filter((s) => s.status === "accepted" || s.status === "paid").length,
-        submissions_paid:      allSubs.filter((s) => s.status === "paid").length,
-        recon_total:           rData?.total ?? 0,
+    const ctrl = new AbortController();
+    void authFetch(`/programs/${program.id}/stats`, { signal: ctrl.signal })
+      .then(async (res) => {
+        if (!res.ok) return;
+        const data = await res.json() as Stats;
+        setStats(data);
+      })
+      .catch((e: { name?: string }) => {
+        if (e.name !== "AbortError") setMessage("Failed to load stats.");
       });
-    });
-  }, [program.id, authFetch]);
+    return () => ctrl.abort();
+  }, [program.id, authFetch, setMessage]);
 
   const [toolType,    setToolType]    = useState("ffuf");
   const [importFile,  setImportFile]  = useState<File | null>(null);
@@ -119,10 +109,10 @@ export default function DashboardSection({ program }: { program: Program }) {
       {stats && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {[
-            { label: "Recon assets",  value: stats.recon_total,          section: "review"      as const },
-            { label: "Findings",      value: stats.findings_total,        section: "findings"    as const },
-            { label: "Accepted",      value: stats.submissions_accepted,  section: "submissions" as const },
-            { label: "Paid",          value: stats.submissions_paid,      section: "submissions" as const },
+            { label: "Recon assets",  value: stats.recon_count,                                                               section: "review"      as const },
+            { label: "Findings",      value: stats.findings_count,                                                            section: "findings"    as const },
+            { label: "Accepted",      value: (stats.submissions_by_status["accepted"] ?? 0) + (stats.submissions_by_status["paid"] ?? 0), section: "submissions" as const },
+            { label: "Paid",          value: stats.submissions_by_status["paid"] ?? 0,                                        section: "submissions" as const },
           ].map(({ label, value, section }) => (
             <button
               key={label}
@@ -135,7 +125,7 @@ export default function DashboardSection({ program }: { program: Program }) {
         </div>
       )}
 
-      {stats && stats.findings_total > 0 && (
+      {stats && stats.findings_count > 0 && (
         <div className="flex flex-wrap gap-2">
           {["critical", "high", "medium", "low", "info"]
             .filter((sev) => stats.findings_by_severity[sev])

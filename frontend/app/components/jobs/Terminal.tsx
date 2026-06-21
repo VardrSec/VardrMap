@@ -69,8 +69,16 @@ type TerminalProps = {
   onDelete: (id: string) => void;
 };
 
+const TOOL_TO_REVIEW_TAB: Record<string, string> = {
+  subfinder: "recon",
+  ffuf:      "recon",
+  httpx:     "recon",
+  nuclei:    "scans",
+  nmap:      "services",
+};
+
 export default function Terminal({ job, accent, onClose, onRetry, onCancel, onDelete }: TerminalProps) {
-  const { authFetch } = useAppContext();
+  const { authFetch, navigate, dispatch } = useAppContext();
   // Cache tagged with jobId — stale cache from a previous job never renders
   const [eventsCache, setEventsCache] = useState<{ jobId: string; events: JobEvent[] } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -214,6 +222,17 @@ export default function Terminal({ job, accent, onClose, onRetry, onCancel, onDe
               className="rounded-md border px-3 py-1 font-mono text-[11px] transition"
               style={{ borderColor: `${accent}55`, color: accent }}>
               re-queue
+            </button>
+          )}
+          {job.status === "done" && job.yield > 0 && TOOL_TO_REVIEW_TAB[job.tool] && (
+            <button
+              onClick={() => {
+                const tab = TOOL_TO_REVIEW_TAB[job.tool] as "recon" | "scans" | "manual" | "services";
+                dispatch({ type: "NAVIGATE_TO_REVIEW", tab });
+                navigate("review");
+              }}
+              className="rounded-md border border-[#a6e3a1]/30 px-3 py-1 font-mono text-[11px] text-[#a6e3a1] transition hover:border-[#a6e3a1]/60">
+              → Review
             </button>
           )}
           <button onClick={() => onDelete(job.id)}

@@ -36,16 +36,17 @@ export default function FindingsSection({ program }: { program: Program }) {
     dispatch({ type: "PROMOTE_TO_SUBMISSION", prefill: { title: finding.title, report_id: "", finding_id: finding.id } });
     navigate("submissions");
   }
-  const [findings,      setFindings]      = useState<Finding[]>([]);
-  const [total,         setTotal]         = useState(0);
-  const [offset,        setOffset]        = useState(0);
-  const [loadingMore,   setLoadingMore]   = useState(false);
-  const [form,          setForm]          = useState<FindingFormState>(EMPTY);
-  const [editingId,     setEditingId]     = useState<string | null>(null);
-  const [editForm,      setEditForm]      = useState<FindingFormState>(EMPTY);
-  const [suggesting,    setSuggesting]    = useState<string | null>(null);
-  const [searchInput,   setSearchInput]   = useState("");
-  const [search,        setSearch]        = useState("");
+  const [findings,       setFindings]       = useState<Finding[]>([]);
+  const [total,          setTotal]          = useState(0);
+  const [offset,         setOffset]         = useState(0);
+  const [loading,        setLoading]        = useState(true);
+  const [loadingMore,    setLoadingMore]    = useState(false);
+  const [form,           setForm]           = useState<FindingFormState>(EMPTY);
+  const [editingId,      setEditingId]      = useState<string | null>(null);
+  const [editForm,       setEditForm]       = useState<FindingFormState>(EMPTY);
+  const [suggesting,     setSuggesting]     = useState<string | null>(null);
+  const [searchInput,    setSearchInput]    = useState("");
+  const [search,         setSearch]         = useState("");
   const [severityFilter, setSeverityFilter] = useState("");
 
   const PAGE = 50;
@@ -57,15 +58,18 @@ export default function FindingsSection({ program }: { program: Program }) {
     return p.toString();
   }
 
-  const loadFindings = useCallback(async (q: string, sev: string) => {
+  const loadFindings = useCallback(async (q: string, sev: string, signal?: AbortSignal) => {
+    setLoading(true);
     try {
-      const res = await authFetch(`/programs/${program.id}/findings?${buildParams(0, q, sev)}`);
+      const res = await authFetch(`/programs/${program.id}/findings?${buildParams(0, q, sev)}`, { signal });
       if (!res.ok) throw new Error();
       const data = await res.json();
       setFindings(Array.isArray(data?.findings) ? data.findings : []);
       setTotal(data?.total ?? 0);
       setOffset(0);
-    } catch { setMessage("Failed to load findings."); }
+    } catch (e) {
+      if ((e as { name?: string }).name !== "AbortError") setMessage("Failed to load findings.");
+    } finally { setLoading(false); }
   }, [program.id, authFetch, setMessage]);
 
   async function loadMore() {
@@ -80,7 +84,11 @@ export default function FindingsSection({ program }: { program: Program }) {
     } catch { setMessage("Failed to load more findings."); } finally { setLoadingMore(false); }
   }
 
-  useEffect(() => { void loadFindings(search, severityFilter); }, [loadFindings, search, severityFilter]);
+  useEffect(() => {
+    const ctrl = new AbortController();
+    void loadFindings(search, severityFilter, ctrl.signal);
+    return () => ctrl.abort();
+  }, [loadFindings, search, severityFilter]);
 
   // Apply the prefill from a promoted scan, then immediately clear it from the
   // reducer. If we didn't clear it, navigating away and back would re-apply the
@@ -105,6 +113,7 @@ export default function FindingsSection({ program }: { program: Program }) {
   }
 
   async function deleteFinding(findingId: string) {
+    if (!confirm("Delete this finding? This cannot be undone.")) return;
     try {
       await authFetch(`/programs/${program.id}/findings/${findingId}`, { method: "DELETE" });
       await loadFindings(search, severityFilter);
@@ -193,7 +202,13 @@ export default function FindingsSection({ program }: { program: Program }) {
               </button>
             )}
           </form>
-          {findings.length === 0 ? (
+          {loading ? (
+            <div className="space-y-3">
+              {[1, 2, 3].map((n) => (
+                <div key={n} className="h-16 animate-pulse rounded-xl border border-[#2e2e2e] bg-[#161616]" />
+              ))}
+            </div>
+          ) : findings.length === 0 ? (
             <p className="text-sm text-[#3a3a3a]">{search || severityFilter ? "No findings match that filter." : "No findings yet."}</p>
           ) : (
             <div className="space-y-3">

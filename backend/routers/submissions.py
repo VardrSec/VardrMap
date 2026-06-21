@@ -78,10 +78,10 @@ def create_submission(
         notes=body.notes or "",
     )
     db.add(sub)
-    db.commit()
-    db.refresh(sub)
+    db.flush()
     log_action(db, current_user["github_id"], "create", "submission", sub.id, program_id)
     db.commit()
+    db.refresh(sub)
     return serialize(sub)
 
 

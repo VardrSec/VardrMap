@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Depends
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from db import get_db
 from deps import get_current_user, get_program_or_404, log_action, require_program_owner
-from models import Program, ProgramMember, User
+from models import Finding, ManualTest, Program, ProgramMember, ReconItem, Report, ScanItem, Submission, User
 from schemas import ProgramCreate, ProgramUpdate
 from serializers import serialize_program
 
@@ -127,6 +128,48 @@ def update_program(
     db.commit()
     db.refresh(program)
     return serialize_program(program, db)
+
+
+@router.get("/programs/{program_id}/stats")
+def get_program_stats(
+    program_id: str,
+    current_user: dict[str, str] = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Lightweight aggregate stats for a program — used by the Dashboard stat cards.
+    Returns counts and breakdowns without serializing full objects."""
+    get_program_or_404(program_id, current_user, db)
+
+    def count(model, extra_filter=None):
+        q = db.query(func.count(model.id)).filter(model.program_id == program_id)  # type: ignore[attr-defined]
+        if extra_filter is not None:
+            q = q.filter(extra_filter)
+        return q.scalar() or 0
+
+    sev_rows = (
+        db.query(Finding.severity, func.count(Finding.id))
+        .filter(Finding.program_id == program_id)
+        .group_by(Finding.severity)
+        .all()
+    )
+
+    sub_status_rows = (
+        db.query(Submission.status, func.count(Submission.id))
+        .filter(Submission.program_id == program_id)
+        .group_by(Submission.status)
+        .all()
+    )
+
+    return {
+        "recon_count":          count(ReconItem),
+        "scans_count":          count(ScanItem),
+        "findings_count":       count(Finding),
+        "manual_tests_count":   count(ManualTest),
+        "reports_count":        count(Report),
+        "submissions_count":    count(Submission),
+        "findings_by_severity": {sev: cnt for sev, cnt in sev_rows},
+        "submissions_by_status": {status: cnt for status, cnt in sub_status_rows},
+    }
 
 
 @router.delete("/programs/{program_id}")

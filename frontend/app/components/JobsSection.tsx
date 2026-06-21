@@ -394,6 +394,7 @@ export default function JobsSection({
               view={prefs.view}
               activeId={activeId}
               onSelect={(id) => { setActiveId(id); pref("showTerminal", true); }}
+              onDelete={deleteJob}
               onRunPending={runPending}
               pendingCount={pendingCount}
               runnerOnline={runnerOnline}

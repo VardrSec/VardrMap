@@ -43,14 +43,27 @@ function MiniBar({ progress, color }: { progress: number; color: string }) {
 
 // ---- STREAM VIEW --------------------------------------------------------
 
-function StreamCard({ job, accent, active, onClick }: {
-  job: ScanJobUI; accent: string; active: boolean; onClick: () => void;
+function TrashButton({ onClick }: { onClick: (e: React.MouseEvent) => void }) {
+  return (
+    <button
+      onClick={onClick}
+      title="Delete job"
+      className="flex-shrink-0 rounded p-1 text-[#3a3a3a] opacity-0 transition group-hover:opacity-100 hover:!text-[#f87171]">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor">
+        <path d="M6 2a1 1 0 0 0-1 1H2.5a.5.5 0 0 0 0 1H3v9a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V4h.5a.5.5 0 0 0 0-1H11a1 1 0 0 0-1-1H6zm1 4a.5.5 0 0 1 .5.5v5a.5.5 0 0 1-1 0v-5A.5.5 0 0 1 7 6zm2 0a.5.5 0 0 1 .5.5v5a.5.5 0 0 1-1 0v-5A.5.5 0 0 1 9 6z"/>
+      </svg>
+    </button>
+  );
+}
+
+function StreamCard({ job, accent, active, onClick, onDelete }: {
+  job: ScanJobUI; accent: string; active: boolean; onClick: () => void; onDelete: () => void;
 }) {
   const sc = job.status === "running" ? accent : STATUS_META[job.status]?.color ?? "#94a3b8";
   return (
-    <button onClick={onClick}
-      className="group flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left transition"
-      style={{ borderColor: active ? `${accent}66` : "#2e2e2e", backgroundColor: active ? "#161616" : "#1a1a1a" }}>
+    <div className="group flex w-full items-center gap-3 rounded-xl border px-4 py-3 transition cursor-pointer"
+      style={{ borderColor: active ? `${accent}66` : "#2e2e2e", backgroundColor: active ? "#161616" : "#1a1a1a" }}
+      onClick={onClick}>
       <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg border border-[#2e2e2e] bg-[#161616]">
         <ToolGlyph tool={job.tool} color={sc} />
       </div>
@@ -79,15 +92,16 @@ function StreamCard({ job, accent, active, onClick }: {
           )}
         </div>
       </div>
-    </button>
+      <TrashButton onClick={(e) => { e.stopPropagation(); onDelete(); }} />
+    </div>
   );
 }
 
-function StreamView({ jobs, accent, activeId, onSelect }: ViewProps) {
+function StreamView({ jobs, accent, activeId, onSelect, onDelete }: ViewProps) {
   return (
     <div className="space-y-2">
       {jobs.map((j) => (
-        <StreamCard key={j.id} job={j} accent={accent} active={activeId === j.id} onClick={() => onSelect(j.id)} />
+        <StreamCard key={j.id} job={j} accent={accent} active={activeId === j.id} onClick={() => onSelect(j.id)} onDelete={() => onDelete(j.id)} />
       ))}
     </div>
   );
@@ -95,18 +109,18 @@ function StreamView({ jobs, accent, activeId, onSelect }: ViewProps) {
 
 // ---- PIPELINE VIEW -------------------------------------------------------
 
-function PipelineCard({ job, accent, active, onClick }: {
-  job: ScanJobUI; accent: string; active: boolean; onClick: () => void;
+function PipelineCard({ job, accent, active, onClick, onDelete }: {
+  job: ScanJobUI; accent: string; active: boolean; onClick: () => void; onDelete: () => void;
 }) {
   const sc = job.status === "running" ? accent : STATUS_META[job.status]?.color ?? "#94a3b8";
   return (
-    <button onClick={onClick}
-      className="w-full rounded-lg border px-2.5 py-2 text-left transition"
+    <div onClick={onClick} className="group cursor-pointer rounded-lg border px-2.5 py-2 text-left transition"
       style={{ borderColor: active ? `${accent}66` : "#2e2e2e", backgroundColor: active ? "#161616" : "#1a1a1a" }}>
       <div className="flex items-center gap-1.5">
         <ToolGlyph tool={job.tool} color={sc} />
         <span className="font-mono text-[12px] font-semibold text-[#f1f5f9]">{job.tool}</span>
         <span className="ml-auto font-mono text-[9px] text-[#3a3a3a]">{fmtAgo(job.queuedAt)}</span>
+        <TrashButton onClick={(e) => { e.stopPropagation(); onDelete(); }} />
       </div>
       <div className="mt-1 font-mono text-[10px] text-[#52525b]">{job.source} · {job.targets} targets</div>
       {job.status === "running" && <div className="mt-2"><MiniBar progress={job.progress} color={sc} /></div>}
@@ -116,11 +130,11 @@ function PipelineCard({ job, accent, active, onClick }: {
       {job.status === "failed" && (
         <div className="mt-1.5 truncate font-mono text-[10px] text-[#f87171]">failed</div>
       )}
-    </button>
+    </div>
   );
 }
 
-function PipelineView({ jobs, accent, activeId, onSelect }: ViewProps) {
+function PipelineView({ jobs, accent, activeId, onSelect, onDelete }: ViewProps) {
   const cols: Array<"pending" | "running" | "done" | "failed"> = ["pending", "running", "done", "failed"];
   return (
     <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -142,7 +156,7 @@ function PipelineView({ jobs, accent, activeId, onSelect }: ViewProps) {
                 </div>
               ) : (
                 items.map((j) => (
-                  <PipelineCard key={j.id} job={j} accent={accent} active={activeId === j.id} onClick={() => onSelect(j.id)} />
+                  <PipelineCard key={j.id} job={j} accent={accent} active={activeId === j.id} onClick={() => onSelect(j.id)} onDelete={() => onDelete(j.id)} />
                 ))
               )}
             </div>
@@ -155,13 +169,13 @@ function PipelineView({ jobs, accent, activeId, onSelect }: ViewProps) {
 
 // ---- TABLE VIEW -----------------------------------------------------------
 
-function TableView({ jobs, accent, activeId, onSelect }: ViewProps) {
+function TableView({ jobs, accent, activeId, onSelect, onDelete }: ViewProps) {
   return (
     <div className="overflow-hidden rounded-xl border border-[#2e2e2e]">
       <table className="w-full border-collapse text-left">
         <thead>
           <tr className="bg-[#161616]">
-            {["Tool", "Source", "Status", "Progress", "Targets", "Yield", "Runtime", "Queued"].map((h) => (
+            {["Tool", "Source", "Status", "Progress", "Targets", "Yield", "Runtime", "Queued", ""].map((h) => (
               <th key={h} className="px-3 py-2 font-mono text-[9px] font-semibold uppercase tracking-widest text-[#52525b]">{h}</th>
             ))}
           </tr>
@@ -171,7 +185,7 @@ function TableView({ jobs, accent, activeId, onSelect }: ViewProps) {
             const sc = j.status === "running" ? accent : STATUS_META[j.status]?.color ?? "#94a3b8";
             return (
               <tr key={j.id} onClick={() => onSelect(j.id)}
-                className="cursor-pointer border-t border-[#2e2e2e] transition hover:bg-[#161616]"
+                className="group cursor-pointer border-t border-[#2e2e2e] transition hover:bg-[#161616]"
                 style={{ backgroundColor: activeId === j.id ? "#161616" : "transparent" }}>
                 <td className="px-3 py-2.5">
                   <span className="flex items-center gap-1.5">
@@ -196,6 +210,9 @@ function TableView({ jobs, accent, activeId, onSelect }: ViewProps) {
                   {j.durationMs ? fmtDur(j.durationMs) : "—"}
                 </td>
                 <td className="px-3 py-2.5 font-mono text-[10px] text-[#3a3a3a]">{fmtAgo(j.queuedAt)}</td>
+                <td className="px-3 py-2.5">
+                  <TrashButton onClick={(e) => { e.stopPropagation(); onDelete(j.id); }} />
+                </td>
               </tr>
             );
           })}
@@ -212,6 +229,7 @@ type ViewProps = {
   accent: string;
   activeId: string | null;
   onSelect: (id: string) => void;
+  onDelete: (id: string) => void;
 };
 
 type JobBoardProps = {
@@ -220,6 +238,7 @@ type JobBoardProps = {
   view: "stream" | "pipeline" | "table";
   activeId: string | null;
   onSelect: (id: string) => void;
+  onDelete: (id: string) => void;
   onRunPending: () => void;
   pendingCount: number;
   runnerOnline: boolean;
@@ -227,7 +246,7 @@ type JobBoardProps = {
 };
 
 export default function JobBoard({
-  jobs, accent, view, activeId, onSelect, onRunPending, pendingCount, runnerOnline, autoRun,
+  jobs, accent, view, activeId, onSelect, onDelete, onRunPending, pendingCount, runnerOnline, autoRun,
 }: JobBoardProps) {
   const views = { stream: StreamView, pipeline: PipelineView, table: TableView };
   const View = views[view] ?? StreamView;
@@ -253,7 +272,7 @@ export default function JobBoard({
           </span>
         )}
       </div>
-      <View jobs={jobs} accent={accent} activeId={activeId} onSelect={onSelect} />
+      <View jobs={jobs} accent={accent} activeId={activeId} onSelect={onSelect} onDelete={onDelete} />
     </div>
   );
 }

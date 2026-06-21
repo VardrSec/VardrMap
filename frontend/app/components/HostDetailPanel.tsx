@@ -58,6 +58,12 @@ export default function HostDetailPanel({ programId, item, onClose }: Props) {
     return () => { cancelled = true; };
   }, [programId, host, authFetch]);
 
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === "Escape") onClose(); }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
   const SEV_COLOR: Record<string, string> = {
     critical: "text-[#f38ba8]", high: "text-[#fab387]",
     medium: "text-[#f9e2af]",   low: "text-[#89b4fa]", info: "text-[#74c7ec]",
