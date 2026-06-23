@@ -309,37 +309,21 @@ export default function JobsSection({
   const runningCount = jobs.filter((j) => j.status === "running").length;
   const busy         = runningCount > 0;
 
-  const viewSwitcher = (
-    <div className="flex rounded-lg border border-[#2e2e2e] bg-[#1a1a1a] p-0.5">
-      {(["stream", "pipeline", "table"] as const).map((v) => (
-        <button key={v} onClick={() => pref("view", v)}
-          className="rounded-md px-3 py-1.5 font-mono text-[11px] uppercase tracking-wider transition"
-          style={prefs.view === v ? { backgroundColor: "#2e2e2e", color: "#f1f5f9" } : { color: "#52525b" }}>
-          {v}
-        </button>
-      ))}
-    </div>
-  );
-
   return (
     <div className="space-y-5">
       {!hideHeader && (
-        <div className="flex flex-wrap items-end justify-between gap-4 border-b border-[#2e2e2e] pb-5">
-          <div>
-            <div className="flex items-center gap-2.5">
-              <h2 className="text-2xl font-bold tracking-tight text-[#f1f5f9]">Scan Jobs</h2>
-              <span className="rounded border border-[#2e2e2e] px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest text-[#52525b]">
-                orchestration
-              </span>
-            </div>
-            <p className="mt-1.5 text-sm text-[#52525b]">
-              Dispatch recon &amp; scan jobs to VardrRunner on your machine — results stream back into VardrMap.
-            </p>
+        <div className="border-b border-[#2e2e2e] pb-5">
+          <div className="flex items-center gap-2.5">
+            <h2 className="text-2xl font-bold tracking-tight text-[#f1f5f9]">Scan Jobs</h2>
+            <span className="rounded border border-[#2e2e2e] px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest text-[#52525b]">
+              orchestration
+            </span>
           </div>
-          {viewSwitcher}
+          <p className="mt-1.5 text-sm text-[#52525b]">
+            Dispatch recon &amp; scan jobs to VardrRunner on your machine — results stream back into VardrMap.
+          </p>
         </div>
       )}
-      {hideHeader && <div className="flex justify-end">{viewSwitcher}</div>}
 
       <ToastBanner msg={toast} accent={ACCENT} />
 
@@ -393,6 +377,7 @@ export default function JobsSection({
               jobs={sorted}
               accent={ACCENT}
               view={prefs.view}
+              onViewChange={(v) => pref("view", v)}
               activeId={activeId}
               onSelect={(id) => { setActiveId(id); pref("showTerminal", true); }}
               onDelete={deleteJob}

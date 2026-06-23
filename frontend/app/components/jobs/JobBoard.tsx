@@ -236,6 +236,7 @@ type JobBoardProps = {
   jobs: ScanJobUI[];
   accent: string;
   view: "stream" | "pipeline" | "table";
+  onViewChange: (v: "stream" | "pipeline" | "table") => void;
   activeId: string | null;
   onSelect: (id: string) => void;
   onDelete: (id: string) => void;
@@ -246,7 +247,7 @@ type JobBoardProps = {
 };
 
 export default function JobBoard({
-  jobs, accent, view, activeId, onSelect, onDelete, onRunPending, pendingCount, runnerOnline, autoRun,
+  jobs, accent, view, onViewChange, activeId, onSelect, onDelete, onRunPending, pendingCount, runnerOnline, autoRun,
 }: JobBoardProps) {
   const views = { stream: StreamView, pipeline: PipelineView, table: TableView };
   const View = views[view] ?? StreamView;
@@ -258,19 +259,30 @@ export default function JobBoard({
           <h3 className="text-[10px] font-semibold uppercase tracking-widest text-[#52525b]">Job Board</h3>
           <span className="rounded bg-[#2e2e2e] px-1.5 py-0.5 font-mono text-[9px] text-[#94a3b8]">{jobs.length}</span>
         </div>
-        {pendingCount > 0 && !autoRun && (
-          <button onClick={onRunPending} disabled={!runnerOnline}
-            className="flex items-center gap-2 rounded-md px-3 py-1.5 font-mono text-[11px] font-semibold text-[#161616] transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
-            style={{ backgroundColor: accent }}>
-            <span className="font-sans">▸</span> vardrrunner jobs run · {pendingCount}
-          </button>
-        )}
-        {autoRun && pendingCount > 0 && (
-          <span className="flex items-center gap-1.5 font-mono text-[10px] text-[#52525b]">
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full" style={{ backgroundColor: accent }} />
-            auto-running queue
-          </span>
-        )}
+        <div className="flex items-center gap-3">
+          {pendingCount > 0 && !autoRun && (
+            <button onClick={onRunPending} disabled={!runnerOnline}
+              className="flex items-center gap-2 rounded-md px-3 py-1.5 font-mono text-[11px] font-semibold text-[#161616] transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
+              style={{ backgroundColor: accent }}>
+              <span className="font-sans">▸</span> vardrrunner jobs run · {pendingCount}
+            </button>
+          )}
+          {autoRun && pendingCount > 0 && (
+            <span className="flex items-center gap-1.5 font-mono text-[10px] text-[#52525b]">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full" style={{ backgroundColor: accent }} />
+              auto-running queue
+            </span>
+          )}
+          <div className="flex rounded-lg border border-[#2e2e2e] bg-[#161616] p-0.5">
+            {(["stream", "pipeline", "table"] as const).map((v) => (
+              <button key={v} onClick={() => onViewChange(v)}
+                className="rounded-md px-3 py-1 font-mono text-[10px] uppercase tracking-wider transition"
+                style={view === v ? { backgroundColor: "#2e2e2e", color: "#f1f5f9" } : { color: "#52525b" }}>
+                {v}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
       <View jobs={jobs} accent={accent} activeId={activeId} onSelect={onSelect} onDelete={onDelete} />
     </div>
