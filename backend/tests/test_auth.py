@@ -42,3 +42,16 @@ def test_valid_token_returns_user(client, auth_headers):
     data = res.json()
     assert data["github_id"] == "gh_user1"
     assert data["username"] == "user1"
+
+
+def test_runner_scoped_key_can_call_me(client, auth_headers):
+    """Runner keys must be able to hit /me so vardrrunner login works."""
+    key_res = client.post("/auth/apikeys", json={"scope": "runner"}, headers=auth_headers)
+    token = key_res.json()["token"]
+    key_id = key_res.json()["id"]
+
+    me = client.get("/me", headers={"Authorization": f"Bearer {token}"})
+    assert me.status_code == 200
+    assert me.json()["scope"] == "runner"
+
+    client.delete(f"/auth/apikeys/{key_id}", headers=auth_headers)

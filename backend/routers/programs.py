@@ -37,10 +37,6 @@ def auth_sync(
     }
 
 
-@router.get("/me")
-def me(current_user: dict[str, str] = Depends(get_current_user)):
-    return current_user
-
 
 @router.get("/programs")
 def get_programs(

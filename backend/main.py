@@ -8,7 +8,7 @@ from slowapi.middleware import SlowAPIMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from db import Base, engine
-from deps import require_full_scope
+from deps import get_current_user, require_full_scope
 from limiter import limiter
 from logging_config import configure_logging
 from routers import apikeys, findings, imports, jobs, manual_tests, members, programs, radar, recon, reports, runner, scans, schedules, scope, services, settings, submissions
@@ -71,6 +71,16 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type"],
 )
+
+# -----------------------------------------------------------------------------
+# Identity — accessible with any valid token (runner-scoped or full)
+# Must live outside the programs router so it doesn't inherit require_full_scope.
+# -----------------------------------------------------------------------------
+
+@app.get("/me")
+def me(current_user: dict[str, str] = Depends(get_current_user)):
+    return current_user
+
 
 # -----------------------------------------------------------------------------
 # Routers
