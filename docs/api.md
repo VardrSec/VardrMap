@@ -149,6 +149,23 @@ Update program fields. Only fields included in the request body are changed.
 
 **Response:** updated program object
 
+### `GET /programs/{program_id}/stats`
+Lightweight aggregate stats for a program — used by the Dashboard stat cards. Returns counts and breakdowns without serializing full objects. Much cheaper than `GET /programs/{id}` when only counts are needed.
+
+**Response**
+```json
+{
+  "recon_count": 120,
+  "scans_count": 55,
+  "findings_count": 7,
+  "manual_tests_count": 3,
+  "reports_count": 3,
+  "submissions_count": 5,
+  "findings_by_severity": { "critical": 1, "high": 2, "medium": 3, "low": 1, "info": 0 },
+  "submissions_by_status": { "submitted": 2, "accepted": 2, "paid": 1 }
+}
+```
+
 ### `DELETE /programs/{program_id}`
 Delete a program. Cascades to all child records (scope, findings, reports, manual tests, recon, scans, imports).
 
@@ -180,7 +197,8 @@ Delete a program. Cascades to all child records (scope, findings, reports, manua
   "findings_count": 7,
   "findings_by_severity": { "critical": 1, "high": 2, "medium": 3, "low": 1, "info": 0 },
   "findings_by_status":   { "new": 4, "triaged": 2, "accepted": 1, "rejected": 0 },
-  "reports_count": 3
+  "reports_count": 3,
+  "services_count": 8
 }
 ```
 
@@ -224,6 +242,8 @@ List findings for a program, ordered by `created_at` descending.
 |---|---|---|---|
 | `limit` | 50 | 1–200 | Max items to return |
 | `offset` | 0 | ≥0 | Number of items to skip |
+| `search` | (none) | — | `ILIKE` filter across title and asset |
+| `severity` | (none) | — | Exact match: `critical`, `high`, `medium`, `low`, `info` |
 
 **Response**
 ```json
@@ -356,7 +376,7 @@ List all manual test cases for a program, ordered by `created_at` descending.
       "hypothesis": "Endpoint does not validate ownership",
       "payload": "GET /api/users/999 with own JWT",
       "evidence": "Returned another user's profile",
-      "status": "confirmed"
+      "status": "validated"
     }
   ]
 }
@@ -375,7 +395,7 @@ Create a manual test case.
   "status": "new"
 }
 ```
-`title` is required. `status` values: `new`, `in-progress`, `confirmed`, `not-exploitable`.
+`title` is required. `status` values: `new`, `in_progress`, `validated`, `closed`.
 
 **Response:** manual test object
 
@@ -410,7 +430,7 @@ List recon items for a program, with optional filters. Items come from ffuf or h
 **Response**
 ```json
 {
-  "recon_items": [
+  "recon": [
     {
       "id": "<uuid>",
       "source": "httpx",
@@ -423,7 +443,10 @@ List recon items for a program, with optional filters. Items come from ffuf or h
       "content_type": "text/html",
       "length": 4321
     }
-  ]
+  ],
+  "total": 120,
+  "offset": 0,
+  "limit": 100
 }
 ```
 
@@ -479,9 +502,9 @@ Update the status of a single scan item.
 
 **Request body**
 ```json
-{ "status": "triaged" }
+{ "status": "reviewed" }
 ```
-`status` values: `new`, `triaged`, `accepted`, `rejected`, `ignored`.
+`status` values: `new`, `reviewed`, `false_positive`, `promoted`.
 
 **Response:** updated scan item object
 
@@ -631,7 +654,7 @@ Update a job's status. Used by VardrRunner to complete (`done`/`failed`) jobs af
 VardrRunner reports its status to VardrMap so the Bridge UI can show real connectivity, hostname, version, and tool availability.
 
 ### `POST /runner/heartbeat`
-VardrRunner posts its status here. Upserts one row per authenticated user (one row per user — not per device).
+VardrRunner posts its status here. Upserts one row per `(user, hostname)` pair — a laptop and a VPS report independently.
 
 **Rate limit:** 60/minute (separate from the global 200/min default).
 
@@ -907,6 +930,12 @@ Tracks the full lifecycle of a bug bounty submission from filed to resolved. Sta
 
 ### `GET /programs/{program_id}/submissions`
 List all submissions for a program, ordered newest-first.
+
+**Query parameters**
+| Parameter | Default | Description |
+|---|---|---|
+| `status` | (none) | Exact match filter: `submitted`, `triaged`, `accepted`, `duplicate`, `na`, `paid`, `rejected` |
+| `platform` | (none) | Case-insensitive `ILIKE` filter on the platform name |
 
 **Response**
 ```json

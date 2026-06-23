@@ -8,79 +8,68 @@ When an item ships it moves to the changelog and its `changelog/vX.Y.Z.md` notes
 
 ---
 
-## v0.20 (next) — candidate milestone
+## v0.20 — shipped (2026-06-20)
 
-A small, trackable milestone. Not everything here must ship together — pull the
-highest-value items first.
+v0.20.0 – v0.20.2 shipped: recon host-detail panel, Dashboard stat cards,
+findings search/severity filter, submissions status/platform filter,
+finding→submission promotion, Review tab live badges, manual→finding promotion,
+scope filter on Recon/Scans, UX hardening (AbortController, debounce, confirm
+dialogs, loading skeletons), job-board trash icon, Terminal → Review navigation,
+`/programs/{id}/stats` endpoint, N+1 fix, DB indexes, dedup fix, double-commit fix.
 
-### Validate v0.19 in production
+See `CHANGELOG.md` and `changelog/v0.20.0.md` – `v0.20.2.md` for details.
 
-v0.19.0 shipped RBAC, API key scopes, recon dedup, and webhooks; v0.19.1 cleared
-the dependency audit. These need a production smoke pass on Railway + Vercel:
+### Production smoke checklist (v0.19 → v0.20 upgrade)
 
-- [ ] Confirm migration `0011rbacreconscopes` applied cleanly — `alembic current`
-      equals head, `program_members` table and the new `recon_items` /
-      `api_keys` columns exist.
-- [ ] **RBAC:** invite a second GitHub account to a program; verify the member
-      can read/write program resources and that a non-member still gets `404`
-      (not `403`) — the BOLA invariant.
-- [ ] **Runner-scoped keys:** a `runner`-scope key succeeds on jobs / imports /
-      heartbeat and is blocked (`403`) everywhere else; a browser JWT stays
-      full-scope.
-- [ ] **Recon dedup + alerts:** re-import the same httpx scan → `new_count == 0`
-      and no duplicate rows; importing a genuinely new asset fires the webhook
-      (when configured) and respects `notify_min_severity`.
+- [ ] Confirm migrations `0011rbacreconscopes` and `0012programidindexes` applied
+      cleanly — `alembic current` equals head.
+- [ ] **RBAC:** invite a second GitHub account; member can read/write resources,
+      non-member gets `404` on all program endpoints.
+- [ ] **Runner-scoped keys:** `runner`-scope key succeeds on jobs/imports/heartbeat,
+      blocked (`403`) everywhere else.
+- [ ] **Recon dedup:** re-import same httpx file → `new_count == 0`, no duplicates.
 
 ### Platform / ops
 
-- [ ] **Migrate the production runtime off Node 20.** Node 20 reaches
-      maintenance EOL in 2026; v0.19.1 added a Node 24 CI leg to de-risk this.
-      Once 24 has been green in CI across a few runs, bump `.nvmrc` 20 → 24
-      (Vercel reads it) and verify a Vercel **preview** deploy before promoting
-      to production.
-- [ ] **Automate dependency freshness.** Add Dependabot (or Renovate) for
-      `frontend/` and `backend/` so security bumps like v0.19.1 are
-      opened as PRs proactively rather than discovered when CI's audit gate
-      fails. Group patch/minor updates to keep noise down.
-- [ ] **Track the `glob@7` deprecation warning.** Surfaced on `npm ci`;
-      transitive (via an ESLint/Jest dependency) and not a vulnerability.
-      Re-evaluate once the upstream tool updates its `glob` dependency.
+- [ ] **Migrate production off Node 20.** Bump `.nvmrc` 20 → 24 (Vercel reads it);
+      verify a preview deploy before promoting to production.
+- [x] **Dependabot enabled.** Weekly automated PRs for frontend + backend deps;
+      security bumps opened proactively.
 
 ### Product
 
-- [ ] **RBAC depth** — roles beyond owner/member (e.g. a read-only viewer);
-      record membership changes in the audit log.
-- [x] **VardrRunner repo extraction** — `runner/` split into its own repository,
-      [jorge-aquino/VardrRunner](https://github.com/jorge-aquino/VardrRunner), with full
-      history; removed from this repo. Integrates over the HTTP API only.
+- [ ] **RBAC depth** — read-only viewer role; audit-log membership changes.
+- [x] **VardrRunner repo extraction** — extracted to
+      [jorge-aquino/VardrRunner](https://github.com/jorge-aquino/VardrRunner).
 
-## Next up — full-repo assessment (2026-06-14)
+---
 
-Backend is mature (343 tests, ~97% coverage, solid auth/BOLA, logging + optional
-Sentry + hardened webhook SSRF guard). The gaps are concentrated in the frontend
-and a little tech debt. Sequenced by value / effort:
+## v0.21 — next
 
-- [ ] **Frontend `Section` component tests (highest value).** Only `ui.tsx` (15)
-      and the reducer (32) are covered; every `Section` (Composer → job dispatch,
-      FindingsSection mutations, SubmissionsSection, the JWT-mint auth path) is
-      untested. Needs an `AppContext` + `fetch` mocking harness on top of the RTL
-      setup added in the frontend-tests work.
-- [ ] **`react-hooks/set-state-in-effect` cleanup pass.** `eslint-plugin-react-hooks@7.1.1`
-      flags two repo-wide patterns — `void loadData()` fetch effects and
-      `if (x) setState(x)` prop→state sync. Clean them up, then adopt the rule to
-      lock it in. Do this *with* the component tests so the refactor is safe.
-- [ ] **TypeScript 6 migration (unblocks Dependabot #8).** Build passes on TS 6,
-      but ts-jest fails: TS 6 makes `tsconfig.test.json`'s `moduleResolution:
-      node10` + `baseUrl` hard errors (TS5101/5107) and adds a `rootDir`
-      requirement (TS5011). Migrate the test tsconfig, then re-bump TS.
-- [ ] **ESLint 10 (Dependabot #9) — upstream-blocked.** `eslint-config-next@16.2.9`'s
-      bundled `eslint-plugin-react` calls the removed `context.getFilename()`.
-      Wait for an ESLint-10-ready `eslint-config-next`; nothing to do here yet.
-- [ ] **Wire Sentry in production.** Logging + Sentry are plumbed but inert until
-      `SENTRY_DSN` is set on Railway. Optionally add an unhandled-exception
-      handler for structured request-error context.
-- [ ] **RBAC depth** — read-only viewer role + audit-log membership changes
-      (also tracked above).
+- [ ] **Frontend section tests.** `FindingsSection`, `SubmissionsSection`, `JobsSection`
+      mutations are untested. Needs `AppContext` + `fetch` mocking harness.
+- [ ] **Docs contract test coverage.** `test_docs_contract.py` now catches route and
+      enum drift; extend to cover response-key shape assertions as new endpoints are added.
+- [ ] **Wire Sentry in production.** `SENTRY_DSN` set on Railway.
+- [ ] **RBAC depth** — tracked above.
+- [ ] **`react-hooks/set-state-in-effect` rule.** Adopt in ESLint config after
+      component-test harness is in place.
+
+## Full-repo assessment notes (2026-06-14, updated 2026-06-22)
+
+Backend: 380 tests, ~97% coverage. The remaining gaps:
+
+- [ ] **Frontend `Section` component tests.** Only `ui.tsx` (15) and the reducer (32)
+      are covered. Needs `AppContext` + `fetch` mocking harness.
+- [x] **AbortController cleanup.** All fetch effects in FindingsSection,
+      SubmissionsSection, ReconSection, DashboardSection now abort on unmount.
+- [x] **TypeScript 6 migration.** Build passes. `ts-jest` migration done.
+- [ ] **ESLint 10 — upstream-blocked.** Wait for `eslint-config-next` to support it.
+- [ ] **Wire Sentry in production.** `SENTRY_DSN` not yet set on Railway.
+- [x] **Double-commit fix** (jobs + submissions create).
+- [x] **N+1 fix** (serialize_program count queries).
+- [x] **Recon dedup host-only fix.**
+- [x] **DB indexes** (migration 0012).
 
 Smaller, non-urgent: API-key `last_used_at` writes on every authenticated request
 (write amplification at scale); the webhook guard's documented residual
