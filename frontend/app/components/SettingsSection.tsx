@@ -146,7 +146,7 @@ export default function SettingsSection() {
       "}",
       'if (-not $activated) { Write-Error "Could not find VardrRunner venv. Run this from the VardrRunner directory after installing it."; exit 1 }',
       "",
-      `vardrrunner login vardrmap --url ${API_URL} --token ${token}`,
+      `vardrrunner login vardrmap --url ${API_URL} --key ${token}`,
       "vardrrunner daemon start",
       "vardrrunner doctor",
     ].join("\r\n");
@@ -199,7 +199,7 @@ export default function SettingsSection() {
               {
                 id: "login",
                 label: "1 · Authenticate",
-                cmd: `vardrrunner login vardrmap --url ${API_URL} --token ${runnerToken}`,
+                cmd: `vardrrunner login vardrmap --url ${API_URL} --key ${runnerToken}`,
               },
               {
                 id: "daemon",
