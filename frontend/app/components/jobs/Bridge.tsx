@@ -150,11 +150,12 @@ export type BridgeProps = {
   onRefreshRunner: () => void;
   onToggleAuto: () => void;
   onToggleCollapse: () => void;
+  onSetupRunner: () => void;
 };
 
 export default function Bridge({
   accent, runnerOnline, runnerStatus, autoRun, lastPoll, queueDepth, runningCount,
-  busy, pulseKey, collapsed, onRefreshRunner, onToggleAuto, onToggleCollapse,
+  busy, pulseKey, collapsed, onRefreshRunner, onToggleAuto, onToggleCollapse, onSetupRunner,
 }: BridgeProps) {
   if (collapsed) {
     return (
@@ -264,7 +265,12 @@ export default function Bridge({
             <div className="mt-3 space-y-2">
               <div className="rounded-lg border border-dashed border-[#2e2e2e] bg-[#1a1a1a] px-3 py-3 text-center">
                 <p className="font-mono text-[11px] text-[#52525b]">runner offline</p>
-                <p className="mt-1 font-mono text-[10px] text-[#3a3a3a]">$ vardrrunner jobs run</p>
+                <button
+                  onClick={onSetupRunner}
+                  className="mt-2 rounded-md border border-[#2e2e2e] px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider text-[#94a3b8] transition hover:border-[#3a3a3a] hover:text-[#f1f5f9]"
+                >
+                  set up runner →
+                </button>
               </div>
               {runnerStatus?.last_seen && (
                 <p className="text-center font-mono text-[10px] text-[#3a3a3a]">

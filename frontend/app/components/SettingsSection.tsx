@@ -5,6 +5,8 @@ import { ApiKey } from "../types";
 import { useAppContext } from "../context/AppContext";
 import { Panel, Input, PrimaryButton, DangerButton, SectionHeader } from "./ui";
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+
 const SEVERITIES = ["info", "low", "medium", "high", "critical"] as const;
 
 export default function SettingsSection() {
@@ -14,6 +16,11 @@ export default function SettingsSection() {
   const [keyScope,   setKeyScope]   = useState<"full" | "runner">("full");
   const [newToken,   setNewToken]   = useState<string | null>(null);
   const [webhookUrl,  setWebhookUrl]  = useState("");
+
+  // Connect Runner
+  const [runnerToken,    setRunnerToken]    = useState<string | null>(null);
+  const [runnerKeyId,    setRunnerKeyId]    = useState<string | null>(null);
+  const [verifyState,    setVerifyState]    = useState<"idle" | "checking" | "online" | "offline">("idle");
   const [minSeverity, setMinSeverity] = useState("high");
 
   const loadKeys = useCallback(async () => {
@@ -83,6 +90,64 @@ export default function SettingsSection() {
     } catch { setMessage("Failed to revoke API key."); }
   }
 
+  async function generateRunnerKey() {
+    if (runnerKeyId) {
+      await authFetch(`/auth/apikeys/${runnerKeyId}`, { method: "DELETE" }).catch(() => {});
+    }
+    try {
+      const res = await authFetch("/auth/apikeys", {
+        method: "POST",
+        body: JSON.stringify({ label: "VardrRunner (connect)", scope: "runner" }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        setMessage((err as { detail?: string }).detail || "Failed to generate runner key.");
+        return;
+      }
+      const data = await res.json();
+      setRunnerToken(data.token as string);
+      setRunnerKeyId(data.id as string);
+      setVerifyState("idle");
+      await loadKeys();
+    } catch { setMessage("Failed to generate runner key."); }
+  }
+
+  async function verifyRunner() {
+    setVerifyState("checking");
+    try {
+      const res = await authFetch("/runner/status");
+      if (res.ok) {
+        const data = await res.json();
+        setVerifyState((data as { online?: boolean }).online ? "online" : "offline");
+      } else {
+        setVerifyState("offline");
+      }
+    } catch { setVerifyState("offline"); }
+  }
+
+  function copyCmd(text: string) {
+    void navigator.clipboard.writeText(text);
+    setMessage("Copied.");
+  }
+
+  function downloadPs1(token: string) {
+    const script = [
+      "# VardrRunner one-time setup",
+      `# Generated ${new Date().toISOString()}`,
+      "",
+      `vardrrunner login vardrmap --url ${API_URL} --token ${token}`,
+      "vardrrunner daemon start",
+      "vardrrunner doctor",
+    ].join("\r\n");
+    const blob = new Blob([script], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "vardrrunner-connect.ps1";
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <div className="space-y-7">
       <SectionHeader title="Settings" description="Manage personal API keys for external tools like Burp Suite." />
@@ -108,6 +173,83 @@ export default function SettingsSection() {
           </button>
         </div>
       )}
+
+      <Panel title="Connect Runner">
+        <p className="mb-4 text-xs text-[#52525b]">
+          Generate a runner-scoped key and copy the exact commands to start VardrRunner on your machine.
+        </p>
+
+        {!runnerToken ? (
+          <PrimaryButton onClick={generateRunnerKey} label="Generate Runner Key" />
+        ) : (
+          <div className="space-y-4">
+            {/* Commands */}
+            {[
+              {
+                id: "login",
+                label: "1 · Authenticate",
+                cmd: `vardrrunner login vardrmap --url ${API_URL} --token ${runnerToken}`,
+              },
+              {
+                id: "daemon",
+                label: "2 · Start daemon",
+                cmd: "vardrrunner daemon start",
+              },
+              {
+                id: "doctor",
+                label: "3 · Verify tools",
+                cmd: "vardrrunner doctor",
+              },
+            ].map(({ id, label, cmd }) => (
+              <div key={id}>
+                <div className="mb-1 font-mono text-[10px] uppercase tracking-widest text-[#52525b]">{label}</div>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 overflow-x-auto rounded-md border border-[#2e2e2e] bg-[#161616] px-3 py-2 font-mono text-xs text-[#f1f5f9] whitespace-nowrap">
+                    {cmd}
+                  </code>
+                  <button
+                    onClick={() => copyCmd(cmd)}
+                    className="flex-shrink-0 rounded-md border border-[#2e2e2e] px-3 py-2 text-xs text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#94a3b8]"
+                  >
+                    Copy
+                  </button>
+                </div>
+              </div>
+            ))}
+
+            {/* Actions row */}
+            <div className="flex flex-wrap items-center gap-3 pt-1">
+              <button
+                onClick={() => downloadPs1(runnerToken)}
+                className="rounded-md border border-[#2e2e2e] px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider text-[#94a3b8] transition hover:border-[#3a3a3a] hover:text-[#f1f5f9]"
+              >
+                Download .ps1
+              </button>
+              <button
+                onClick={verifyRunner}
+                disabled={verifyState === "checking"}
+                className="rounded-md border border-[#2e2e2e] px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider transition"
+                style={{
+                  borderColor: verifyState === "online" ? "#a6e3a180" : verifyState === "offline" ? "#f8717180" : "#2e2e2e",
+                  color: verifyState === "online" ? "#a6e3a1" : verifyState === "offline" ? "#f87171" : "#94a3b8",
+                }}
+              >
+                {verifyState === "checking" ? "checking…" : verifyState === "online" ? "online ✓" : verifyState === "offline" ? "offline ✗" : "Verify connection"}
+              </button>
+              <button
+                onClick={generateRunnerKey}
+                className="ml-auto text-[10px] font-mono text-[#52525b] transition hover:text-[#94a3b8]"
+              >
+                regenerate key
+              </button>
+            </div>
+
+            <p className="text-[10px] text-[#3a3a3a]">
+              This key is runner-scoped (jobs, imports, heartbeat only). Revoke it from Active Keys below if you need to rotate.
+            </p>
+          </div>
+        )}
+      </Panel>
 
       <Panel title="Generate API Key">
         <div className="space-y-3">

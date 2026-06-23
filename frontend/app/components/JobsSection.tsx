@@ -73,7 +73,7 @@ function mapToUI(job: ScanJob): ScanJobUI {
 export default function JobsSection({
   programId, defaultTool, prefillEpoch, hideHeader,
 }: { programId: string; defaultTool?: string; prefillEpoch?: number; hideHeader?: boolean }) {
-  const { authFetch, selectedProgram } = useAppContext();
+  const { authFetch, selectedProgram, navigate } = useAppContext();
   const scopeCount  = selectedProgram?.scope.in.length ?? 0;
   const programName = selectedProgram?.name            ?? "Active Program";
 
@@ -357,6 +357,7 @@ export default function JobsSection({
         onRefreshRunner={() => { void loadJobs(); }}
         onToggleAuto={() => setAutoRun((v) => !v)}
         onToggleCollapse={() => pref("collapsed", !prefs.collapsed)}
+        onSetupRunner={() => navigate("settings")}
       />
 
       <Telemetry jobs={jobs} accent={ACCENT} />
