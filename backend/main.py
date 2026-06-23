@@ -90,24 +90,27 @@ def me(current_user: dict[str, str] = Depends(get_current_user)):
 
 _full = [Depends(require_full_scope)]
 
-app.include_router(apikeys.router,     dependencies=_full)
-app.include_router(programs.router,    dependencies=_full)
-app.include_router(members.router,     dependencies=_full)
-app.include_router(scope.router,       dependencies=_full)
-app.include_router(recon.router,       dependencies=_full)
-app.include_router(scans.router,       dependencies=_full)
-app.include_router(manual_tests.router, dependencies=_full)
-app.include_router(findings.router,    dependencies=_full)
-app.include_router(reports.router,     dependencies=_full)
-app.include_router(services.router)
-app.include_router(radar.router,       dependencies=_full)
-app.include_router(submissions.router, dependencies=_full)
-app.include_router(schedules.router,   dependencies=_full)
-app.include_router(settings.router,    dependencies=_full)
-# Runner endpoints — accessible with both full and runner-scoped keys
+# Runner router registered first so its GET /programs/{id} and
+# GET /programs/{id}/scope routes match before programs.router's copies,
+# allowing runner-scoped keys to read program data for job execution.
 app.include_router(imports.router)
 app.include_router(jobs.router)
 app.include_router(runner.router)
+
+app.include_router(apikeys.router,      dependencies=_full)
+app.include_router(programs.router,     dependencies=_full)
+app.include_router(members.router,      dependencies=_full)
+app.include_router(scope.router,        dependencies=_full)
+app.include_router(recon.router,        dependencies=_full)
+app.include_router(scans.router,        dependencies=_full)
+app.include_router(manual_tests.router, dependencies=_full)
+app.include_router(findings.router,     dependencies=_full)
+app.include_router(reports.router,      dependencies=_full)
+app.include_router(services.router)
+app.include_router(radar.router,        dependencies=_full)
+app.include_router(submissions.router,  dependencies=_full)
+app.include_router(schedules.router,    dependencies=_full)
+app.include_router(settings.router,     dependencies=_full)
 
 # -----------------------------------------------------------------------------
 # Health / root

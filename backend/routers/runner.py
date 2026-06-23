@@ -9,10 +9,11 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from db import get_db
-from deps import get_current_user
+from deps import get_current_user, get_program_or_404
 from limiter import limiter
-from models import RunnerHeartbeat
+from models import RunnerHeartbeat, ScopeItem
 from security import strip_html
+from serializers import serialize_program
 
 router = APIRouter(tags=["runner"])
 
@@ -49,6 +50,32 @@ class HeartbeatPayload(BaseModel):
     @field_validator("hostname", "version", "os", mode="before")
     @classmethod
     def sanitize(cls, v): return strip_html(v) if v else ""
+
+
+@router.get("/programs/{program_id}")
+def get_program_for_runner(
+    program_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Read-only program fetch — registered here (outside require_full_scope) so
+    runner-scoped keys can resolve scope/targets when executing jobs."""
+    program = get_program_or_404(program_id, current_user, db)
+    return serialize_program(program, db)
+
+
+@router.get("/programs/{program_id}/scope")
+def get_program_scope(
+    program_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Scope-only fetch for runners that only need the target list."""
+    get_program_or_404(program_id, current_user, db)
+    items = db.query(ScopeItem).filter(ScopeItem.program_id == program_id).all()
+    in_scope  = [{"id": i.id, "value": i.value, "kind": i.kind, "notes": i.notes} for i in items if i.scope_type == "in"]
+    out_scope = [{"id": i.id, "value": i.value, "kind": i.kind, "notes": i.notes} for i in items if i.scope_type == "out"]
+    return {"in": in_scope, "out": out_scope}
 
 
 @router.post("/runner/heartbeat")
