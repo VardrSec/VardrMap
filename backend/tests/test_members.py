@@ -175,3 +175,47 @@ def test_non_member_cannot_add_member(client, auth_headers, other_headers):
 def test_no_auth_returns_401(client):
     res = client.get("/programs/any-id/members")
     assert res.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Viewer role
+# ---------------------------------------------------------------------------
+
+def test_add_member_with_viewer_role(client, auth_headers):
+    pid = _create_program(client, auth_headers)
+    res = client.post(
+        f"/programs/{pid}/members",
+        json={"github_id": "gh_user2", "role": "viewer"},
+        headers=auth_headers,
+    )
+    assert res.status_code == 201
+    assert res.json()["role"] == "viewer"
+    _cleanup(client, auth_headers, pid)
+
+
+def test_viewer_cannot_create_finding(client, auth_headers, other_headers):
+    pid = _create_program(client, auth_headers)
+    client.post(
+        f"/programs/{pid}/members",
+        json={"github_id": "gh_user2", "role": "viewer"},
+        headers=auth_headers,
+    )
+    res = client.post(
+        f"/programs/{pid}/findings",
+        json={"title": "Viewer Finding", "severity": "high"},
+        headers=other_headers,
+    )
+    assert res.status_code == 403
+    _cleanup(client, auth_headers, pid)
+
+
+def test_viewer_can_read_findings(client, auth_headers, other_headers):
+    pid = _create_program(client, auth_headers)
+    client.post(
+        f"/programs/{pid}/members",
+        json={"github_id": "gh_user2", "role": "viewer"},
+        headers=auth_headers,
+    )
+    res = client.get(f"/programs/{pid}/findings", headers=other_headers)
+    assert res.status_code == 200
+    _cleanup(client, auth_headers, pid)

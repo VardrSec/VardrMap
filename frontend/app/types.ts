@@ -27,6 +27,7 @@ export type Program = {
   findings_by_status: Record<string, number>;
   reports_count: number;
   services_count: number;
+  my_role?: "owner" | "member" | "viewer";
 };
 export type ApiKey = { id: string; label: string; scope: "full" | "runner"; created_at: string | null; last_used_at: string | null };
 export type ProgramMember = { id: string; program_id: string; member_github_id: string; role: string; invited_at: string | null };

@@ -2,13 +2,17 @@
 Runner heartbeat — VardrRunner posts its status; frontend polls to display
 real connectivity, hostname, version, and tool availability in the Bridge.
 """
+import asyncio
+import json
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
-from db import get_db
+import sse as _sse
+from db import SessionLocal, get_db
 from deps import get_current_user, get_program_or_404
 from limiter import limiter
 from models import RunnerHeartbeat, ScopeItem
@@ -61,7 +65,7 @@ def get_program_for_runner(
     """Read-only program fetch — registered here (outside require_full_scope) so
     runner-scoped keys can resolve scope/targets when executing jobs."""
     program = get_program_or_404(program_id, current_user, db)
-    return serialize_program(program, db)
+    return serialize_program(program, db, github_id=current_user["github_id"])
 
 
 @router.get("/programs/{program_id}/scope")
@@ -118,6 +122,39 @@ def post_heartbeat(
     db.commit()
     db.refresh(hb)
     return {"ok": True, "last_seen": hb.last_seen.isoformat()}
+
+
+@router.get("/programs/{program_id}/jobs/stream")
+async def stream_job_events(
+    program_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """SSE endpoint — streams job status changes to the frontend.
+    Auth check uses a transient session to avoid holding a connection for the stream lifetime."""
+    db = SessionLocal()
+    try:
+        get_program_or_404(program_id, current_user, db)
+    finally:
+        db.close()
+
+    async def generate():
+        q = _sse.subscribe(program_id)
+        try:
+            yield f"data: {json.dumps({'connected': True})}\n\n"
+            while True:
+                try:
+                    event = await asyncio.wait_for(q.get(), timeout=20.0)
+                    yield f"data: {json.dumps(event)}\n\n"
+                except asyncio.TimeoutError:
+                    yield ": keepalive\n\n"
+        finally:
+            _sse.unsubscribe(program_id, q)
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.get("/runner/status")

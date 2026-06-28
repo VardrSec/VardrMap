@@ -97,6 +97,19 @@ def require_program_owner(program: Program, current_user: dict[str, str]) -> Non
         raise HTTPException(status_code=403, detail="This action requires program ownership")
 
 
+def require_member_write(program: Program, current_user: dict, db: Session) -> None:
+    """Raise 403 if the current user is a viewer-role member.
+    Call after get_program_or_404. Owners always pass."""
+    if program.owner_github_id == current_user["github_id"]:
+        return
+    member = db.query(ProgramMember).filter(
+        ProgramMember.program_id == program.id,
+        ProgramMember.member_github_id == current_user["github_id"],
+    ).first()
+    if member and member.role == "viewer":
+        raise HTTPException(status_code=403, detail="Viewers cannot make changes to this program")
+
+
 def require_full_scope(
     current_user: dict[str, str] = Depends(get_current_user),
 ) -> dict[str, str]:

@@ -67,6 +67,7 @@ describe("FindingsSection", () => {
   });
 
   it("deletes a finding via DELETE", async () => {
+    window.confirm = jest.fn(() => true);
     const { authFetch, setMessage } = renderWithApp(<FindingsSection program={PROGRAM} />, {
       routes: {
         "GET /programs/prog-1/findings?limit=50&offset=0": {

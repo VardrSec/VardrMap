@@ -229,33 +229,36 @@ export default function ReportsSection({ program }: { program: Program }) {
     } catch { setMessage("Failed to update report."); }
   }
 
+  const isViewer = program.my_role === 'viewer';
   const mdPreview = generateMarkdown(form);
 
   return (
     <div className="space-y-7">
       <SectionHeader title="Reports" description="Draft submission-ready reports from validated findings." />
       <div className="grid gap-5 xl:grid-cols-2">
-        <Panel title="Draft Report">
-          <div className="grid gap-3">
-            <div>
-              <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-widest text-[#52525b]">Link Finding</label>
-              <select
-                className="w-full rounded-md border border-[#2e2e2e] bg-[#161616] px-2.5 py-2 text-sm text-[#f1f5f9] transition focus:border-[#f59e0b] focus:outline-none"
-                value={form.finding_id}
-                onChange={(e) => {
-                  const fid = e.target.value;
-                  const f = findings.find((x) => x.id === fid);
-                  setForm({ ...form, finding_id: fid, title: f?.title || form.title, summary: f?.summary || form.summary, steps: f?.steps || form.steps, impact: f?.impact || form.impact, remediation: f?.remediation || form.remediation });
-                }}
-              >
-                <option value="">No linked finding</option>
-                {findings.map((f) => <option key={f.id} value={f.id}>{f.title}</option>)}
-              </select>
+        {!isViewer && (
+          <Panel title="Draft Report">
+            <div className="grid gap-3">
+              <div>
+                <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-widest text-[#52525b]">Link Finding</label>
+                <select
+                  className="w-full rounded-md border border-[#2e2e2e] bg-[#161616] px-2.5 py-2 text-sm text-[#f1f5f9] transition focus:border-[#f59e0b] focus:outline-none"
+                  value={form.finding_id}
+                  onChange={(e) => {
+                    const fid = e.target.value;
+                    const f = findings.find((x) => x.id === fid);
+                    setForm({ ...form, finding_id: fid, title: f?.title || form.title, summary: f?.summary || form.summary, steps: f?.steps || form.steps, impact: f?.impact || form.impact, remediation: f?.remediation || form.remediation });
+                  }}
+                >
+                  <option value="">No linked finding</option>
+                  {findings.map((f) => <option key={f.id} value={f.id}>{f.title}</option>)}
+                </select>
+              </div>
+              <ReportFields value={form} onChange={setForm} />
+              <PrimaryButton onClick={addReport} label="Save Report" />
             </div>
-            <ReportFields value={form} onChange={setForm} />
-            <PrimaryButton onClick={addReport} label="Save Report" />
-          </div>
-        </Panel>
+          </Panel>
+        )}
 
         <Panel title="Report Preview">
           <div className="min-h-[140px] rounded-lg border border-[#2e2e2e] bg-[#161616] p-4">
@@ -308,10 +311,14 @@ export default function ReportsSection({ program }: { program: Program }) {
                       title="Log as a platform submission">
                       Submit →
                     </button>
-                    <button onClick={() => startEdit(report)} className="rounded-md border border-[#2e2e2e] px-2.5 py-1 text-xs text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#94a3b8]">
-                      Edit
-                    </button>
-                    <DangerButton onClick={() => deleteReport(report.id)} label="Delete" small />
+                    {!isViewer && (
+                      <button onClick={() => startEdit(report)} className="rounded-md border border-[#2e2e2e] px-2.5 py-1 text-xs text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#94a3b8]">
+                        Edit
+                      </button>
+                    )}
+                    {!isViewer && (
+                      <DangerButton onClick={() => deleteReport(report.id)} label="Delete" small />
+                    )}
                   </div>
                 </div>
               )

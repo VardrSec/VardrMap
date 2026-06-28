@@ -198,9 +198,12 @@ Delete a program. Cascades to all child records (scope, findings, reports, manua
   "findings_by_severity": { "critical": 1, "high": 2, "medium": 3, "low": 1, "info": 0 },
   "findings_by_status":   { "new": 4, "triaged": 2, "accepted": 1, "rejected": 0 },
   "reports_count": 3,
-  "services_count": 8
+  "services_count": 8,
+  "my_role": "owner"
 }
 ```
+
+`my_role` is the calling user's role in this program: `"owner"` (the program owner), `"member"` (invited collaborator with write access), or `"viewer"` (invited collaborator with read-only access). Viewers receive `403` on mutation routes (POST/DELETE findings, reports, scope items).
 
 ---
 
@@ -599,6 +602,32 @@ Queue a new scan job.
 
 **Errors**
 - `400` — invalid `tool_type`, invalid `target_source`, or unknown config key for the tool
+- `404` — program not found or belongs to another user
+
+### `GET /programs/{program_id}/jobs/stream`
+Server-Sent Events (SSE) stream for real-time job status changes. The frontend opens this alongside polling; when a `job_update` event arrives, it triggers an immediate `GET /programs/{id}/jobs` refresh.
+
+Auth uses the standard `Authorization: Bearer` header via a streaming `fetch` (EventSource doesn't support custom headers). The connection sends a keepalive comment every 20 seconds.
+
+**Response** — `text/event-stream`
+
+On connect:
+```
+data: {"connected": true}
+```
+
+On job create or `done`/`failed` event:
+```
+data: {"type": "job_update", "job_id": "<uuid>", "status": "pending"}
+```
+
+Keepalive (every 20 s when idle):
+```
+: keepalive
+```
+
+**Errors**
+- `401` — not authenticated
 - `404` — program not found or belongs to another user
 
 ### `GET /programs/{program_id}/jobs`
@@ -1060,7 +1089,17 @@ Notifications fire (as a Discord/Slack-compatible webhook POST) when:
 
 ## Program Members
 
-Invite GitHub collaborators to read and write a program's resources. Only the program owner can manage membership and delete the program; members can create, update, and delete all other resources (findings, reports, submissions, etc.).
+Invite GitHub collaborators to access a program. Only the program owner can manage membership and delete the program.
+
+**Roles**
+
+| Role | Read | Write (findings, reports, scope) | Manage members | Delete program |
+|---|---|---|---|---|
+| `owner` | yes | yes | yes | yes |
+| `member` | yes | yes | no | no |
+| `viewer` | yes | no | no | no |
+
+`viewer` members receive `403` on all mutation routes (POST/DELETE for findings, reports, scope items). All roles can read.
 
 ### `GET /programs/{program_id}/members`
 List invited members. Accessible by owner or any member.
@@ -1080,8 +1119,9 @@ Invite a collaborator by GitHub ID. Owner only. Max 20 members per program.
 
 **Request body**
 ```json
-{ "github_id": "gh_collaborator" }
+{ "github_id": "gh_collaborator", "role": "member" }
 ```
+`role` is optional — defaults to `"member"`. Accepted values: `"member"`, `"viewer"`.
 
 **Errors**
 - `400` — invited user is the owner, or max members reached

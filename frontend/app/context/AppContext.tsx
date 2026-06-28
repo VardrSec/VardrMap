@@ -37,6 +37,7 @@ function normalizeProgram(raw: unknown): Program {
     findings_by_status:   asRecord(p.findings_by_status),
     reports_count:        n(p.reports_count),
     services_count:       n(p.services_count),
+    my_role:              (p.my_role as "owner" | "member" | "viewer" | undefined) ?? "owner",
   };
 }
 

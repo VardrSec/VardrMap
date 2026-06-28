@@ -1,7 +1,7 @@
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from models import Finding, ImportRecord, ManualTest, Program, ReconItem, Report, ScanItem, ScopeItem, Service
+from models import Finding, ImportRecord, ManualTest, Program, ProgramMember, ReconItem, Report, ScanItem, ScopeItem, Service
 
 
 def serialize_scope_item(item: ScopeItem) -> dict:
@@ -105,7 +105,7 @@ _SEVERITIES = ["critical", "high", "medium", "low", "info"]
 _FINDING_STATUSES = ["new", "candidate", "triaged", "in_progress", "closed"]
 
 
-def serialize_program(p: Program, db: Session) -> dict:
+def serialize_program(p: Program, db: Session, github_id: str | None = None) -> dict:
     # Single query per table using COUNT aggregation — avoids N+1 on list endpoints.
     counts: dict[str, int] = {}
     for model, key in [
@@ -141,6 +141,14 @@ def serialize_program(p: Program, db: Session) -> dict:
         if status in findings_by_status:
             findings_by_status[status] = cnt
 
+    my_role = "owner"
+    if github_id and github_id != p.owner_github_id:
+        member = db.query(ProgramMember).filter(
+            ProgramMember.program_id == p.id,
+            ProgramMember.member_github_id == github_id,
+        ).first()
+        my_role = member.role if member else "member"
+
     return {
         "id": p.id,
         "owner_github_id": p.owner_github_id,
@@ -163,4 +171,5 @@ def serialize_program(p: Program, db: Session) -> dict:
         "findings_by_status":   findings_by_status,
         "reports_count":        counts["reports"],
         "services_count":       counts["services"],
+        "my_role":              my_role,
     }

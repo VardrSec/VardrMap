@@ -157,6 +157,45 @@ export default function JobsSection({
     void loadSchedules();
   }, [loadJobs, loadSchedules]);
 
+  // SSE connection for real-time job updates
+  useEffect(() => {
+    if (!programId) return;
+    let active = true;
+    const ctrl = new AbortController();
+
+    async function connectSSE() {
+      try {
+        const res = await authFetch(`/programs/${programId}/jobs/stream`, {
+          signal: ctrl.signal,
+        });
+        if (!res.ok || !res.body) return;
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        while (active) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const text = decoder.decode(value);
+          for (const line of text.split('\n')) {
+            if (line.startsWith('data: ')) {
+              try {
+                const event = JSON.parse(line.slice(6));
+                if (event.type === 'job_update') {
+                  void loadJobs();
+                }
+              } catch { /* ignore malformed */ }
+            }
+          }
+        }
+      } catch {
+        // Connection dropped — polling takes over
+      }
+      if (active) setTimeout(connectSSE, 3000);
+    }
+
+    void connectSSE();
+    return () => { active = false; ctrl.abort(); };
+  }, [programId, authFetch, loadJobs]);
+
   // Adaptive polling: 5s while any jobs are active, 30s when idle
   useEffect(() => {
     const hasActive = () =>

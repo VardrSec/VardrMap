@@ -1,4 +1,6 @@
 """Program membership — invite collaborators to read and write a program."""
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -14,7 +16,7 @@ _MAX_MEMBERS = 20
 
 class MemberAdd(BaseModel):
     github_id: str = Field(min_length=1, max_length=100)
-    role: str = "member"  # "member" is the only role in v0.19.0
+    role: Literal["member", "viewer"] = "member"
 
 
 def serialize(m: ProgramMember) -> dict:
@@ -69,7 +71,7 @@ def add_member(
         program_id=program_id,
         owner_github_id=current_user["github_id"],
         member_github_id=body.github_id,
-        role="member",
+        role=body.role,
     )
     db.add(member)
     db.flush()

@@ -163,16 +163,20 @@ export default function FindingsSection({ program }: { program: Program }) {
     } catch { setMessage("AI suggestion request failed."); } finally { setSuggesting(null); }
   }
 
+  const isViewer = program.my_role === 'viewer';
+
   return (
     <div className="space-y-7">
       <SectionHeader title="Findings" description="Track validated issues before drafting the final report." />
       <div className="grid gap-5 xl:grid-cols-2">
-        <Panel title="Add Finding">
-          <FindingForm value={form} onChange={setForm} />
-          <div className="mt-3">
-            <PrimaryButton onClick={addFinding} label="Save Finding" />
-          </div>
-        </Panel>
+        {!isViewer && (
+          <Panel title="Add Finding">
+            <FindingForm value={form} onChange={setForm} />
+            <div className="mt-3">
+              <PrimaryButton onClick={addFinding} label="Save Finding" />
+            </div>
+          </Panel>
+        )}
         <Panel title={`Finding Tracker${total > 0 ? ` (${total})` : ""}`}>
           <form
             onSubmit={(e) => { e.preventDefault(); setSearch(searchInput); }}
@@ -240,23 +244,29 @@ export default function FindingsSection({ program }: { program: Program }) {
                         </div>
                       </div>
                       <div className="flex gap-2">
-                        <button
-                          onClick={() => aiSuggest(finding)}
-                          disabled={suggesting === finding.id}
-                          title="Use Claude AI to draft CVSS, impact, and remediation"
-                          className="rounded-md border border-[#2e2e2e] px-2.5 py-1 text-xs text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#a6e3a1] disabled:opacity-40">
-                          {suggesting === finding.id ? "…" : "AI Suggest"}
-                        </button>
+                        {!isViewer && (
+                          <button
+                            onClick={() => aiSuggest(finding)}
+                            disabled={suggesting === finding.id}
+                            title="Use Claude AI to draft CVSS, impact, and remediation"
+                            className="rounded-md border border-[#2e2e2e] px-2.5 py-1 text-xs text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#a6e3a1] disabled:opacity-40">
+                            {suggesting === finding.id ? "…" : "AI Suggest"}
+                          </button>
+                        )}
                         <button onClick={() => logSubmission(finding)} className="rounded-md border border-[#2e2e2e] px-2.5 py-1 text-xs text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#a6e3a1]">
                           Log Submission →
                         </button>
                         <button onClick={() => promoteToReport(finding)} className="rounded-md border border-[#2e2e2e] px-2.5 py-1 text-xs text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#94a3b8]">
                           Draft Report →
                         </button>
-                        <button onClick={() => startEdit(finding)} className="rounded-md border border-[#2e2e2e] px-2.5 py-1 text-xs text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#94a3b8]">
-                          Edit
-                        </button>
-                        <DangerButton onClick={() => deleteFinding(finding.id)} label="Delete" small />
+                        {!isViewer && (
+                          <button onClick={() => startEdit(finding)} className="rounded-md border border-[#2e2e2e] px-2.5 py-1 text-xs text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#94a3b8]">
+                            Edit
+                          </button>
+                        )}
+                        {!isViewer && (
+                          <DangerButton onClick={() => deleteFinding(finding.id)} label="Delete" small />
+                        )}
                       </div>
                     </div>
                     {finding.summary && <p className="mt-3 text-sm text-[#6b7280]">{finding.summary}</p>}

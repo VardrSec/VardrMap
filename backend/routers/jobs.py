@@ -5,6 +5,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+import sse as _sse
 from db import get_db
 from deps import get_current_user, get_program_or_404, log_action
 from limiter import limiter
@@ -126,6 +127,7 @@ def create_job(
     log_action(db, current_user["github_id"], "create", "scan_job", job.id, program_id)
     db.commit()
     db.refresh(job)
+    _sse.notify(program_id, {"type": "job_update", "job_id": job.id, "status": job.status})
     return serialize_job(job)
 
 
@@ -332,6 +334,8 @@ def create_job_event(
     db.add(event)
     db.commit()
     db.refresh(event)
+    if body.kind in ("done", "failed"):
+        _sse.notify(job.program_id, {"type": "job_update", "job_id": job_id, "status": body.kind})
     return serialize_event(event)
 
 

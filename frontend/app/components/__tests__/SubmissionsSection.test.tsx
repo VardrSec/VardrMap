@@ -74,6 +74,7 @@ describe("SubmissionsSection", () => {
   });
 
   it("deletes a submission via DELETE and removes it from the list", async () => {
+    window.confirm = jest.fn(() => true);
     const { authFetch, setMessage } = renderWithApp(<SubmissionsSection program={PROGRAM} />, {
       routes: {
         "GET /programs/prog-1/submissions": { body: { submissions: [SUBMISSION] } },

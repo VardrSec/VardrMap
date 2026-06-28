@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from db import get_db
-from deps import get_current_user, get_program_or_404, log_action
+from deps import get_current_user, get_program_or_404, log_action, require_member_write
 from models import Report
 from schemas import ReportCreate, ReportUpdate
 from serializers import serialize_report
@@ -32,7 +32,8 @@ def add_report(
     current_user: dict[str, str] = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    get_program_or_404(program_id, current_user, db)
+    program = get_program_or_404(program_id, current_user, db)
+    require_member_write(program, current_user, db)
     report = Report(
         program_id=program_id,
         finding_id=payload.finding_id or "",
@@ -83,7 +84,8 @@ def delete_report(
     current_user: dict[str, str] = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    get_program_or_404(program_id, current_user, db)
+    program = get_program_or_404(program_id, current_user, db)
+    require_member_write(program, current_user, db)
     report = db.query(Report).filter(
         Report.id == report_id,
         Report.program_id == program_id,

@@ -62,7 +62,7 @@ def get_programs(
 
     seen = {p.id for p in owned}
     all_programs = owned + [p for p in shared if p.id not in seen]
-    return {"programs": [serialize_program(p, db) for p in all_programs]}
+    return {"programs": [serialize_program(p, db, github_id=github_id) for p in all_programs]}
 
 
 @router.post("/programs")
@@ -96,7 +96,7 @@ def create_program(
     log_action(db, current_user["github_id"], "create", "program", program.id)
     db.commit()
     db.refresh(program)
-    return serialize_program(program, db)
+    return serialize_program(program, db, github_id=current_user["github_id"])
 
 
 @router.get("/programs/{program_id}")
@@ -106,7 +106,7 @@ def get_program(
     db: Session = Depends(get_db),
 ):
     program = get_program_or_404(program_id, current_user, db)
-    return serialize_program(program, db)
+    return serialize_program(program, db, github_id=current_user["github_id"])
 
 
 @router.patch("/programs/{program_id}")
@@ -123,7 +123,7 @@ def update_program(
     log_action(db, current_user["github_id"], "update", "program", program_id, program_id)
     db.commit()
     db.refresh(program)
-    return serialize_program(program, db)
+    return serialize_program(program, db, github_id=current_user["github_id"])
 
 
 @router.get("/programs/{program_id}/stats")
