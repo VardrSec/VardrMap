@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from db import get_db
-from deps import get_current_user, get_program_or_404, log_action
+from deps import get_current_user, get_program_or_404, log_action, require_member_write
 from models import Submission
 from schemas import SubmissionCreate, SubmissionUpdate
 
@@ -63,6 +63,7 @@ def create_submission(
     db: Session = Depends(get_db),
 ):
     program = get_program_or_404(program_id, current_user, db)
+    require_member_write(program, current_user, db)
     sub = Submission(
         program_id=program_id,
         # Store under the program owner so the list query finds it regardless of who created it
@@ -94,6 +95,7 @@ def update_submission(
     db: Session = Depends(get_db),
 ):
     program = get_program_or_404(program_id, current_user, db)
+    require_member_write(program, current_user, db)
     sub = (
         db.query(Submission)
         .filter(
@@ -137,6 +139,7 @@ def delete_submission(
     db: Session = Depends(get_db),
 ):
     program = get_program_or_404(program_id, current_user, db)
+    require_member_write(program, current_user, db)
     sub = (
         db.query(Submission)
         .filter(

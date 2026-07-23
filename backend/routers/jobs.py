@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 import sse as _sse
 from db import get_db
-from deps import get_current_user, get_program_or_404, log_action
+from deps import get_current_user, get_program_or_404, log_action, require_member_write
 from limiter import limiter
 from models import JobEvent, ReconItem, ScanJob, ScheduledScan, ScopeItem, User
 from notifications import send_webhook
@@ -121,7 +121,8 @@ def create_job(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    get_program_or_404(program_id, current_user, db)
+    program = get_program_or_404(program_id, current_user, db)
+    require_member_write(program, current_user, db)
     if body.tool_type not in _VALID_TOOLS:
         raise HTTPException(status_code=400, detail=f"tool_type must be one of {sorted(_VALID_TOOLS)}")
     if body.target_source not in _VALID_SOURCES:
@@ -178,7 +179,8 @@ def create_pipeline(
     parent completes. Validation is per-stage and identical to single-job creation,
     so a bad stage rejects the whole pipeline before anything is written.
     """
-    get_program_or_404(program_id, current_user, db)
+    program = get_program_or_404(program_id, current_user, db)
+    require_member_write(program, current_user, db)
     for i, stage in enumerate(body.stages):
         if stage.tool_type not in _VALID_TOOLS:
             raise HTTPException(status_code=400, detail=f"stage {i}: tool_type must be one of {sorted(_VALID_TOOLS)}")

@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from db import get_db
-from deps import get_current_user, get_program_or_404, log_action
+from deps import get_current_user, get_program_or_404, log_action, require_member_write
 from models import ScanItem
 from schemas import BulkScanStatusUpdate, ScanStatusUpdate
 from serializers import serialize_scan_item
@@ -60,7 +60,8 @@ def bulk_update_scan_status(
     current_user: dict[str, str] = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    get_program_or_404(program_id, current_user, db)
+    program = get_program_or_404(program_id, current_user, db)
+    require_member_write(program, current_user, db)
     scans = db.query(ScanItem).filter(
         ScanItem.program_id == program_id,
         ScanItem.id.in_(payload.ids),
@@ -90,7 +91,8 @@ def triage_scans(
     Unlike the per-finding suggest endpoint, this operates on un-promoted ScanItems —
     it is the first pass over raw tool output, before anything becomes a Finding.
     """
-    get_program_or_404(program_id, current_user, db)
+    program = get_program_or_404(program_id, current_user, db)
+    require_member_write(program, current_user, db)  # AI actions cost money — viewers can't trigger them
 
     query = db.query(ScanItem).filter(ScanItem.program_id == program_id)
     if payload.ids:
@@ -164,7 +166,8 @@ def update_scan_status(
     current_user: dict[str, str] = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    get_program_or_404(program_id, current_user, db)
+    program = get_program_or_404(program_id, current_user, db)
+    require_member_write(program, current_user, db)
     scan = db.query(ScanItem).filter(
         ScanItem.id == scan_id,
         ScanItem.program_id == program_id,

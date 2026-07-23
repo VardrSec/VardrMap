@@ -13,7 +13,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from db import get_db
-from deps import get_current_user, get_program_or_404, log_action
+from deps import get_current_user, get_program_or_404, log_action, require_member_write
 from models import ScheduledScan
 from routers.jobs import _validate_job_config, _VALID_SOURCES, _VALID_TOOLS, SCHEDULE_INTERVALS as INTERVALS
 
@@ -75,6 +75,7 @@ def create_schedule(
     db: Session = Depends(get_db),
 ):
     program = get_program_or_404(program_id, current_user, db)
+    require_member_write(program, current_user, db)
     if body.tool_type not in _VALID_TOOLS:
         raise HTTPException(status_code=400, detail=f"tool_type must be one of {sorted(_VALID_TOOLS)}")
     if body.target_source not in _VALID_SOURCES:
@@ -111,6 +112,7 @@ def update_schedule(
     db: Session = Depends(get_db),
 ):
     program = get_program_or_404(program_id, current_user, db)
+    require_member_write(program, current_user, db)
     schedule = (
         db.query(ScheduledScan)
         .filter(
@@ -144,6 +146,7 @@ def delete_schedule(
     db: Session = Depends(get_db),
 ):
     program = get_program_or_404(program_id, current_user, db)
+    require_member_write(program, current_user, db)
     schedule = (
         db.query(ScheduledScan)
         .filter(
