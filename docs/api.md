@@ -429,6 +429,7 @@ List recon items for a program, with optional filters. Items come from ffuf or h
 | `offset` | 0 | ≥0 | Number of items to skip |
 | `search` | (none) | — | Full-text filter across URL, host, path, title |
 | `status_code` | (none) | — | Filter by HTTP status code (e.g. `200`) |
+| `job_id` | (none) | — | Only items produced by this scan job (provenance link) |
 
 **Response**
 ```json
@@ -444,7 +445,8 @@ List recon items for a program, with optional filters. Items come from ffuf or h
       "webserver": "nginx",
       "tech": ["React", "Node.js"],
       "content_type": "text/html",
-      "length": 4321
+      "length": 4321,
+      "job_id": "<uuid | null>"
     }
   ],
   "total": 120,
@@ -474,6 +476,7 @@ List scan items with pagination and optional status filter. Items come from nucl
 | `limit` | 100 | 1–500 | Max items to return |
 | `offset` | 0 | ≥0 | Number of items to skip |
 | `status` | (none) | — | Filter by status value |
+| `job_id` | (none) | — | Only items produced by this scan job (provenance link) |
 
 **Response**
 ```json
@@ -491,7 +494,8 @@ List scan items with pagination and optional status filter. Items come from nucl
       "description": "...",
       "status": "new",
       "cwe": "CWE-22",
-      "cvss": "9.8"
+      "cvss": "9.8",
+      "job_id": "<uuid | null>"
     }
   ],
   "total": 55,
@@ -499,6 +503,31 @@ List scan items with pagination and optional status filter. Items come from nucl
   "limit": 100
 }
 ```
+`job_id` is the scan job that produced the item (null for manual file imports), enabling a job → its-results provenance link.
+
+### `POST /programs/{program_id}/scans/triage`
+AI triage over **raw** scan items (before promotion to findings). Sends a batch to Claude and returns a prioritized, false-positive-flagged list — turning the nuclei firehose into a ranked queue. Requires `ANTHROPIC_API_KEY` on the server.
+
+**Request body**
+```json
+{ "ids": ["<uuid>", "<uuid>"] }
+```
+`ids` — specific scan items to triage. If empty, the newest `new`-status items are triaged (capped at 25 per call).
+
+**Response**
+```json
+{
+  "triage": [
+    { "id": "<uuid>", "priority": "high", "false_positive": false, "rationale": "Confirmed SQLi on login." }
+  ]
+}
+```
+`priority` is one of `high`, `medium`, `low`, `noise`. Only ids that were part of the request are echoed back.
+
+**Errors**
+- `404` — program not found / not owned
+- `503` — `ANTHROPIC_API_KEY` not configured
+- `502` — model returned non-JSON or the request failed
 
 ### `PATCH /programs/{program_id}/scans/{scan_id}`
 Update the status of a single scan item.
@@ -536,6 +565,7 @@ Upload tool output for parsing and storage. Accepts `multipart/form-data`.
 |---|---|---|
 | `tool_type` | string | `ffuf`, `httpx`, or `nuclei` |
 | `file` | file | `.json` or `.jsonl` output file |
+| `job_id` | string (optional) | Scan job that produced this output; stamped onto every new recon/scan item for provenance. VardrRunner passes the id of the job it is executing. |
 
 **File constraints**
 - Extension: `.json` or `.jsonl`
@@ -576,12 +606,14 @@ A job object looks like:
   "target_source": "scope",
   "config": { "limit": 100 },
   "status": "pending",
+  "depends_on": null,
   "created_at": "2026-06-09T10:00:00",
   "started_at": null,
   "completed_at": null,
   "error_message": ""
 }
 ```
+`depends_on` is the id of a job this stage waits on (null = no dependency). Set by `POST /programs/{id}/pipelines`.
 
 ### `POST /programs/{program_id}/jobs`
 Queue a new scan job.
@@ -591,18 +623,58 @@ Queue a new scan job.
 {
   "tool_type": "httpx",
   "target_source": "scope",
-  "config": { "status_code": 200, "limit": 500 }
+  "config": { "status_code": 200, "limit": 500 },
+  "depends_on": null
 }
 ```
 - `tool_type`: `"httpx"`, `"nuclei"`, `"subfinder"`, or `"nmap"`
 - `target_source`: `"scope"` or `"recon"`
 - `config` (optional): tool-specific options — `status_code`, `limit` for httpx; `severity`, `templates` for nuclei; `top_ports`, `timing` for nmap. Unknown keys are rejected.
+- `depends_on` (optional): id of another job (same program, same owner) that must reach `done` before this job becomes eligible in `GET /jobs/pending`.
 
 **Response:** job object with `status: "pending"`.
 
 **Errors**
-- `400` — invalid `tool_type`, invalid `target_source`, or unknown config key for the tool
+- `400` — invalid `tool_type`, invalid `target_source`, unknown config key, or `depends_on` referencing a job not in this program
 - `404` — program not found or belongs to another user
+
+### `POST /programs/{program_id}/pipelines`
+Queue an ordered chain of jobs where each stage waits on the previous one. The canonical recon pipeline `subfinder → httpx → nuclei` is one request. Validation is per-stage and identical to single-job creation, so a bad stage rejects the whole pipeline atomically (no partial writes).
+
+**Request body**
+```json
+{
+  "stages": [
+    { "tool_type": "subfinder", "target_source": "scope" },
+    { "tool_type": "httpx", "target_source": "recon" },
+    { "tool_type": "nuclei", "target_source": "recon", "config": { "severity": "high,critical" } }
+  ]
+}
+```
+`stages` — 1 to 8 stages. Each stage has the same fields as a single job (minus `depends_on`, which is wired automatically).
+
+**Response** — `201`
+```json
+{ "jobs": [ <job_object>, ... ] }
+```
+Jobs are returned in stage order; the first has `depends_on: null`, each subsequent one depends on the prior job's id.
+
+### `POST /programs/{program_id}/jobs/preview`
+Dry-run: resolve the target list a job would run against **without queuing anything**. Lets the Composer confirm intent before launching ("about to scan 4,000 hosts?").
+
+**Request body** — same shape as `POST .../jobs` (`tool_type`, `target_source`, optional `config`).
+
+**Response**
+```json
+{
+  "tool_type": "nuclei",
+  "target_source": "recon",
+  "count": 1284,
+  "sample": ["https://a.example.com", "https://b.example.com"],
+  "truncated": true
+}
+```
+`count` is the total resolved targets; `sample` is the first 20; `truncated` is true when more exist. This mirrors what VardrRunner fetches (in-scope items for `scope`; recon rows for `recon`) and is an estimate — the runner applies final host normalization.
 
 ### `GET /programs/{program_id}/jobs/stream`
 Server-Sent Events (SSE) stream for real-time job status changes. The frontend opens this alongside polling; when a `job_update` event arrives, it triggers an immediate `GET /programs/{id}/jobs` refresh.
@@ -639,7 +711,9 @@ List all jobs for a program, newest first.
 ```
 
 ### `GET /jobs/pending`
-Return all `pending` jobs owned by the authenticated user, oldest first. Used by VardrRunner to poll for work.
+Return `pending` jobs owned by the authenticated user that are eligible to run now, oldest first. Used by VardrRunner to poll for work. Also materializes any due scheduled scans into pending jobs.
+
+Pipeline stages with an unmet dependency are held back: a job with `depends_on` set is only returned once its parent reaches `done`. If the parent `failed` (or no longer exists), the dependent job is auto-failed with an `"upstream pipeline stage failed"` message so it never hangs the queue.
 
 **Response**
 ```json
@@ -1060,6 +1134,52 @@ Update `enabled` (pause/resume) and/or `interval`.
 
 ### `DELETE /programs/{program_id}/schedules/{schedule_id}`
 Permanently delete a schedule. Jobs already materialized from it are unaffected.
+
+---
+
+## Scan Profiles
+
+Reusable saved tool + config presets for a program. A hunter can save a frequently-used scan (e.g. "nuclei CVE sweep") and queue it in one click instead of retyping config. Config is validated identically to job creation, so a profile can never store a scan the job endpoint would reject.
+
+**Profile object shape**
+```json
+{
+  "id":            "uuid",
+  "program_id":    "uuid",
+  "name":          "CVE sweep",
+  "tool_type":     "nuclei",
+  "target_source": "recon",
+  "config":        { "severity": "high,critical", "templates": "cves" },
+  "created_at":    "2026-07-22T10:00:00+00:00"
+}
+```
+
+### `GET /programs/{program_id}/scan-profiles`
+List all scan profiles for a program, newest first.
+
+**Response**
+```json
+{ "profiles": [ <profile_object>, ... ] }
+```
+
+### `POST /programs/{program_id}/scan-profiles`
+Create a saved profile. `201` on success.
+
+**Request body**
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `name` | string | yes | 1–100 chars |
+| `tool_type` | string | yes | `httpx`, `nuclei`, `subfinder`, or `nmap` |
+| `target_source` | string | yes | `scope` or `recon` |
+| `config` | object | no | Tool config, same validation as job creation |
+
+**Errors**
+- `400` — invalid tool, source, or config keys
+- `403` — viewer-role member (read-only)
+- `404` — program not found or belongs to another user
+
+### `DELETE /programs/{program_id}/scan-profiles/{profile_id}`
+Permanently delete a profile.
 
 ---
 
