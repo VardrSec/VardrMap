@@ -13,7 +13,7 @@ export type AppState = {
   reportPrefill: ReportFormState | null;
   submissionPrefill: SubmissionPrefill | null;
   dashboardPrefill: { tool?: string; tab?: "import" } | null;
-  reviewPrefill: { tab?: ReviewTab; manualTest?: ManualTestFormState; prefillEpoch?: number } | null;
+  reviewPrefill: { tab?: ReviewTab; manualTest?: ManualTestFormState; jobId?: string; prefillEpoch?: number } | null;
 };
 
 export type AppAction =
@@ -25,7 +25,7 @@ export type AppAction =
   | { type: "NAVIGATE"; section: Section }
   | { type: "NAVIGATE_TO_DASHBOARD"; tool?: string; tab?: "import" }
   | { type: "DASHBOARD_PREFILL_CONSUMED" }
-  | { type: "NAVIGATE_TO_REVIEW"; tab?: ReviewTab; manualTest?: ManualTestFormState }
+  | { type: "NAVIGATE_TO_REVIEW"; tab?: ReviewTab; manualTest?: ManualTestFormState; jobId?: string }
   | { type: "REVIEW_PREFILL_CONSUMED" }
   | { type: "PROMOTE_TO_FINDING"; prefill: FindingFormState }
   | { type: "FINDING_PREFILL_CONSUMED" }
@@ -101,6 +101,7 @@ export function appReducer(state: AppState, action: AppAction): AppState {
         reviewPrefill: {
           tab: action.tab,
           manualTest: action.manualTest,
+          jobId: action.jobId,
           prefillEpoch: (state.reviewPrefill?.prefillEpoch ?? 0) + 1,
         },
       };
