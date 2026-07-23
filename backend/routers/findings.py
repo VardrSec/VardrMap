@@ -71,7 +71,8 @@ def update_finding(
     current_user: dict[str, str] = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    get_program_or_404(program_id, current_user, db)
+    program = get_program_or_404(program_id, current_user, db)
+    require_member_write(program, current_user, db)
     finding = db.query(Finding).filter(
         Finding.id == finding_id,
         Finding.program_id == program_id,
@@ -109,7 +110,8 @@ def suggest_finding(
 ):
     """Call Claude API to draft CVSS, impact, and remediation for a finding."""
     # BOLA scope check first — wrong-user gets 404, not a 503 that leaks API state
-    get_program_or_404(program_id, current_user, db)
+    program = get_program_or_404(program_id, current_user, db)
+    require_member_write(program, current_user, db)  # AI actions cost money — viewers can't trigger them
     finding = db.query(Finding).filter(
         Finding.id == finding_id,
         Finding.program_id == program_id,

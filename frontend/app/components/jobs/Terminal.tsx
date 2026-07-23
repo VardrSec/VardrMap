@@ -224,15 +224,16 @@ export default function Terminal({ job, accent, onClose, onRetry, onCancel, onDe
               re-queue
             </button>
           )}
-          {job.status === "done" && job.yield > 0 && TOOL_TO_REVIEW_TAB[job.tool] && (
+          {job.status === "done" && TOOL_TO_REVIEW_TAB[job.tool] && (
             <button
               onClick={() => {
                 const tab = TOOL_TO_REVIEW_TAB[job.tool] as "recon" | "scans" | "manual" | "services";
-                dispatch({ type: "NAVIGATE_TO_REVIEW", tab });
+                dispatch({ type: "NAVIGATE_TO_REVIEW", tab, jobId: job.id });
                 navigate("review");
               }}
-              className="rounded-md border border-[#a6e3a1]/30 px-3 py-1 font-mono text-[11px] text-[#a6e3a1] transition hover:border-[#a6e3a1]/60">
-              → Review
+              className="rounded-md border border-[#a6e3a1]/30 px-3 py-1 font-mono text-[11px] text-[#a6e3a1] transition hover:border-[#a6e3a1]/60"
+              title="Show only the results this job produced">
+              → View results
             </button>
           )}
           <button onClick={() => onDelete(job.id)}

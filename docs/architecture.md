@@ -130,6 +130,7 @@ scan_items
   id (PK), program_id (FK), source ("nuclei")
   template_id, title, severity, asset, matched_at,
   type, description, status, cwe, cvss
+  job_id (nullable — scan_job that produced this item; null for manual imports)
   created_at
 
 import_records
@@ -153,6 +154,8 @@ scan_jobs
   target_source ("scope"|"recon")
   config (JSON — tool-specific options: status_code/limit for httpx; severity/templates for nuclei; top_ports/timing for nmap)
   status ("pending"|"running"|"done"|"failed")
+  depends_on (nullable — soft ref to another scan_job; this stage is held out of
+    GET /jobs/pending until its parent is "done", auto-failed if the parent failed)
   created_at, started_at (nullable), completed_at (nullable)
   error_message
 
@@ -235,6 +238,16 @@ program_members
   invited_at
   Unique: (program_id, member_github_id)
 
+scan_profiles
+  id (PK)
+  program_id (FK → programs.id, CASCADE DELETE, indexed)
+  owner_github_id (indexed)
+  name (VARCHAR 100)
+  tool_type ("httpx"|"nuclei"|"subfinder"|"nmap")
+  target_source ("scope"|"recon")
+  config (JSON — same shape and validation as scan_jobs.config)
+  created_at
+
 audit_logs
   id (PK)
   github_id (no FK — records survive user deletion)
@@ -248,7 +261,8 @@ audit_logs
 - `AuditLog` has no FK constraints so records are never deleted when users or programs are removed.
 - `api_keys.key_hash` stores the SHA-256 hex digest of the plaintext token. The plaintext is never stored. `last_used_at` is stamped on every successful API key authentication. `scope` restricts runner-scoped keys to jobs/imports/heartbeat endpoints — all other endpoints return `403` for runner keys.
 - `recon_items.first_seen_at` is set once when an item is first imported and never overwritten. Dedup key is `(program_id, source, url)`: re-importing the same URL produces `new_count: 0` with no duplicate row.
-- `program_members` grant collaborators read+write access to a program's resources. Only the owner can manage members and delete/PATCH the program itself. `GET /programs` returns both owned programs and programs where the user is a member.
+- `program_members` grant collaborators access to a program's resources, with two roles: **`member`** (read + write) and **`viewer`** (read-only). Only the owner can manage members and delete/PATCH the program itself. `GET /programs` returns both owned programs and programs where the user is a member.
+- **Viewer enforcement:** every program-scoped write endpoint (create/update/delete of findings, reports, manual tests, scans, submissions, schedules, scan profiles, services, scope, imports, jobs, pipelines) calls `require_member_write` after `get_program_or_404`, which raises `403` for a viewer-role member. The guard fires before any resource lookup, so a viewer gets `403` even for a non-existent target id. Owners always pass; runner-scoped API keys resolve to the owner and therefore also pass (so uploads/heartbeats are unaffected). AI actions (`findings/{id}/suggest`, `scans/triage`) are gated too, since they incur cost. Read (`GET`) endpoints remain open to viewers.
 - `scan_jobs.config` is a JSON column with optional tool options. VardrRunner reads this dict when executing the job. Unknown config keys are rejected at creation time.
 - `scan_jobs` are scoped to the owning user via `owner_github_id` — a user can only see/update their own jobs. Claiming a job uses `POST /jobs/{id}/claim` which atomically sets `status = "running"` only if currently `"pending"`, returning 409 otherwise.
 - `services` rows are bulk-upserted on `(host, port, protocol)` — repeated nmap scans update metadata rather than creating duplicates. `last_scanned_at` is stamped on both insert and update so freshness is always visible.
@@ -259,6 +273,10 @@ audit_logs
 - `scheduled_scans` have no backend cron. Due schedules (`enabled` and `next_run_at <= now`) are materialized into pending `scan_jobs` inside `GET /jobs/pending` — the runner's poll drives the clock. `next_run_at` advances from *now* rather than the previous `next_run_at`, so a runner that was offline for a week creates one catch-up job, not seven.
 - `users.webhook_url` (stored plaintext — it must be usable, unlike hashed API keys; only ever returned to its owner) and `users.notify_min_severity` drive outbound notifications, sent via FastAPI BackgroundTasks so webhook latency never delays API responses. URLs are validated against an SSRF guard (HTTPS only, no localhost/private/link-local targets).
 - `job_events` are appended by VardrRunner via `POST /jobs/{id}/events` at each lifecycle stage. The frontend Terminal polls `GET /jobs/{id}/events` (3 s interval while job is pending/running, stops on terminal state). Events cascade-delete with their parent job. Rate-limited to 600/min.
+- **Pipelines** (`POST /programs/{id}/pipelines`) create an ordered chain of `scan_jobs` linked by `depends_on`. A dependent stage is withheld from `GET /jobs/pending` until its parent is `done`; the runner's own poll drives the clock (same pattern as scheduled scans). If a parent `failed`, `GET /jobs/pending` auto-fails the dependent stage so it never hangs. The canonical chain is subfinder → httpx → nuclei.
+- **Provenance:** `recon_items.job_id` and `scan_items.job_id` record which `scan_job` produced each row (stamped from the optional `job_id` form field on `POST /imports`; null for manual uploads). `GET /programs/{id}/recon?job_id=` and `GET /programs/{id}/scans?job_id=` filter by it, so the Terminal can deep-link from a finished job to exactly the rows it yielded.
+- **AI triage** (`POST /programs/{id}/scans/triage`) sends a batch of un-promoted `scan_items` to Claude (Haiku) and returns a per-item `priority`/`false_positive`/`rationale`. Unlike `findings/{id}/suggest` (which enriches an already-created finding), triage is the first pass over raw tool output. Only ids present in the request are echoed back, so the model cannot smuggle in other rows. Requires `ANTHROPIC_API_KEY`.
+- `scan_profiles` are reusable tool + config presets per program, validated identically to `scan_jobs.config`. They let the Composer queue a frequently-used scan in one click. No FK from jobs to profiles — a profile is a template, copied into a job at queue time.
 
 ---
 

@@ -7,9 +7,9 @@ from sqlalchemy.orm import Session
 
 import sse as _sse
 from db import get_db
-from deps import get_current_user, get_program_or_404, log_action
+from deps import get_current_user, get_program_or_404, log_action, require_member_write
 from limiter import limiter
-from models import JobEvent, ScanJob, ScheduledScan, User
+from models import JobEvent, ReconItem, ScanJob, ScheduledScan, ScopeItem, User
 from notifications import send_webhook
 
 router = APIRouter(tags=["jobs"])
@@ -78,6 +78,19 @@ class JobCreate(BaseModel):
     tool_type: str              # "httpx", "nuclei", "subfinder", or "nmap"
     target_source: str          # "scope" or "recon"
     config: Optional[dict] = None
+    depends_on: Optional[str] = None  # scan_job id this job waits on before running
+
+
+class PipelineStage(BaseModel):
+    tool_type: str
+    target_source: str
+    config: Optional[dict] = None
+
+
+class PipelineCreate(BaseModel):
+    # Ordered stages: each becomes a scan_job that waits on the one before it.
+    # A one-click "Recon Pipeline" (subfinder -> httpx -> nuclei) is just three stages.
+    stages: list[PipelineStage] = Field(min_length=1, max_length=8)
 
 
 class JobStatusUpdate(BaseModel):
@@ -93,6 +106,7 @@ def serialize_job(j: ScanJob) -> dict:
         "target_source": j.target_source,
         "config": j.config or {},
         "status": j.status,
+        "depends_on": j.depends_on,
         "created_at":   j.created_at.isoformat()   if j.created_at   else None,
         "started_at":   j.started_at.isoformat()   if j.started_at   else None,
         "completed_at": j.completed_at.isoformat() if j.completed_at else None,
@@ -107,13 +121,16 @@ def create_job(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    get_program_or_404(program_id, current_user, db)
+    program = get_program_or_404(program_id, current_user, db)
+    require_member_write(program, current_user, db)
     if body.tool_type not in _VALID_TOOLS:
         raise HTTPException(status_code=400, detail=f"tool_type must be one of {sorted(_VALID_TOOLS)}")
     if body.target_source not in _VALID_SOURCES:
         raise HTTPException(status_code=400, detail="target_source must be scope or recon")
     if body.config:
         _validate_job_config(body.tool_type, body.config)
+    if body.depends_on:
+        _validate_dependency(body.depends_on, program_id, current_user["github_id"], db)
 
     job = ScanJob(
         program_id=program_id,
@@ -121,6 +138,7 @@ def create_job(
         tool_type=body.tool_type,
         target_source=body.target_source,
         config=body.config or {},
+        depends_on=body.depends_on,
     )
     db.add(job)
     db.flush()  # assigns job.id without committing
@@ -129,6 +147,131 @@ def create_job(
     db.refresh(job)
     _sse.notify(program_id, {"type": "job_update", "job_id": job.id, "status": job.status})
     return serialize_job(job)
+
+
+def _validate_dependency(parent_id: str, program_id: str, github_id: str, db: Session) -> None:
+    """A dependency must be an existing job the caller owns in the same program.
+    Prevents dangling waits and cross-program/cross-user references."""
+    parent = (
+        db.query(ScanJob)
+        .filter(
+            ScanJob.id == parent_id,
+            ScanJob.owner_github_id == github_id,
+            ScanJob.program_id == program_id,
+        )
+        .first()
+    )
+    if not parent:
+        raise HTTPException(status_code=400, detail="depends_on must reference an existing job in this program")
+
+
+@router.post("/programs/{program_id}/pipelines", status_code=201)
+def create_pipeline(
+    program_id: str,
+    body: PipelineCreate,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Queue an ordered chain of jobs where each stage waits on the previous one.
+
+    The canonical recon pipeline is subfinder -> httpx -> nuclei: one click queues
+    all three, and each stage only becomes eligible in GET /jobs/pending once its
+    parent completes. Validation is per-stage and identical to single-job creation,
+    so a bad stage rejects the whole pipeline before anything is written.
+    """
+    program = get_program_or_404(program_id, current_user, db)
+    require_member_write(program, current_user, db)
+    for i, stage in enumerate(body.stages):
+        if stage.tool_type not in _VALID_TOOLS:
+            raise HTTPException(status_code=400, detail=f"stage {i}: tool_type must be one of {sorted(_VALID_TOOLS)}")
+        if stage.target_source not in _VALID_SOURCES:
+            raise HTTPException(status_code=400, detail=f"stage {i}: target_source must be scope or recon")
+        if stage.config:
+            _validate_job_config(stage.tool_type, stage.config)
+
+    created: list[ScanJob] = []
+    prev_id: Optional[str] = None
+    for stage in body.stages:
+        job = ScanJob(
+            program_id=program_id,
+            owner_github_id=current_user["github_id"],
+            tool_type=stage.tool_type,
+            target_source=stage.target_source,
+            config=stage.config or {},
+            depends_on=prev_id,
+        )
+        db.add(job)
+        db.flush()  # assign job.id so the next stage can depend on it
+        log_action(db, current_user["github_id"], "create", "scan_job", job.id, program_id)
+        created.append(job)
+        prev_id = job.id
+    db.commit()
+    for job in created:
+        db.refresh(job)
+    _sse.notify(program_id, {"type": "job_update", "job_id": created[0].id, "status": created[0].status})
+    return {"jobs": [serialize_job(j) for j in created]}
+
+
+class JobPreview(BaseModel):
+    tool_type: str
+    target_source: str
+    config: Optional[dict] = None
+
+
+def _resolve_targets(program_id: str, target_source: str, config: dict, db: Session) -> list[str]:
+    """Resolve the target list a job would run against, server-side. This mirrors what
+    VardrRunner fetches (in-scope items for 'scope'; recon rows for 'recon') so the UI
+    can show a dry-run preview before queuing. It is an estimate — the runner applies
+    final host normalization — but it catches "I'm about to scan 4,000 hosts" mistakes."""
+    if target_source == "scope":
+        rows = (
+            db.query(ScopeItem.value)
+            .filter(ScopeItem.program_id == program_id, ScopeItem.scope_type == "in")
+            .all()
+        )
+        targets = [v for (v,) in rows if v]
+    else:  # recon
+        rows = (
+            db.query(ReconItem.url, ReconItem.host)
+            .filter(ReconItem.program_id == program_id)
+            .all()
+        )
+        targets = [url or host for (url, host) in rows if (url or host)]
+    # De-dup while preserving order.
+    seen: set[str] = set()
+    deduped = [t for t in targets if not (t in seen or seen.add(t))]
+    if config and config.get("limit"):
+        try:
+            deduped = deduped[: int(config["limit"])]
+        except (TypeError, ValueError):
+            pass
+    return deduped
+
+
+@router.post("/programs/{program_id}/jobs/preview")
+def preview_job(
+    program_id: str,
+    body: JobPreview,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Dry-run: resolve the targets a job would run against without queuing anything.
+    Returns the total count and a capped sample so the Composer can confirm intent."""
+    get_program_or_404(program_id, current_user, db)
+    if body.tool_type not in _VALID_TOOLS:
+        raise HTTPException(status_code=400, detail=f"tool_type must be one of {sorted(_VALID_TOOLS)}")
+    if body.target_source not in _VALID_SOURCES:
+        raise HTTPException(status_code=400, detail="target_source must be scope or recon")
+    if body.config:
+        _validate_job_config(body.tool_type, body.config)
+    targets = _resolve_targets(program_id, body.target_source, body.config or {}, db)
+    return {
+        "tool_type": body.tool_type,
+        "target_source": body.target_source,
+        "count": len(targets),
+        "sample": targets[:20],
+        "truncated": len(targets) > 20,
+    }
 
 
 @router.get("/programs/{program_id}/jobs")
@@ -182,9 +325,14 @@ def get_pending_jobs(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """All pending jobs for the authenticated user, oldest first. Used by VardrRunner to poll."""
+    """Pending jobs the runner may execute now, oldest first. Used by VardrRunner to poll.
+
+    Pipeline stages with an unmet dependency are held back: a job waits until its
+    parent is "done", and is auto-failed if its parent failed (or vanished) so it
+    never hangs the queue forever.
+    """
     _materialize_due_schedules(db, current_user["github_id"])
-    jobs = (
+    pending = (
         db.query(ScanJob)
         .filter(
             ScanJob.owner_github_id == current_user["github_id"],
@@ -193,7 +341,38 @@ def get_pending_jobs(
         .order_by(ScanJob.created_at.asc())
         .all()
     )
-    return {"jobs": [serialize_job(j) for j in jobs]}
+    eligible = _filter_by_dependencies(pending, db)
+    return {"jobs": [serialize_job(j) for j in eligible]}
+
+
+def _filter_by_dependencies(pending: list[ScanJob], db: Session) -> list[ScanJob]:
+    """Return only jobs whose dependency is satisfied. Auto-fail jobs whose parent
+    failed or no longer exists so they don't wait forever."""
+    eligible: list[ScanJob] = []
+    now = datetime.now(timezone.utc)
+    changed = False
+    # Resolve parent statuses in one query rather than per-job.
+    parent_ids = {j.depends_on for j in pending if j.depends_on}
+    parent_status: dict[str, str] = {}
+    if parent_ids:
+        for pid, status in db.query(ScanJob.id, ScanJob.status).filter(ScanJob.id.in_(parent_ids)).all():
+            parent_status[pid] = status
+    for job in pending:
+        if not job.depends_on:
+            eligible.append(job)
+            continue
+        status = parent_status.get(job.depends_on)
+        if status == "done":
+            eligible.append(job)
+        elif status in (None, "failed"):
+            job.status = "failed"
+            job.completed_at = now
+            job.error_message = "upstream pipeline stage failed" if status == "failed" else "upstream pipeline stage not found"
+            changed = True
+        # parent still pending/running -> hold this stage, don't surface it
+    if changed:
+        db.commit()
+    return eligible
 
 
 @router.patch("/jobs/{job_id}")

@@ -21,6 +21,8 @@ export default function ReviewSection({ program }: { program: Program }) {
   const { state: { reviewPrefill }, dispatch } = useAppContext();
   const [activeTab, setActiveTab] = useState<ReviewTab>("recon");
   const [manualPrefill, setManualPrefill] = useState<{ data: ManualTestFormState; epoch: number } | null>(null);
+  // Provenance filter: when set, the recon/scans tab shows only rows produced by this job.
+  const [jobFilter, setJobFilter] = useState<string | null>(null);
   const lastPrefillEpoch = useRef<number | null>(null);
 
   useEffect(() => {
@@ -34,9 +36,15 @@ export default function ReviewSection({ program }: { program: Program }) {
     if (reviewPrefill.manualTest) {
       setManualPrefill({ data: reviewPrefill.manualTest, epoch });
     }
+    setJobFilter(reviewPrefill.jobId ?? null);
     dispatch({ type: "REVIEW_PREFILL_CONSUMED" });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reviewPrefill]);
+
+  function selectTab(id: ReviewTab) {
+    setActiveTab(id);
+    setJobFilter(null);  // manual tab change clears any provenance filter
+  }
 
   return (
     <div className="space-y-7">
@@ -51,7 +59,7 @@ export default function ReviewSection({ program }: { program: Program }) {
           {TABS.map((t) => {
             const count = program[t.countKey] as number;
             return (
-              <button key={t.id} onClick={() => setActiveTab(t.id)}
+              <button key={t.id} onClick={() => selectTab(t.id)}
                 className="flex items-center gap-1.5 rounded-md px-4 py-1.5 font-mono text-[11px] uppercase tracking-wider transition"
                 style={activeTab === t.id ? { backgroundColor: "#2e2e2e", color: "#f1f5f9" } : { color: "#52525b" }}>
                 {t.label}
@@ -67,8 +75,8 @@ export default function ReviewSection({ program }: { program: Program }) {
         </div>
       </div>
 
-      {activeTab === "recon"    && <ReconSection    programId={program.id} hideHeader scopeItems={program.scope.in} />}
-      {activeTab === "scans"    && <ScanningSection programId={program.id} hideHeader scopeItems={program.scope.in} />}
+      {activeTab === "recon"    && <ReconSection    programId={program.id} hideHeader scopeItems={program.scope.in} jobFilter={jobFilter} onClearJobFilter={() => setJobFilter(null)} />}
+      {activeTab === "scans"    && <ScanningSection programId={program.id} hideHeader scopeItems={program.scope.in} jobFilter={jobFilter} onClearJobFilter={() => setJobFilter(null)} />}
       {activeTab === "manual"   && (
         <ManualSection
           program={program}

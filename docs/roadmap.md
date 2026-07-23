@@ -44,7 +44,22 @@ See `CHANGELOG.md` and `changelog/v0.20.0.md` – `v0.20.2.md` for details.
 
 ---
 
-## v0.21 — next
+## v0.21 — shipped (2026-07-22)
+
+Scan automation & integration — the input → output → triage loop tied together:
+
+- [x] **Scan pipelines** — `POST /programs/{id}/pipelines` chains subfinder→httpx→nuclei
+      via `scan_jobs.depends_on`; dependent stages held out of `GET /jobs/pending`
+      until the parent is `done`, auto-failed if the parent fails.
+- [x] **Job→results provenance** — `recon_items.job_id` / `scan_items.job_id` stamped
+      on import; `?job_id=` filters on recon/scans list endpoints.
+- [x] **AI triage over raw scan output** — `POST /programs/{id}/scans/triage`.
+- [x] **Dry-run target preview** — `POST /programs/{id}/jobs/preview`.
+- [x] **Saved scan profiles** — `GET/POST/DELETE /programs/{id}/scan-profiles`.
+
+See `changelog/v0.21.0.md`.
+
+## v0.22 — next
 
 - [ ] **Frontend section tests.** `FindingsSection`, `SubmissionsSection`, `JobsSection`
       mutations are untested. Needs `AppContext` + `fetch` mocking harness.

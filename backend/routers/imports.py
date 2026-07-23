@@ -6,7 +6,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPExcepti
 from sqlalchemy.orm import Session
 
 from db import get_db
-from deps import get_current_user, get_program_or_404, log_action
+from deps import get_current_user, get_program_or_404, log_action, require_member_write
 from models import ImportRecord, Program, ReconItem, User
 from notifications import send_webhook, severity_meets_threshold
 from parsers import normalize_to_list, parse_ffuf, parse_httpx, parse_json_or_jsonl, parse_nuclei
@@ -151,10 +151,12 @@ async def import_results(
     background_tasks: BackgroundTasks,
     tool_type: ToolType = Form(...),
     file: UploadFile = File(...),
+    job_id: str | None = Form(default=None),
     current_user: dict[str, str] = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    get_program_or_404(program_id, current_user, db)
+    program = get_program_or_404(program_id, current_user, db)
+    require_member_write(program, current_user, db)
 
     ext = Path(file.filename or "").suffix.lower()
     if ext not in ALLOWED_EXTENSIONS:
@@ -177,17 +179,21 @@ async def import_results(
         recon_items = parse_ffuf(items, program_id)
         new_items, new_count = _dedup_recon(db, recon_items, program_id, "ffuf")
         for r in new_items:
+            r.job_id = job_id
             db.add(r)
         imported_count = len(new_items)
 
     elif tool_type == "httpx":
         recon_items = parse_httpx(items, program_id)
+        for r in recon_items:
+            r.job_id = job_id  # stamped on genuinely-new rows; enriched rows keep their origin
         new_count, updated_count = _upsert_recon_httpx(db, recon_items, program_id)
         imported_count = new_count + updated_count
 
     elif tool_type == "nuclei":
         scan_items = parse_nuclei(items, program_id)
         for s in scan_items:
+            s.job_id = job_id
             db.add(s)
         imported_count = len(scan_items)
 

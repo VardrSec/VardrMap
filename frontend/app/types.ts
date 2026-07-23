@@ -4,12 +4,24 @@ export type ReconItem = {
   id: string; source: string; url?: string; path?: string; host?: string;
   title?: string; status_code?: number; webserver?: string; port?: string | number;
   tech?: string | string[]; length?: number; words?: number; lines?: number;
-  content_type?: string; notes?: string;
+  content_type?: string; notes?: string; job_id?: string | null;
 };
 export type ScanItem = {
   id: string; source: string; template_id: string; title: string;
   severity: string; asset: string; matched_at?: string; type?: string;
   description?: string; status: string; cwe?: string; cvss?: string;
+  job_id?: string | null;
+};
+export type ScanProfile = {
+  id: string; program_id: string; name: string; tool_type: string;
+  target_source: string; config: Record<string, unknown>; created_at: string | null;
+};
+export type JobPreview = {
+  tool_type: string; target_source: string; count: number;
+  sample: string[]; truncated: boolean;
+};
+export type ScanTriageResult = {
+  id: string; priority: string; false_positive: boolean; rationale: string;
 };
 export type ManualTest = { id: string; title: string; hypothesis: string; payload: string; evidence: string; status: string };
 export type Finding = { id: string; title: string; severity: string; asset: string; status: string; summary: string; steps: string; impact: string; remediation: string; created_at?: string | null };
