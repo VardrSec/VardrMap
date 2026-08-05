@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { RunnerStatus, ScanJob, ScanJobUI, ScheduledScan } from "../types";
+import type { JobPreview, RunnerStatus, ScanJob, ScanJobUI, ScanProfile, ScheduledScan } from "../types";
 import { useAppContext } from "../context/AppContext";
 import { TOOLS } from "./jobs/mockData";
 import Bridge from "./jobs/Bridge";
@@ -88,6 +88,7 @@ export default function JobsSection({
 
   const [jobs,          setJobs]          = useState<ScanJobUI[]>([]);
   const [schedules,     setSchedules]     = useState<ScheduledScan[]>([]);
+  const [profiles,      setProfiles]      = useState<ScanProfile[]>([]);
   const [loading,       setLoading]       = useState(true);
   const [runnerStatus,  setRunnerStatus]  = useState<RunnerStatus | null>(null);
   const [autoRun,       setAutoRun]       = useState(false);
@@ -151,11 +152,21 @@ export default function JobsSection({
     } catch { /* schedules panel just stays hidden */ }
   }, [authFetch, engagementId]);
 
+  const loadProfiles = useCallback(async () => {
+    try {
+      const res = await authFetch(`/engagements/${engagementId}/scan-profiles`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setProfiles(Array.isArray(data?.profiles) ? data.profiles : []);
+    } catch { /* profiles just stay empty */ }
+  }, [authFetch, engagementId]);
+
   // Initial load
   useEffect(() => {
     void loadJobs();
     void loadSchedules();
-  }, [loadJobs, loadSchedules]);
+    void loadProfiles();
+  }, [loadJobs, loadSchedules, loadProfiles]);
 
   // SSE connection for real-time job updates
   useEffect(() => {
@@ -258,6 +269,68 @@ export default function JobsSection({
       setActiveId(ui.id);
       flash("Job queued. Run `vardrrunner jobs run` to execute.");
     } catch { flash("Failed to queue job."); }
+  }
+
+  // One-click recon pipeline: subfinder → httpx → nuclei, chained via depends_on.
+  async function queuePipeline() {
+    try {
+      const res = await authFetch(`/engagements/${engagementId}/pipelines`, {
+        method: "POST",
+        body: JSON.stringify({
+          stages: [
+            { tool_type: "subfinder", target_source: "scope" },
+            { tool_type: "httpx", target_source: "recon" },
+            { tool_type: "nuclei", target_source: "recon", config: { severity: "high,critical" } },
+          ],
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => null) as { detail?: string } | null;
+        flash(`Failed to queue pipeline${err?.detail ? `: ${err.detail}` : "."}`);
+        return;
+      }
+      await loadJobs();
+      flash("Recon pipeline queued — httpx and nuclei run after their upstream stage completes.");
+    } catch { flash("Failed to queue pipeline."); }
+  }
+
+  async function previewJob(spec: { tool: string; source: string; config: Record<string, unknown> }): Promise<JobPreview | null> {
+    try {
+      const res = await authFetch(`/engagements/${engagementId}/jobs/preview`, {
+        method: "POST",
+        body: JSON.stringify({ tool_type: spec.tool, target_source: spec.source, config: spec.config }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => null) as { detail?: string } | null;
+        flash(`Preview failed${err?.detail ? `: ${err.detail}` : "."}`);
+        return null;
+      }
+      return await res.json() as JobPreview;
+    } catch { flash("Preview failed."); return null; }
+  }
+
+  async function saveProfile(spec: { tool: string; source: string; config: Record<string, unknown> }, name: string) {
+    try {
+      const res = await authFetch(`/engagements/${engagementId}/scan-profiles`, {
+        method: "POST",
+        body: JSON.stringify({ name, tool_type: spec.tool, target_source: spec.source, config: spec.config }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => null) as { detail?: string } | null;
+        flash(`Failed to save profile${err?.detail ? `: ${err.detail}` : "."}`);
+        return;
+      }
+      await loadProfiles();
+      flash(`Profile "${name}" saved.`);
+    } catch { flash("Failed to save profile."); }
+  }
+
+  async function deleteProfile(id: string) {
+    try {
+      const res = await authFetch(`/engagements/${engagementId}/scan-profiles/${id}`, { method: "DELETE" });
+      if (!res.ok) { flash("Failed to delete profile."); return; }
+      setProfiles((p) => p.filter((x) => x.id !== id));
+    } catch { flash("Failed to delete profile."); }
   }
 
   async function toggleSchedule(id: string, enabled: boolean) {
@@ -391,6 +464,11 @@ export default function JobsSection({
             key={`${defaultTool ?? ""}:${prefillEpoch ?? 0}`}
             accent={ACCENT}
             onQueue={queueJob}
+            onPipeline={queuePipeline}
+            onPreview={previewJob}
+            profiles={profiles}
+            onSaveProfile={saveProfile}
+            onDeleteProfile={deleteProfile}
             runnerOnline={runnerOnline}
             scopeCount={scopeCount}
             reconCount={reconCount}

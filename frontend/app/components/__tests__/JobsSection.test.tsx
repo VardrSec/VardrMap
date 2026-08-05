@@ -18,6 +18,7 @@ const BASE_ROUTES = {
   "GET /runner/status": { body: { online: false } },
   [`GET /engagements/${PROGRAM_ID}/recon?limit=1`]: { body: { total: 0 } },
   [`GET /engagements/${PROGRAM_ID}/schedules`]: { body: { schedules: [] } },
+  [`GET /engagements/${PROGRAM_ID}/scan-profiles`]: { body: { profiles: [] } },
 };
 
 const NEW_JOB = {
@@ -44,6 +45,28 @@ describe("JobsSection", () => {
   it("renders the Composer panel", async () => {
     renderWithApp(<JobsSection engagementId={PROGRAM_ID} />, { routes: BASE_ROUTES });
     expect(await screen.findByText("Queue a Job")).toBeInTheDocument();
+  });
+
+  it("queues a subfinder→httpx→nuclei chain via POST /pipelines from the Recon Pipeline button", async () => {
+    const { authFetch } = renderWithApp(<JobsSection engagementId={PROGRAM_ID} />, {
+      routes: {
+        ...BASE_ROUTES,
+        [`POST /engagements/${PROGRAM_ID}/pipelines`]: { body: { jobs: [] } },
+      },
+    });
+
+    await screen.findByText("Queue a Job");
+    await userEvent.click(await screen.findByRole("button", { name: "Queue recon pipeline" }));
+
+    await waitFor(() =>
+      expect(authFetch).toHaveBeenCalledWith(
+        `/engagements/${PROGRAM_ID}/pipelines`,
+        expect.objectContaining({ method: "POST" }),
+      ),
+    );
+    const call = authFetch.mock.calls.find((c: unknown[]) => c[0] === `/engagements/${PROGRAM_ID}/pipelines`);
+    const stages = JSON.parse((call![1] as { body: string }).body).stages;
+    expect(stages.map((s: { tool_type: string }) => s.tool_type)).toEqual(["subfinder", "httpx", "nuclei"]);
   });
 
   it("queues a one-time job via POST /jobs when Queue Job is clicked", async () => {

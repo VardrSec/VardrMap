@@ -89,6 +89,7 @@ class Engagement(Base):
     submissions = relationship("Submission", back_populates="engagement", cascade="all, delete-orphan")
     scheduled_scans = relationship("ScheduledScan", back_populates="engagement", cascade="all, delete-orphan")
     members = relationship("EngagementMember", back_populates="engagement", cascade="all, delete-orphan")
+    scan_profiles = relationship("ScanProfile", back_populates="engagement", cascade="all, delete-orphan")
 
 
 class Authorization(Base):
@@ -237,6 +238,7 @@ class ScanItem(Base):
     status = Column(String(20), default="new")
     cwe = Column(String(50), default="")
     cvss = Column(String(50), default="")
+    job_id = Column(String, nullable=True)  # scan_job that produced this item, if any
     created_at = Column(DateTime, nullable=True, default=lambda: datetime.now(timezone.utc))
 
     engagement = relationship("Engagement", back_populates="scan_items")
@@ -278,6 +280,10 @@ class ScanJob(Base):
     target_source = Column(String(20), nullable=False)      # "scope" or "recon"
     config = Column(JSON, nullable=True)                    # tool-specific options
     status = Column(String(20), default="pending")          # pending | running | done | failed
+    # Soft ref to the scan_job this stage waits on. A dependent job stays out of
+    # GET /jobs/pending until its parent is "done"; if the parent "failed" the child
+    # is auto-failed so it never hangs. NULL = no dependency (eligible immediately).
+    depends_on = Column(String, nullable=True)
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     started_at = Column(DateTime, nullable=True)
     completed_at = Column(DateTime, nullable=True)
@@ -410,7 +416,7 @@ class Submission(Base):
 
 
 class EngagementMember(Base):
-    """Invited collaborators on a engagement. Members can read and write engagement resources;
+    """Invited collaborators on an engagement. Members can read and write engagement resources;
     only the owner can delete the engagement or manage membership."""
     __tablename__ = "program_members"
     __table_args__ = (UniqueConstraint("program_id", "member_github_id", name="uq_program_members"),)
@@ -423,3 +429,21 @@ class EngagementMember(Base):
     invited_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
     engagement = relationship("Engagement", back_populates="members")
+
+
+class ScanProfile(Base):
+    """A saved, reusable tool + config preset for an engagement. Lets a hunter queue a
+    frequently-used scan (e.g. "nuclei CVE profile") in one click instead of retyping
+    config every time. config mirrors ScanJob.config shape and is validated identically."""
+    __tablename__ = "scan_profiles"
+
+    id = Column(String, primary_key=True, default=new_uuid)
+    program_id = Column(String, ForeignKey("programs.id", ondelete="CASCADE"), nullable=False, index=True)
+    owner_github_id = Column(String, nullable=False, index=True)
+    name = Column(String(100), nullable=False)
+    tool_type = Column(String(20), nullable=False)       # "httpx" | "nuclei" | "subfinder" | "nmap"
+    target_source = Column(String(20), nullable=False)   # "scope" | "recon"
+    config = Column(JSON, nullable=True)                 # same shape/validation as ScanJob.config
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    engagement = relationship("Engagement", back_populates="scan_profiles")

@@ -1,11 +1,11 @@
-"""RBAC program members, recon dedup columns, API key scopes
+"""RBAC engagement members, recon dedup columns, API key scopes
 
 Revision ID: 0011rbacreconscopes
 Revises: 0010schednotify
 Create Date: 2026-06-12
 
 Adds:
-  - program_members table: invited collaborators on a program
+  - program_members table: invited collaborators on an engagement
   - recon_items.first_seen_at: timestamp set once on first import, never overwritten
   - recon_items.job_id: optional link back to the scan job that produced the item
   - api_keys.scope: "full" (default) or "runner" — runner keys can only hit jobs/imports/heartbeat

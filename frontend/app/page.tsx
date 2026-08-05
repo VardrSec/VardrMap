@@ -134,7 +134,7 @@ function AppShell() {
               <label className="mb-1.5 block text-[9px] font-semibold uppercase tracking-widest text-[#52525b]">Active Engagement</label>
               <select className="w-full rounded-md border border-[#2e2e2e] bg-[#161616] px-2.5 py-1.5 text-xs text-[#f1f5f9] transition focus:border-[#f59e0b] focus:outline-none"
                 value={selectedEngagementId} onChange={(e) => selectEngagement(e.target.value)}>
-                <option value="">Choose a engagement</option>
+                <option value="">Choose an engagement</option>
                 {engagements.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </div>
@@ -189,7 +189,7 @@ function AppShell() {
             <SettingsSection />
           ) : !selectedEngagement ? (
             <div className="rounded-2xl border border-dashed border-[#2e2e2e] p-14 text-center">
-              <p className="text-sm text-[#3a3a3a]">Create or select a engagement to begin.</p>
+              <p className="text-sm text-[#3a3a3a]">Create or select an engagement to begin.</p>
             </div>
           ) : (
             <>

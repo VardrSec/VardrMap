@@ -30,9 +30,10 @@ function isInScope(item: ReconItem, scopeItems: ScopeItem[]): boolean {
 // because a real ffuf/httpx run can return thousands of rows — we don't want
 // all of that coming down on every engagement refresh.
 export default function ReconSection({
-  engagementId, hideHeader, scopeItems,
+  engagementId, hideHeader, scopeItems, jobFilter, onClearJobFilter,
 }: {
   engagementId: string; hideHeader?: boolean; scopeItems?: ScopeItem[];
+  jobFilter?: string | null; onClearJobFilter?: () => void;
 }) {
   const { authFetch, setMessage } = useAppContext();
   const [items,        setItems]        = useState<ReconItem[]>([]);
@@ -48,7 +49,7 @@ export default function ReconSection({
   const load = useCallback(async (off: number, replace: boolean, q: string, signal?: AbortSignal) => {
     setLoading(true);
     try {
-      const params = `limit=${PAGE_SIZE}&offset=${off}${q ? `&search=${encodeURIComponent(q)}` : ""}`;
+      const params = `limit=${PAGE_SIZE}&offset=${off}${q ? `&search=${encodeURIComponent(q)}` : ""}${jobFilter ? `&job_id=${encodeURIComponent(jobFilter)}` : ""}`;
       const res = await authFetch(`/engagements/${engagementId}/recon?${params}`, { signal });
       if (!res.ok) throw new Error();
       const data = await res.json();
@@ -58,7 +59,7 @@ export default function ReconSection({
     } catch (e) {
       if ((e as { name?: string }).name !== "AbortError") setMessage("Failed to load recon.");
     } finally { setLoading(false); }
-  }, [engagementId, authFetch, setMessage]);
+  }, [engagementId, authFetch, setMessage, jobFilter]);
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -92,6 +93,18 @@ export default function ReconSection({
         />
       )}
       {!hideHeader && <SectionHeader title="Recon" description="Review discovered subdomains, endpoints, paths, and technologies." />}
+
+      {jobFilter && (
+        <div className="flex items-center gap-2 rounded-lg border px-3 py-2 text-xs"
+          style={{ borderColor: "#f59e0b33", backgroundColor: "#f59e0b0d", color: "#f59e0b" }}>
+          <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: "#f59e0b" }} />
+          Showing recon produced by one scan job
+          <button onClick={onClearJobFilter}
+            className="ml-auto rounded border border-[#f59e0b33] px-2 py-0.5 font-mono text-[10px] transition hover:bg-[#f59e0b1a]">
+            clear filter
+          </button>
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center gap-2">
         <form onSubmit={handleSearch} className="flex flex-1 gap-2">

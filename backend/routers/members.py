@@ -1,4 +1,4 @@
-"""Engagement membership — invite collaborators to read and write a engagement."""
+"""Engagement membership — invite collaborators to read and write an engagement."""
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException

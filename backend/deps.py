@@ -159,7 +159,7 @@ def parse_iso_datetime(value: str | None, field: str) -> datetime | None:
 
 
 def resolve_owned_client_id(client_id: str | None, current_user: dict[str, str], db: Session) -> str | None:
-    """Validate that a client belongs to the caller before linking a engagement to it.
+    """Validate that a client belongs to the caller before linking an engagement to it.
 
     Without this check the field would be an existence oracle: attaching a
     engagement to another user's client id would either succeed or fail

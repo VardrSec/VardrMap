@@ -154,7 +154,7 @@ def get_engagement_stats(
     current_user: dict[str, str] = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Lightweight aggregate stats for a engagement — used by the Dashboard stat cards.
+    """Lightweight aggregate stats for an engagement — used by the Dashboard stat cards.
     Returns counts and breakdowns without serializing full objects."""
     get_engagement_or_404(program_id, current_user, db)
 

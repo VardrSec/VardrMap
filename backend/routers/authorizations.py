@@ -1,4 +1,4 @@
-"""Authorizations — the record of permission to test a engagement.
+"""Authorizations — the record of permission to test an engagement.
 
 Access is scoped through the engagement, so owners and invited members can read
 the authorisation covering work they are doing, and everyone else gets 404.

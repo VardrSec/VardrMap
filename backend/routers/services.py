@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from db import get_db
-from deps import get_current_user, get_engagement_or_404, log_action, require_full_scope
+from deps import get_current_user, get_engagement_or_404, log_action, require_full_scope, require_member_write
 from models import Service
 
 router = APIRouter(tags=["services"])
@@ -69,7 +69,8 @@ def bulk_create_services(
 ):
     """VardrRunner posts nmap results here. Upserts on (host, port, protocol) — updates
     service metadata if the combination already exists rather than creating duplicates."""
-    get_engagement_or_404(program_id, current_user, db)
+    engagement = get_engagement_or_404(program_id, current_user, db)
+    require_member_write(engagement, current_user, db)
 
     now = datetime.now(timezone.utc)
     created = 0
@@ -123,7 +124,8 @@ def delete_service(
     current_user: dict = Depends(require_full_scope),
     db: Session = Depends(get_db),
 ):
-    get_engagement_or_404(program_id, current_user, db)
+    engagement = get_engagement_or_404(program_id, current_user, db)
+    require_member_write(engagement, current_user, db)
     svc = db.query(Service).filter(
         Service.id == service_id,
         Service.program_id == program_id,

@@ -33,7 +33,11 @@ jobs:
       - name: Dependency audit
         run: |
           pip install pip-audit
-          pip-audit -r requirements.txt
+          # PYSEC-2026-1325 (CVE-2024-23342): Minerva timing side-channel in the pure-Python
+          # `ecdsa` package, a hard transitive dependency of python-jose with no fixed release.
+          # Not reachable here — VardrMap signs/verifies JWTs with HS256 (HMAC) only, which
+          # never exercises ecdsa. Revisit if we ever adopt EC-based JWTs or python-jose ships a fix.
+          pip-audit -r requirements.txt --ignore-vuln PYSEC-2026-1325
 
       - name: Migration consistency check
         run: |

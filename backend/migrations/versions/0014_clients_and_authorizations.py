@@ -1,7 +1,7 @@
 """Add clients and authorizations; add engagement context to programs
 
-Revision ID: 0013clientsauthorizations
-Revises: 0012programidindexes
+Revision ID: 0014clientsauthorizations
+Revises: 0013pipelineprofiles
 Create Date: 2026-08-04
 
 Introduces the two concepts that separate a professional engagement from bug
@@ -22,8 +22,8 @@ from typing import Sequence, Union
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0013clientsauthorizations"
-down_revision: Union[str, None] = "0012programidindexes"
+revision: str = "0014clientsauthorizations"
+down_revision: Union[str, None] = "0013pipelineprofiles"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

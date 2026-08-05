@@ -19,6 +19,7 @@ def get_recon(
     offset: int = Query(default=0, ge=0),
     search: Optional[str] = None,
     status_code: Optional[int] = None,
+    job_id: Optional[str] = None,
     current_user: dict[str, str] = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -34,6 +35,8 @@ def get_recon(
         ))
     if status_code is not None:
         query = query.filter(ReconItem.status_code == status_code)
+    if job_id:
+        query = query.filter(ReconItem.job_id == job_id)
     total = query.count()
     # Surface enriched/live rows first: a probed host (has a status_code) outranks a
     # bare discovered host, so the Review page doesn't lead with blank rows.

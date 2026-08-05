@@ -87,56 +87,14 @@ users
   notify_min_severity ("info"|"low"|"medium"|"high"|"critical" — finding notification threshold)
   created_at
 
-clients
-  id (PK)
-  owner_github_id (FK → users.github_id, indexed)
-  name, contact_name, contact_email, notes
-  created_at
-  → programs (detached on delete, NOT cascaded — see below)
-
 programs
   id (PK)
   owner_github_id (FK → users.github_id)
   name, platform, program_url
   scope_summary, severity_guidance, safe_harbor_notes
-  client_id (FK → clients.id, nullable, indexed — bounty programmes have none)
-  engagement_type ("bug_bounty"|"pentest"|"red_team"|"internal", default "bug_bounty")
-  engagement_status ("planned"|"active"|"reporting"|"closed", default "active")
-  starts_at, ends_at (nullable — the contracted testing window)
   created_at
-  → scope_items, findings, reports, manual_tests, authorizations,
+  → scope_items, findings, reports, manual_tests,
     recon_items, scan_items, import_records, scan_jobs, services, submissions (all cascade delete)
-
-authorizations
-  id (PK), program_id (FK → programs.id, CASCADE DELETE, indexed)
-  owner_github_id (denormalised for the same fast BOLA filter used elsewhere, indexed)
-  permits (what the testing is permitted to do, in the authoriser's words)
-  authorized_by, authorized_at, reference (SOW number, ticket, or policy URL)
-  window_start, window_end (nullable — null means open on that side)
-  status ("active"|"expired"|"revoked"), notes
-  created_at
-
-### Engagement context
-
-`clients` and `authorizations` were added to support professional engagements
-alongside bug bounty work. Both are additive: every field on `programs` is
-nullable or defaulted, so rows and API callers that predate them are unaffected,
-and `engagement_type` backfills to `bug_bounty` because that is what the
-existing rows are.
-
-Two deliberate deviations from the usual cascade rule:
-
-- **Deleting a client does not delete its engagements.** Programs are detached
-  (`client_id` set to null) instead. The testing record outlives the commercial
-  relationship, and losing a year of findings because a client row was tidied up
-  would be an expensive surprise.
-- **Clients are not shared through `program_members`.** Membership grants access
-  to one engagement; a client record may cover several that the member has
-  nothing to do with. A non-owner asking for a client gets `404`.
-
-`authorizations` is append-mostly. Superseding one means marking it `expired`
-and creating a new row, not editing it — the record's value is being able to say
-later what was permitted at the time, which an edited row cannot answer.
 
 scope_items
   id (PK), program_id (FK), scope_type ("in"|"out")
@@ -172,6 +130,7 @@ scan_items
   id (PK), program_id (FK), source ("nuclei")
   template_id, title, severity, asset, matched_at,
   type, description, status, cwe, cvss
+  job_id (nullable — scan_job that produced this item; null for manual imports)
   created_at
 
 import_records
@@ -195,6 +154,8 @@ scan_jobs
   target_source ("scope"|"recon")
   config (JSON — tool-specific options: status_code/limit for httpx; severity/templates for nuclei; top_ports/timing for nmap)
   status ("pending"|"running"|"done"|"failed")
+  depends_on (nullable — soft ref to another scan_job; this stage is held out of
+    GET /jobs/pending until its parent is "done", auto-failed if the parent failed)
   created_at, started_at (nullable), completed_at (nullable)
   error_message
 
@@ -277,6 +238,16 @@ program_members
   invited_at
   Unique: (program_id, member_github_id)
 
+scan_profiles
+  id (PK)
+  program_id (FK → programs.id, CASCADE DELETE, indexed)
+  owner_github_id (indexed)
+  name (VARCHAR 100)
+  tool_type ("httpx"|"nuclei"|"subfinder"|"nmap")
+  target_source ("scope"|"recon")
+  config (JSON — same shape and validation as scan_jobs.config)
+  created_at
+
 audit_logs
   id (PK)
   github_id (no FK — records survive user deletion)
@@ -290,7 +261,8 @@ audit_logs
 - `AuditLog` has no FK constraints so records are never deleted when users or programs are removed.
 - `api_keys.key_hash` stores the SHA-256 hex digest of the plaintext token. The plaintext is never stored. `last_used_at` is stamped on every successful API key authentication. `scope` restricts runner-scoped keys to jobs/imports/heartbeat endpoints — all other endpoints return `403` for runner keys.
 - `recon_items.first_seen_at` is set once when an item is first imported and never overwritten. Dedup key is `(program_id, source, url)`: re-importing the same URL produces `new_count: 0` with no duplicate row.
-- `program_members` grant collaborators read+write access to a program's resources. Only the owner can manage members and delete/PATCH the program itself. `GET /engagements` returns both owned programs and programs where the user is a member.
+- `program_members` grant collaborators access to a program's resources, with two roles: **`member`** (read + write) and **`viewer`** (read-only). Only the owner can manage members and delete/PATCH the program itself. `GET /programs` returns both owned programs and programs where the user is a member.
+- **Viewer enforcement:** every program-scoped write endpoint (create/update/delete of findings, reports, manual tests, scans, submissions, schedules, scan profiles, services, scope, imports, jobs, pipelines) calls `require_member_write` after `get_program_or_404`, which raises `403` for a viewer-role member. The guard fires before any resource lookup, so a viewer gets `403` even for a non-existent target id. Owners always pass; runner-scoped API keys resolve to the owner and therefore also pass (so uploads/heartbeats are unaffected). AI actions (`findings/{id}/suggest`, `scans/triage`) are gated too, since they incur cost. Read (`GET`) endpoints remain open to viewers.
 - `scan_jobs.config` is a JSON column with optional tool options. VardrRunner reads this dict when executing the job. Unknown config keys are rejected at creation time.
 - `scan_jobs` are scoped to the owning user via `owner_github_id` — a user can only see/update their own jobs. Claiming a job uses `POST /jobs/{id}/claim` which atomically sets `status = "running"` only if currently `"pending"`, returning 409 otherwise.
 - `services` rows are bulk-upserted on `(host, port, protocol)` — repeated nmap scans update metadata rather than creating duplicates. `last_scanned_at` is stamped on both insert and update so freshness is always visible.
@@ -301,15 +273,19 @@ audit_logs
 - `scheduled_scans` have no backend cron. Due schedules (`enabled` and `next_run_at <= now`) are materialized into pending `scan_jobs` inside `GET /jobs/pending` — the runner's poll drives the clock. `next_run_at` advances from *now* rather than the previous `next_run_at`, so a runner that was offline for a week creates one catch-up job, not seven.
 - `users.webhook_url` (stored plaintext — it must be usable, unlike hashed API keys; only ever returned to its owner) and `users.notify_min_severity` drive outbound notifications, sent via FastAPI BackgroundTasks so webhook latency never delays API responses. URLs are validated against an SSRF guard (HTTPS only, no localhost/private/link-local targets).
 - `job_events` are appended by VardrRunner via `POST /jobs/{id}/events` at each lifecycle stage. The frontend Terminal polls `GET /jobs/{id}/events` (3 s interval while job is pending/running, stops on terminal state). Events cascade-delete with their parent job. Rate-limited to 600/min.
+- **Pipelines** (`POST /programs/{id}/pipelines`) create an ordered chain of `scan_jobs` linked by `depends_on`. A dependent stage is withheld from `GET /jobs/pending` until its parent is `done`; the runner's own poll drives the clock (same pattern as scheduled scans). If a parent `failed`, `GET /jobs/pending` auto-fails the dependent stage so it never hangs. The canonical chain is subfinder → httpx → nuclei.
+- **Provenance:** `recon_items.job_id` and `scan_items.job_id` record which `scan_job` produced each row (stamped from the optional `job_id` form field on `POST /imports`; null for manual uploads). `GET /programs/{id}/recon?job_id=` and `GET /programs/{id}/scans?job_id=` filter by it, so the Terminal can deep-link from a finished job to exactly the rows it yielded.
+- **AI triage** (`POST /programs/{id}/scans/triage`) sends a batch of un-promoted `scan_items` to Claude (Haiku) and returns a per-item `priority`/`false_positive`/`rationale`. Unlike `findings/{id}/suggest` (which enriches an already-created finding), triage is the first pass over raw tool output. Only ids present in the request are echoed back, so the model cannot smuggle in other rows. Requires `ANTHROPIC_API_KEY`.
+- `scan_profiles` are reusable tool + config presets per program, validated identically to `scan_jobs.config`. They let the Composer queue a frequently-used scan in one click. No FK from jobs to profiles — a profile is a template, copied into a job at queue time.
 
 ---
 
-## Engagement Serialization (Lazy Loading)
+## Program Serialization (Lazy Loading)
 
-`GET /engagements` and `GET /engagements/{id}` return aggregate stats rather than full arrays. This avoids loading potentially large result sets on every program fetch.
+`GET /programs` and `GET /programs/{id}` return aggregate stats rather than full arrays. This avoids loading potentially large result sets on every program fetch.
 
 ```python
-# serialize_engagement returns:
+# serialize_program returns:
 {
   "id": ...,
   "name": ...,
@@ -362,7 +338,7 @@ The `ScanJobUI` type (`frontend/app/types.ts`) extends the API-level `ScanJob` w
 
 ## File Upload Pipeline
 
-`POST /engagements/{program_id}/imports` accepts a multipart form with `tool_type` and `file`.
+`POST /programs/{program_id}/imports` accepts a multipart form with `tool_type` and `file`.
 
 Validation order:
 1. File extension must be `.json` or `.jsonl`
@@ -385,7 +361,7 @@ User's machine
   ▼
 VardrRunner (separate repo)
   │  1. fetch recon targets from VardrMap API
-  │     GET /engagements/{id}/recon?limit=100&status_code=200
+  │     GET /programs/{id}/recon?limit=100&status_code=200
   │
   │  2. show dry-run preview, ask for confirmation
   │
@@ -395,7 +371,7 @@ VardrRunner (separate repo)
   │  4. save raw output to ~/.vardrmap/runs/<timestamp>/
   │
   │  5. upload via existing import endpoint
-  │     POST /engagements/{id}/imports  (multipart, tool_type=nuclei)
+  │     POST /programs/{id}/imports  (multipart, tool_type=nuclei)
   ▼
 VardrMap backend (Railway)
   │  parse, store, deduplicate → ScanItem rows
@@ -419,7 +395,7 @@ The UI can queue jobs that VardrRunner picks up and executes. This decouples sca
 
 ```
 Browser (VardrMap UI)
-  │  POST /engagements/{id}/jobs  { tool_type, target_source, config }
+  │  POST /programs/{id}/jobs  { tool_type, target_source, config }
   ▼
 Railway (FastAPI) — stores ScanJob row, status = "pending"
 
@@ -434,7 +410,7 @@ VardrRunner (separate repo)
   │  5. POST  /jobs/{id}/events     — kind = "targets_resolved"
   │  6. execute tool locally via subprocess
   │  7. POST  /jobs/{id}/events     — kind = "running"
-  │  8. upload results via POST /engagements/{id}/imports
+  │  8. upload results via POST /programs/{id}/imports
   │  9. POST  /jobs/{id}/events     — kind = "uploaded"
   │ 10. PATCH /jobs/{id}            — status = "done" | "failed"
   │ 11. POST  /jobs/{id}/events     — kind = "done" | "failed"

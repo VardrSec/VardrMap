@@ -72,6 +72,7 @@ def serialize_recon_item(item: ReconItem) -> dict:
         "words": item.words,
         "lines": item.lines,
         "notes": item.notes or "",
+        "job_id": item.job_id,
     }
 
 
@@ -89,6 +90,7 @@ def serialize_scan_item(item: ScanItem) -> dict:
         "status": item.status or "new",
         "cwe": item.cwe or "",
         "cvss": item.cvss or "",
+        "job_id": item.job_id,
     }
 
 

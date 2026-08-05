@@ -62,7 +62,8 @@ def update_report(
     current_user: dict[str, str] = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    get_engagement_or_404(program_id, current_user, db)
+    engagement = get_engagement_or_404(program_id, current_user, db)
+    require_member_write(engagement, current_user, db)
     report = db.query(Report).filter(
         Report.id == report_id,
         Report.program_id == program_id,

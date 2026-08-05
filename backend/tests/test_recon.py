@@ -3,7 +3,7 @@ import io
 
 
 def _seed_recon(client, auth_headers, program_id, count=2):
-    """Import httpx JSONL to seed recon items for a engagement."""
+    """Import httpx JSONL to seed recon items for an engagement."""
     lines = "\n".join(
         f'{{"url":"http://sub{i}.example.com","host":"sub{i}.example.com","status-code":{200 + i},"title":"Site {i}","webserver":"nginx"}}'
         for i in range(count)
