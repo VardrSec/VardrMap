@@ -107,20 +107,24 @@ Revoke an API key. Returns 404 if the key does not belong to the current user.
 
 ---
 
-## Programs
+## Engagements
 
-### `GET /programs`
-List all programs where the current user is the owner **or** an invited member. Each program includes aggregate stats — not full arrays of findings, reports, or manual tests.
+### `GET /engagements`
+List all engagements where the current user is the owner **or** an invited member. Each engagement includes aggregate stats — not full arrays of findings, reports, or manual tests.
 
 **Response**
 ```json
 {
-  "programs": [ <program_object>, ... ]
+  "engagements": [ <engagement_object>, ... ],
+  "programs":    [ <engagement_object>, ... ]
 }
 ```
+Both keys carry the same list. `engagements` is the name going forward;
+`programs` is retained because VardrRunner reads it and ships from its own
+repository on its own schedule.
 
-### `POST /programs`
-Create a new program.
+### `POST /engagements`
+Create a new engagement.
 
 **Request body**
 ```json
@@ -130,27 +134,44 @@ Create a new program.
   "program_url": "https://hackerone.com/acme",
   "scope_summary": "Web and mobile apps",
   "severity_guidance": "P1 for auth bypass, P2 for stored XSS",
-  "safe_harbor_notes": "No physical testing"
+  "safe_harbor_notes": "No physical testing",
+
+  "client_id": null,
+  "engagement_type": "bug_bounty",
+  "engagement_status": "active",
+  "starts_at": null,
+  "ends_at": null
 }
 ```
 Only `name` is required. All other fields default to empty string.
 
-**Response:** full program object
+**Engagement context** (all optional, all shown above with their defaults):
 
-### `GET /programs/{program_id}`
-Get a single program by ID. Returns 404 if it does not belong to the current user.
+- `client_id` — links the engagement to a client. Must be a client owned by the
+  caller; another user's id returns `404`. Null for bounty work.
+- `engagement_type` — `bug_bounty` (default), `pentest`, `red_team`, `internal`.
+- `engagement_status` — `active` (default), `planned`, `reporting`, `closed`.
+- `starts_at` / `ends_at` — the contracted testing window, ISO-8601.
 
-**Response:** full program object
+The defaults mean a caller that sends none of these creates exactly what it
+created before this was added: a bug bounty programme.
 
-### `PATCH /programs/{program_id}`
-Update program fields. Only fields included in the request body are changed.
+**Response:** full engagement object
 
-**Request body:** any subset of `POST /programs` fields
+### `GET /engagements/{program_id}`
+Get a single engagement by ID. Returns 404 if it does not belong to the current user.
 
-**Response:** updated program object
+**Response:** full engagement object
 
-### `GET /programs/{program_id}/stats`
-Lightweight aggregate stats for a program — used by the Dashboard stat cards. Returns counts and breakdowns without serializing full objects. Much cheaper than `GET /programs/{id}` when only counts are needed.
+### `PATCH /engagements/{program_id}`
+Update engagement fields. Only fields included in the request body are changed.
+
+**Request body:** any subset of `POST /engagements` fields
+
+**Response:** updated engagement object
+
+### `GET /engagements/{program_id}/stats`
+Lightweight aggregate stats for a engagement — used by the Dashboard stat cards. Returns counts and breakdowns without serializing full objects. Much cheaper than `GET /engagements/{id}` when only counts are needed.
 
 **Response**
 ```json
@@ -166,15 +187,15 @@ Lightweight aggregate stats for a program — used by the Dashboard stat cards. 
 }
 ```
 
-### `DELETE /programs/{program_id}`
-Delete a program. Cascades to all child records (scope, findings, reports, manual tests, recon, scans, imports).
+### `DELETE /engagements/{program_id}`
+Delete a engagement. Cascades to all child records (scope, findings, reports, manual tests, recon, scans, imports).
 
 **Response**
 ```json
-{ "message": "Program deleted" }
+{ "message": "Engagement deleted" }
 ```
 
-**Program object shape**
+**Engagement object shape**
 ```json
 {
   "id": "<uuid>",
@@ -203,13 +224,13 @@ Delete a program. Cascades to all child records (scope, findings, reports, manua
 }
 ```
 
-`my_role` is the calling user's role in this program: `"owner"` (the program owner), `"member"` (invited collaborator with write access), or `"viewer"` (invited collaborator with read-only access). Viewers receive `403` on mutation routes (POST/DELETE findings, reports, scope items).
+`my_role` is the calling user's role in this engagement: `"owner"` (the engagement owner), `"member"` (invited collaborator with write access), or `"viewer"` (invited collaborator with read-only access). Viewers receive `403` on mutation routes (POST/DELETE findings, reports, scope items).
 
 ---
 
 ## Scope
 
-### `POST /programs/{program_id}/scope/in`
+### `POST /engagements/{program_id}/scope/in`
 Add an in-scope item.
 
 **Request body**
@@ -220,12 +241,12 @@ Add an in-scope item.
 
 **Response:** scope item object
 
-### `POST /programs/{program_id}/scope/out`
+### `POST /engagements/{program_id}/scope/out`
 Add an out-of-scope item. Same request body as above.
 
 **Response:** scope item object
 
-### `DELETE /programs/{program_id}/scope/{scope_type}/{item_id}`
+### `DELETE /engagements/{program_id}/scope/{scope_type}/{item_id}`
 Remove a scope item. `scope_type` must be `in` or `out`.
 
 **Response**
@@ -237,8 +258,8 @@ Remove a scope item. `scope_type` must be `in` or `out`.
 
 ## Findings
 
-### `GET /programs/{program_id}/findings`
-List findings for a program, ordered by `created_at` descending.
+### `GET /engagements/{program_id}/findings`
+List findings for a engagement, ordered by `created_at` descending.
 
 **Query parameters**
 | Parameter | Default | Constraints | Description |
@@ -258,7 +279,7 @@ List findings for a program, ordered by `created_at` descending.
 }
 ```
 
-### `POST /programs/{program_id}/findings`
+### `POST /engagements/{program_id}/findings`
 Create a finding.
 
 **Request body**
@@ -278,12 +299,12 @@ Create a finding.
 
 **Response:** finding object
 
-### `PATCH /programs/{program_id}/findings/{finding_id}`
+### `PATCH /engagements/{program_id}/findings/{finding_id}`
 Update a finding. Only fields present in the body are changed.
 
 **Response:** updated finding object
 
-### `DELETE /programs/{program_id}/findings/{finding_id}`
+### `DELETE /engagements/{program_id}/findings/{finding_id}`
 Delete a finding.
 
 **Response**
@@ -291,7 +312,7 @@ Delete a finding.
 { "message": "Finding deleted" }
 ```
 
-### `POST /programs/{program_id}/findings/{finding_id}/suggest`
+### `POST /engagements/{program_id}/findings/{finding_id}/suggest`
 Ask Claude AI to draft CVSS score, impact statement, and remediation for a finding.
 
 Requires `ANTHROPIC_API_KEY` to be set on the server. Returns `503` if the key is absent.
@@ -309,8 +330,8 @@ Requires `ANTHROPIC_API_KEY` to be set on the server. Returns `503` if the key i
 
 ## Reports
 
-### `GET /programs/{program_id}/reports`
-List reports for a program, ordered by `created_at` descending.
+### `GET /engagements/{program_id}/reports`
+List reports for a engagement, ordered by `created_at` descending.
 
 **Query parameters**
 | Parameter | Default | Constraints | Description |
@@ -328,7 +349,7 @@ List reports for a program, ordered by `created_at` descending.
 }
 ```
 
-### `POST /programs/{program_id}/reports`
+### `POST /engagements/{program_id}/reports`
 Create a report.
 
 **Request body**
@@ -349,12 +370,12 @@ Create a report.
 
 **Response:** report object
 
-### `PATCH /programs/{program_id}/reports/{report_id}`
+### `PATCH /engagements/{program_id}/reports/{report_id}`
 Update a report. Only fields present in the body are changed.
 
 **Response:** updated report object
 
-### `DELETE /programs/{program_id}/reports/{report_id}`
+### `DELETE /engagements/{program_id}/reports/{report_id}`
 Delete a report.
 
 **Response**
@@ -366,8 +387,8 @@ Delete a report.
 
 ## Manual Tests
 
-### `GET /programs/{program_id}/manual-tests`
-List all manual test cases for a program, ordered by `created_at` descending.
+### `GET /engagements/{program_id}/manual-tests`
+List all manual test cases for a engagement, ordered by `created_at` descending.
 
 **Response**
 ```json
@@ -385,7 +406,7 @@ List all manual test cases for a program, ordered by `created_at` descending.
 }
 ```
 
-### `POST /programs/{program_id}/manual-tests`
+### `POST /engagements/{program_id}/manual-tests`
 Create a manual test case.
 
 **Request body**
@@ -402,12 +423,12 @@ Create a manual test case.
 
 **Response:** manual test object
 
-### `PATCH /programs/{program_id}/manual-tests/{test_id}`
+### `PATCH /engagements/{program_id}/manual-tests/{test_id}`
 Update a manual test. Only fields present in the body are changed.
 
 **Response:** updated manual test object
 
-### `DELETE /programs/{program_id}/manual-tests/{test_id}`
+### `DELETE /engagements/{program_id}/manual-tests/{test_id}`
 Delete a manual test.
 
 **Response**
@@ -419,8 +440,8 @@ Delete a manual test.
 
 ## Recon
 
-### `GET /programs/{program_id}/recon`
-List recon items for a program, with optional filters. Items come from ffuf or httpx imports.
+### `GET /engagements/{program_id}/recon`
+List recon items for a engagement, with optional filters. Items come from ffuf or httpx imports.
 
 **Query parameters**
 | Parameter | Default | Constraints | Description |
@@ -453,8 +474,8 @@ List recon items for a program, with optional filters. Items come from ffuf or h
 }
 ```
 
-### `DELETE /programs/{program_id}/recon`
-Delete all recon items for a program. This is a bulk clear operation.
+### `DELETE /engagements/{program_id}/recon`
+Delete all recon items for a engagement. This is a bulk clear operation.
 
 **Response**
 ```json
@@ -465,7 +486,7 @@ Delete all recon items for a program. This is a bulk clear operation.
 
 ## Scans
 
-### `GET /programs/{program_id}/scans`
+### `GET /engagements/{program_id}/scans`
 List scan items with pagination and optional status filter. Items come from nuclei imports.
 
 **Query parameters**
@@ -500,7 +521,7 @@ List scan items with pagination and optional status filter. Items come from nucl
 }
 ```
 
-### `PATCH /programs/{program_id}/scans/{scan_id}`
+### `PATCH /engagements/{program_id}/scans/{scan_id}`
 Update the status of a single scan item.
 
 **Request body**
@@ -511,7 +532,7 @@ Update the status of a single scan item.
 
 **Response:** updated scan item object
 
-### `POST /programs/{program_id}/scans/bulk-status`
+### `POST /engagements/{program_id}/scans/bulk-status`
 Update the status of multiple scan items at once.
 
 **Request body**
@@ -528,7 +549,7 @@ Update the status of multiple scan items at once.
 
 ## Imports
 
-### `POST /programs/{program_id}/imports`
+### `POST /engagements/{program_id}/imports`
 Upload tool output for parsing and storage. Accepts `multipart/form-data`.
 
 **Form fields**
@@ -552,7 +573,7 @@ Upload tool output for parsing and storage. Accepts `multipart/form-data`.
     "filename": "redacted",
     "imported_count": 42
   },
-  "program": <full program object with updated counts>
+  "engagement": <full engagement object with updated counts>
 }
 ```
 
@@ -583,7 +604,7 @@ A job object looks like:
 }
 ```
 
-### `POST /programs/{program_id}/jobs`
+### `POST /engagements/{program_id}/jobs`
 Queue a new scan job.
 
 **Request body**
@@ -602,10 +623,10 @@ Queue a new scan job.
 
 **Errors**
 - `400` — invalid `tool_type`, invalid `target_source`, or unknown config key for the tool
-- `404` — program not found or belongs to another user
+- `404` — engagement not found or belongs to another user
 
-### `GET /programs/{program_id}/jobs/stream`
-Server-Sent Events (SSE) stream for real-time job status changes. The frontend opens this alongside polling; when a `job_update` event arrives, it triggers an immediate `GET /programs/{id}/jobs` refresh.
+### `GET /engagements/{program_id}/jobs/stream`
+Server-Sent Events (SSE) stream for real-time job status changes. The frontend opens this alongside polling; when a `job_update` event arrives, it triggers an immediate `GET /engagements/{id}/jobs` refresh.
 
 Auth uses the standard `Authorization: Bearer` header via a streaming `fetch` (EventSource doesn't support custom headers). The connection sends a keepalive comment every 20 seconds.
 
@@ -628,10 +649,10 @@ Keepalive (every 20 s when idle):
 
 **Errors**
 - `401` — not authenticated
-- `404` — program not found or belongs to another user
+- `404` — engagement not found or belongs to another user
 
-### `GET /programs/{program_id}/jobs`
-List all jobs for a program, newest first.
+### `GET /engagements/{program_id}/jobs`
+List all jobs for a engagement, newest first.
 
 **Response**
 ```json
@@ -803,7 +824,7 @@ Frontend polls this to stream job lifecycle events into the Terminal. Returns al
 
 ## Services
 
-Open ports and services discovered by nmap. All endpoints are BOLA-scoped: the program must belong to the authenticated user.
+Open ports and services discovered by nmap. All endpoints are BOLA-scoped: the engagement must belong to the authenticated user.
 
 **Scope requirements:** `POST /services` accepts runner-scoped API keys (VardrRunner posts nmap results here). `GET` and `DELETE` require a full-scope key or browser JWT.
 
@@ -825,15 +846,15 @@ A service object looks like:
 }
 ```
 
-### `GET /programs/{program_id}/services`
-List all services for a program, ordered by host then port.
+### `GET /engagements/{program_id}/services`
+List all services for a engagement, ordered by host then port.
 
 **Response**
 ```json
 { "services": [ <service_object>, ... ], "total": 42 }
 ```
 
-### `POST /programs/{program_id}/services`
+### `POST /engagements/{program_id}/services`
 Bulk-upsert services. VardrRunner posts nmap results here after a scan job completes. Upserts on `(host, port, protocol)` — updates metadata if the combination already exists.
 
 **Request body**
@@ -864,7 +885,7 @@ Maximum 5 000 services per request.
 { "created": 3, "updated": 1 }
 ```
 
-### `DELETE /programs/{program_id}/services/{service_id}`
+### `DELETE /engagements/{program_id}/services/{service_id}`
 Delete a single service record.
 
 **Response**
@@ -874,7 +895,7 @@ Delete a single service record.
 
 **Errors**
 - `401` — not authenticated
-- `404` — program or service not found, or belongs to another user
+- `404` — engagement or service not found, or belongs to another user
 - `422` — invalid field value (e.g. port out of range)
 
 **`last_scanned_at`** — stamped on both create and upsert (whenever VardrRunner reports the port). Reflects when the service was last seen by nmap. `created_at` is only set once at insert time.
@@ -957,8 +978,8 @@ Tracks the full lifecycle of a bug bounty submission from filed to resolved. Sta
 }
 ```
 
-### `GET /programs/{program_id}/submissions`
-List all submissions for a program, ordered newest-first.
+### `GET /engagements/{program_id}/submissions`
+List all submissions for a engagement, ordered newest-first.
 
 **Query parameters**
 | Parameter | Default | Description |
@@ -971,7 +992,7 @@ List all submissions for a program, ordered newest-first.
 { "submissions": [ <submission_object>, ... ], "total": 5 }
 ```
 
-### `POST /programs/{program_id}/submissions`
+### `POST /engagements/{program_id}/submissions`
 Log a new submission.
 
 **Request body**
@@ -987,14 +1008,14 @@ Log a new submission.
 | `payout_usd` | number | no | Payout amount in USD |
 | `notes` | string | no | Free-form notes |
 
-### `PATCH /programs/{program_id}/submissions/{submission_id}`
+### `PATCH /engagements/{program_id}/submissions/{submission_id}`
 Update a submission. Partial update — only provided fields are changed. When `status` transitions to a terminal state (`accepted`, `duplicate`, `na`, `paid`, `rejected`) and `resolved_at` is not set, it is auto-stamped to the current UTC time.
 
 **Errors**
 - `404` — submission not found or belongs to another user
 - `400` — malformed `resolved_at` datetime
 
-### `DELETE /programs/{program_id}/submissions/{submission_id}`
+### `DELETE /engagements/{program_id}/submissions/{submission_id}`
 Permanently delete a submission.
 
 **Errors**
@@ -1032,15 +1053,15 @@ Recurring scan definitions. There is no backend cron: due schedules are material
 }
 ```
 
-### `GET /programs/{program_id}/schedules`
-List all schedules for a program, newest first.
+### `GET /engagements/{program_id}/schedules`
+List all schedules for a engagement, newest first.
 
 **Response**
 ```json
 { "schedules": [ <schedule_object>, ... ], "total": 2 }
 ```
 
-### `POST /programs/{program_id}/schedules`
+### `POST /engagements/{program_id}/schedules`
 Create a recurring scan.
 
 **Request body**
@@ -1053,12 +1074,12 @@ Create a recurring scan.
 
 **Errors**
 - `400` — invalid tool, source, interval, or config keys
-- `404` — program not found or belongs to another user
+- `404` — engagement not found or belongs to another user
 
-### `PATCH /programs/{program_id}/schedules/{schedule_id}`
+### `PATCH /engagements/{program_id}/schedules/{schedule_id}`
 Update `enabled` (pause/resume) and/or `interval`.
 
-### `DELETE /programs/{program_id}/schedules/{schedule_id}`
+### `DELETE /engagements/{program_id}/schedules/{schedule_id}`
 Permanently delete a schedule. Jobs already materialized from it are unaffected.
 
 ---
@@ -1087,13 +1108,13 @@ Notifications fire (as a Discord/Slack-compatible webhook POST) when:
 
 ---
 
-## Program Members
+## Engagement Members
 
-Invite GitHub collaborators to access a program. Only the program owner can manage membership and delete the program.
+Invite GitHub collaborators to access a engagement. Only the engagement owner can manage membership and delete the engagement.
 
 **Roles**
 
-| Role | Read | Write (findings, reports, scope) | Manage members | Delete program |
+| Role | Read | Write (findings, reports, scope) | Manage members | Delete engagement |
 |---|---|---|---|---|
 | `owner` | yes | yes | yes | yes |
 | `member` | yes | yes | no | no |
@@ -1101,7 +1122,7 @@ Invite GitHub collaborators to access a program. Only the program owner can mana
 
 `viewer` members receive `403` on all mutation routes (POST/DELETE for findings, reports, scope items). All roles can read.
 
-### `GET /programs/{program_id}/members`
+### `GET /engagements/{program_id}/members`
 List invited members. Accessible by owner or any member.
 
 **Response**
@@ -1114,8 +1135,8 @@ List invited members. Accessible by owner or any member.
 }
 ```
 
-### `POST /programs/{program_id}/members`
-Invite a collaborator by GitHub ID. Owner only. Max 20 members per program.
+### `POST /engagements/{program_id}/members`
+Invite a collaborator by GitHub ID. Owner only. Max 20 members per engagement.
 
 **Request body**
 ```json
@@ -1125,22 +1146,22 @@ Invite a collaborator by GitHub ID. Owner only. Max 20 members per program.
 
 **Errors**
 - `400` — invited user is the owner, or max members reached
-- `403` — caller is not the program owner
+- `403` — caller is not the engagement owner
 - `409` — user already a member
 
-### `DELETE /programs/{program_id}/members/{member_github_id}`
+### `DELETE /engagements/{program_id}/members/{member_github_id}`
 Remove a collaborator. Owner only.
 
 **Errors**
-- `403` — caller is not the program owner
+- `403` — caller is not the engagement owner
 - `404` — member not found
 
 ---
 
 ## Imports (updated)
 
-### `POST /programs/{program_id}/imports`
-The response now includes `new_count` for httpx and ffuf imports — the number of recon items that were not previously seen for this program. Re-importing the same file a second time will produce `imported_count: 0, new_count: 0`. A new `first_seen_at` timestamp is set on each unique recon item at discovery time and never overwritten. A webhook fires (if configured) when `new_count > 0` for httpx imports.
+### `POST /engagements/{program_id}/imports`
+The response now includes `new_count` for httpx and ffuf imports — the number of recon items that were not previously seen for this engagement. Re-importing the same file a second time will produce `imported_count: 0, new_count: 0`. A new `first_seen_at` timestamp is set on each unique recon item at discovery time and never overwritten. A webhook fires (if configured) when `new_count > 0` for httpx imports.
 
 Updated response shape:
 ```json
@@ -1149,7 +1170,7 @@ Updated response shape:
   "imported_count": 12,
   "new_count":       8,
   "import_record":  { ... },
-  "program":        { ... }
+  "engagement":        { ... }
 }
 ```
 
@@ -1159,3 +1180,122 @@ Updated response shape:
 
 ### `GET /runner/status`
 Now returns a `runners` array — one entry per machine that has sent a heartbeat (newest first), each with `online`, `last_seen`, `hostname`, `version`, `os`, and `tools`. Heartbeats are upserted per `(user, hostname)` so a laptop and a VPS report independently. Top-level fields mirror the most recently seen runner for backward compatibility; top-level `online` is true if **any** runner is online.
+
+---
+
+## Clients
+
+An organisation engagements are performed for. Optional: bug bounty work has no
+client, because the programme itself is the counterparty.
+
+Clients are scoped to the user who created them and are **not** shared through
+engagement membership — a collaborator invited to one engagement should not see the
+other engagements a client record covers. Another user's client returns `404`.
+
+### `GET /clients`
+List the calling user's clients, ordered by name.
+
+**Response:** array of client objects
+
+### `POST /clients`
+Create a client.
+
+**Request body**
+```json
+{ "name": "Acme Corp", "contact_name": "Dana Lee", "contact_email": "dana@acme.com", "notes": "" }
+```
+Only `name` is required.
+
+**Response:** `201` client object
+
+### `GET /clients/{client_id}`
+Fetch one client.
+
+**Response:** client object, or `404`
+
+### `PATCH /clients/{client_id}`
+Update any subset of `name`, `contact_name`, `contact_email`, `notes`.
+
+**Response:** client object
+
+### `DELETE /clients/{client_id}`
+Delete a client. Its engagements are **detached, not deleted** — `client_id` is
+set to null on each — because the testing record outlives the commercial
+relationship.
+
+**Response:** `204`, no body
+
+---
+
+## Authorizations
+
+The record of permission to test a engagement, and the window it covers. This is
+the artifact that separates a professional engagement from bounty hunting: a
+named person authorised named activity, between two dates.
+
+Access is scoped through the engagement, so owners and invited members can read the
+authorisation covering work they are doing. Viewers cannot create or edit one.
+
+Authorisations are **append-mostly**. To supersede one, mark it `expired` and
+create a new row rather than editing it — the value of the record is being able
+to say later what was permitted at the time.
+
+All datetimes are ISO-8601 strings; a trailing `Z` is accepted.
+
+### `GET /engagements/{program_id}/authorizations`
+List a engagement's authorisations, newest first.
+
+**Response:** array of authorization objects
+
+### `POST /engagements/{program_id}/authorizations`
+Record an authorisation.
+
+**Request body**
+```json
+{
+  "permits": "Unauthenticated and authenticated testing of the web application and its API.",
+  "authorized_by": "Dana Lee, CTO",
+  "authorized_at": "2026-08-01T09:00:00Z",
+  "reference": "SOW-2026-014",
+  "window_start": "2026-08-04T00:00:00Z",
+  "window_end": "2026-08-18T23:59:59Z",
+  "notes": ""
+}
+```
+Every field is optional. A missing `window_start` or `window_end` means open on
+that side — normal for a bounty programme, unusual for an engagement.
+
+**Response:** `201` authorization object. Created with `status: "active"`.
+
+### `PATCH /engagements/{program_id}/authorizations/{authorization_id}`
+Update an authorisation, most often to set `status` to `expired` or `revoked`.
+
+`status` values: `active`, `expired`, `revoked`.
+
+**Response:** authorization object
+
+### `GET /engagements/{program_id}/authorization/active`
+The authorisation currently permitting work, or `null`.
+
+An authorisation qualifies when its `status` is `active` and the present moment
+falls inside its window. This is the question the rest of the toolchain needs
+answered before it runs anything.
+
+**Response:** authorization object, or `null`
+
+---
+
+## Deprecated: `/programs/*`
+
+The resource was renamed from *program* to *engagement* when VardrMap widened
+from bug bounty work to professional testing. Every `/engagements/*` route is
+still reachable at the old `/programs/*` path, which is rewritten before
+routing, so existing VardrRunner installs and any scripts using a `vmap_` key
+keep working unchanged.
+
+The alias is transitional. Move to `/engagements/*`; `/programs/*` will be
+removed once VardrRunner and the frontend are both updated.
+
+Note that *program* still has a distinct, correct meaning elsewhere in this API:
+a **bug bounty program** on HackerOne or Bugcrowd, as surfaced by
+`GET /radar`. Those are not engagements and were not renamed.

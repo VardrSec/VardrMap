@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from db import get_db
-from deps import get_current_user, get_program_or_404, log_action
+from deps import get_current_user, get_engagement_or_404, log_action
 from models import ScanItem
 from schemas import BulkScanStatusUpdate, ScanStatusUpdate
 from serializers import serialize_scan_item
@@ -12,7 +12,7 @@ from serializers import serialize_scan_item
 router = APIRouter()
 
 
-@router.get("/programs/{program_id}/scans")
+@router.get("/engagements/{program_id}/scans")
 def get_scans(
     program_id: str,
     limit: int = Query(default=100, ge=1, le=500),
@@ -21,7 +21,7 @@ def get_scans(
     current_user: dict[str, str] = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    get_program_or_404(program_id, current_user, db)
+    get_engagement_or_404(program_id, current_user, db)
     query = db.query(ScanItem).filter(ScanItem.program_id == program_id)
     if status:
         query = query.filter(ScanItem.status == status)
@@ -30,14 +30,14 @@ def get_scans(
     return {"scans": [serialize_scan_item(s) for s in items], "total": total, "offset": offset, "limit": limit}
 
 
-@router.post("/programs/{program_id}/scans/bulk-status")
+@router.post("/engagements/{program_id}/scans/bulk-status")
 def bulk_update_scan_status(
     program_id: str,
     payload: BulkScanStatusUpdate,
     current_user: dict[str, str] = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    get_program_or_404(program_id, current_user, db)
+    get_engagement_or_404(program_id, current_user, db)
     scans = db.query(ScanItem).filter(
         ScanItem.program_id == program_id,
         ScanItem.id.in_(payload.ids),
@@ -49,7 +49,7 @@ def bulk_update_scan_status(
     return {"updated": len(scans)}
 
 
-@router.patch("/programs/{program_id}/scans/{scan_id}")
+@router.patch("/engagements/{program_id}/scans/{scan_id}")
 def update_scan_status(
     program_id: str,
     scan_id: str,
@@ -57,7 +57,7 @@ def update_scan_status(
     current_user: dict[str, str] = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    get_program_or_404(program_id, current_user, db)
+    get_engagement_or_404(program_id, current_user, db)
     scan = db.query(ScanItem).filter(
         ScanItem.id == scan_id,
         ScanItem.program_id == program_id,

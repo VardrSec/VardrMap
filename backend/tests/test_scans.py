@@ -3,7 +3,7 @@ import io
 
 
 def _seed_scans(client, auth_headers, program_id, count=2):
-    """Import nuclei JSONL to seed scan items for a program."""
+    """Import nuclei JSONL to seed scan items for a engagement."""
     lines = "\n".join(
         f'{{"template-id":"sqli-{i}","info":{{"name":"SQL Injection {i}","severity":"high"}},"host":"http://example{i}.com","matched-at":"http://example{i}.com/login"}}'
         for i in range(count)

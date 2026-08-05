@@ -13,11 +13,11 @@ from sqlalchemy.orm import Session
 
 import sse as _sse
 from db import SessionLocal, get_db
-from deps import get_current_user, get_program_or_404
+from deps import get_current_user, get_engagement_or_404
 from limiter import limiter
 from models import RunnerHeartbeat, ScopeItem
 from security import strip_html
-from serializers import serialize_program
+from serializers import serialize_engagement
 
 router = APIRouter(tags=["runner"])
 
@@ -56,26 +56,26 @@ class HeartbeatPayload(BaseModel):
     def sanitize(cls, v): return strip_html(v) if v else ""
 
 
-@router.get("/programs/{program_id}")
+@router.get("/engagements/{program_id}")
 def get_program_for_runner(
     program_id: str,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Read-only program fetch — registered here (outside require_full_scope) so
+    """Read-only engagement fetch — registered here (outside require_full_scope) so
     runner-scoped keys can resolve scope/targets when executing jobs."""
-    program = get_program_or_404(program_id, current_user, db)
-    return serialize_program(program, db, github_id=current_user["github_id"])
+    engagement = get_engagement_or_404(program_id, current_user, db)
+    return serialize_engagement(engagement, db, github_id=current_user["github_id"])
 
 
-@router.get("/programs/{program_id}/scope")
+@router.get("/engagements/{program_id}/scope")
 def get_program_scope(
     program_id: str,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Scope-only fetch for runners that only need the target list."""
-    get_program_or_404(program_id, current_user, db)
+    get_engagement_or_404(program_id, current_user, db)
     items = db.query(ScopeItem).filter(ScopeItem.program_id == program_id).all()
     in_scope  = [{"id": i.id, "value": i.value, "kind": i.kind, "notes": i.notes} for i in items if i.scope_type == "in"]
     out_scope = [{"id": i.id, "value": i.value, "kind": i.kind, "notes": i.notes} for i in items if i.scope_type == "out"]
@@ -124,7 +124,7 @@ def post_heartbeat(
     return {"ok": True, "last_seen": hb.last_seen.isoformat()}
 
 
-@router.get("/programs/{program_id}/jobs/stream")
+@router.get("/engagements/{program_id}/jobs/stream")
 async def stream_job_events(
     program_id: str,
     current_user: dict = Depends(get_current_user),
@@ -133,7 +133,7 @@ async def stream_job_events(
     Auth check uses a transient session to avoid holding a connection for the stream lifetime."""
     db = SessionLocal()
     try:
-        get_program_or_404(program_id, current_user, db)
+        get_engagement_or_404(program_id, current_user, db)
     finally:
         db.close()
 

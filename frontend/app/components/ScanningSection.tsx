@@ -18,9 +18,9 @@ function assetMatchesScope(asset: string, scopeItems: ScopeItem[]): boolean {
 }
 
 export default function ScanningSection({
-  programId, hideHeader, scopeItems,
+  engagementId, hideHeader, scopeItems,
 }: {
-  programId: string; hideHeader?: boolean; scopeItems?: ScopeItem[];
+  engagementId: string; hideHeader?: boolean; scopeItems?: ScopeItem[];
 }) {
   const { authFetch, setMessage, promoteScanToFinding } = useAppContext();
   const [items,        setItems]        = useState<ScanItem[]>([]);
@@ -35,14 +35,14 @@ export default function ScanningSection({
     setLoading(true);
     try {
       const params = `limit=${PAGE_SIZE}&offset=${off}${filter !== "all" ? `&status=${filter}` : ""}`;
-      const res = await authFetch(`/programs/${programId}/scans?${params}`);
+      const res = await authFetch(`/engagements/${engagementId}/scans?${params}`);
       if (!res.ok) throw new Error();
       const data = await res.json();
       setTotal(data.total ?? 0);
       setItems((prev) => replace ? data.scans : [...prev, ...data.scans]);
       setOffset(off);
     } catch { setMessage("Failed to load scans."); } finally { setLoading(false); }
-  }, [programId, authFetch, setMessage]);
+  }, [engagementId, authFetch, setMessage]);
 
   useEffect(() => { void load(0, true, statusFilter); }, [load, statusFilter]);
   useEffect(() => { setSelected(new Set()); }, [statusFilter]);
@@ -67,7 +67,7 @@ export default function ScanningSection({
 
   async function updateStatus(scan: ScanItem, status: string) {
     try {
-      await authFetch(`/programs/${programId}/scans/${scan.id}`, {
+      await authFetch(`/engagements/${engagementId}/scans/${scan.id}`, {
         method: "PATCH",
         body: JSON.stringify({ status }),
       });
@@ -79,7 +79,7 @@ export default function ScanningSection({
     const ids = [...selected];
     const count = ids.length;
     try {
-      const res = await authFetch(`/programs/${programId}/scans/bulk-status`, {
+      const res = await authFetch(`/engagements/${engagementId}/scans/bulk-status`, {
         method: "POST",
         body: JSON.stringify({ ids, status }),
       });

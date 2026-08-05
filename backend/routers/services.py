@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from db import get_db
-from deps import get_current_user, get_program_or_404, log_action, require_full_scope
+from deps import get_current_user, get_engagement_or_404, log_action, require_full_scope
 from models import Service
 
 router = APIRouter(tags=["services"])
@@ -44,13 +44,13 @@ def serialize_service(s: Service) -> dict:
     }
 
 
-@router.get("/programs/{program_id}/services")
+@router.get("/engagements/{program_id}/services")
 def list_services(
     program_id: str,
     current_user: dict = Depends(require_full_scope),
     db: Session = Depends(get_db),
 ):
-    get_program_or_404(program_id, current_user, db)
+    get_engagement_or_404(program_id, current_user, db)
     rows = (
         db.query(Service)
         .filter(Service.program_id == program_id)
@@ -60,7 +60,7 @@ def list_services(
     return {"services": [serialize_service(s) for s in rows], "total": len(rows)}
 
 
-@router.post("/programs/{program_id}/services", status_code=201)
+@router.post("/engagements/{program_id}/services", status_code=201)
 def bulk_create_services(
     program_id: str,
     body: ServicesBulkCreate,
@@ -69,7 +69,7 @@ def bulk_create_services(
 ):
     """VardrRunner posts nmap results here. Upserts on (host, port, protocol) — updates
     service metadata if the combination already exists rather than creating duplicates."""
-    get_program_or_404(program_id, current_user, db)
+    get_engagement_or_404(program_id, current_user, db)
 
     now = datetime.now(timezone.utc)
     created = 0
@@ -110,20 +110,20 @@ def bulk_create_services(
             created += 1
 
     # One audit entry per bulk upsert (not per service) to record who changed the
-    # program's service inventory, without flooding the log.
+    # engagement's service inventory, without flooding the log.
     log_action(db, current_user["github_id"], "upsert", "service", program_id, program_id=program_id)
     db.commit()
     return {"created": created, "updated": updated}
 
 
-@router.delete("/programs/{program_id}/services/{service_id}", status_code=200)
+@router.delete("/engagements/{program_id}/services/{service_id}", status_code=200)
 def delete_service(
     program_id: str,
     service_id: str,
     current_user: dict = Depends(require_full_scope),
     db: Session = Depends(get_db),
 ):
-    get_program_or_404(program_id, current_user, db)
+    get_engagement_or_404(program_id, current_user, db)
     svc = db.query(Service).filter(
         Service.id == service_id,
         Service.program_id == program_id,

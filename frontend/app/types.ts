@@ -14,9 +14,31 @@ export type ScanItem = {
 export type ManualTest = { id: string; title: string; hypothesis: string; payload: string; evidence: string; status: string };
 export type Finding = { id: string; title: string; severity: string; asset: string; status: string; summary: string; steps: string; impact: string; remediation: string; created_at?: string | null };
 export type Report = { id: string; finding_id: string; title: string; summary: string; steps: string; impact: string; remediation: string; cwe: string; cvss: string; status: string };
-export type Program = {
+export type EngagementType = "bug_bounty" | "pentest" | "red_team" | "internal";
+export type EngagementStatus = "planned" | "active" | "reporting" | "closed";
+
+export type Client = {
+  id: string; name: string; contact_name: string; contact_email: string;
+  notes: string; created_at: string;
+};
+
+export type Authorization = {
+  id: string; program_id: string; permits: string;
+  authorized_by: string; authorized_at: string; reference: string;
+  window_start: string; window_end: string;
+  status: "active" | "expired" | "revoked";
+  notes: string; created_at: string;
+};
+
+export type Engagement = {
   id: string; name: string; platform: string; program_url: string;
   scope_summary: string; severity_guidance: string; safe_harbor_notes: string;
+  // Engagement context. Empty string / defaults for bug bounty work.
+  client_id: string;
+  engagement_type: EngagementType;
+  engagement_status: EngagementStatus;
+  starts_at: string;
+  ends_at: string;
   scope: { in: ScopeItem[]; out: ScopeItem[] };
   imports: ImportRecord[];
   recon_count: number;
@@ -30,7 +52,7 @@ export type Program = {
   my_role?: "owner" | "member" | "viewer";
 };
 export type ApiKey = { id: string; label: string; scope: "full" | "runner"; created_at: string | null; last_used_at: string | null };
-export type ProgramMember = { id: string; program_id: string; member_github_id: string; role: string; invited_at: string | null };
+export type EngagementMember = { id: string; program_id: string; member_github_id: string; role: string; invited_at: string | null };
 export type Service = {
   id: string; program_id: string; host: string; port: number; protocol: string;
   service_name: string; product: string; version: string; state: string; source: string;

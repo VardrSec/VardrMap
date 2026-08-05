@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from db import get_db
-from deps import get_current_user, get_program_or_404, log_action, require_member_write
+from deps import get_current_user, get_engagement_or_404, log_action, require_member_write
 from models import Report
 from schemas import ReportCreate, ReportUpdate
 from serializers import serialize_report
@@ -10,7 +10,7 @@ from serializers import serialize_report
 router = APIRouter()
 
 
-@router.get("/programs/{program_id}/reports")
+@router.get("/engagements/{program_id}/reports")
 def get_reports(
     program_id: str,
     limit: int = Query(default=50, ge=1, le=200),
@@ -18,22 +18,22 @@ def get_reports(
     current_user: dict[str, str] = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    get_program_or_404(program_id, current_user, db)
+    get_engagement_or_404(program_id, current_user, db)
     query = db.query(Report).filter(Report.program_id == program_id)
     total = query.count()
     reports = query.order_by(Report.created_at.desc()).offset(offset).limit(limit).all()
     return {"reports": [serialize_report(r) for r in reports], "total": total, "offset": offset, "limit": limit}
 
 
-@router.post("/programs/{program_id}/reports")
+@router.post("/engagements/{program_id}/reports")
 def add_report(
     program_id: str,
     payload: ReportCreate,
     current_user: dict[str, str] = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    program = get_program_or_404(program_id, current_user, db)
-    require_member_write(program, current_user, db)
+    engagement = get_engagement_or_404(program_id, current_user, db)
+    require_member_write(engagement, current_user, db)
     report = Report(
         program_id=program_id,
         finding_id=payload.finding_id or "",
@@ -54,7 +54,7 @@ def add_report(
     return serialize_report(report)
 
 
-@router.patch("/programs/{program_id}/reports/{report_id}")
+@router.patch("/engagements/{program_id}/reports/{report_id}")
 def update_report(
     program_id: str,
     report_id: str,
@@ -62,7 +62,7 @@ def update_report(
     current_user: dict[str, str] = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    get_program_or_404(program_id, current_user, db)
+    get_engagement_or_404(program_id, current_user, db)
     report = db.query(Report).filter(
         Report.id == report_id,
         Report.program_id == program_id,
@@ -77,15 +77,15 @@ def update_report(
     return serialize_report(report)
 
 
-@router.delete("/programs/{program_id}/reports/{report_id}")
+@router.delete("/engagements/{program_id}/reports/{report_id}")
 def delete_report(
     program_id: str,
     report_id: str,
     current_user: dict[str, str] = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    program = get_program_or_404(program_id, current_user, db)
-    require_member_write(program, current_user, db)
+    engagement = get_engagement_or_404(program_id, current_user, db)
+    require_member_write(engagement, current_user, db)
     report = db.query(Report).filter(
         Report.id == report_id,
         Report.program_id == program_id,

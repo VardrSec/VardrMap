@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Program } from "../types";
+import { Engagement } from "../types";
 import { ManualTestFormState } from "../types";
 import { ReviewTab } from "../context/appReducer";
 import { useAppContext } from "../context/AppContext";
@@ -10,14 +10,14 @@ import ScanningSection from "./ScanningSection";
 import ManualSection from "./ManualSection";
 import ServicesSection from "./ServicesSection";
 
-const TABS: { id: ReviewTab; label: string; countKey: keyof import("../types").Program }[] = [
+const TABS: { id: ReviewTab; label: string; countKey: keyof import("../types").Engagement }[] = [
   { id: "recon",    label: "Recon",    countKey: "recon_count"        },
   { id: "scans",    label: "Scans",    countKey: "scans_count"        },
   { id: "manual",   label: "Manual",   countKey: "manual_tests_count" },
   { id: "services", label: "Services", countKey: "services_count"     },
 ];
 
-export default function ReviewSection({ program }: { program: Program }) {
+export default function ReviewSection({ engagement }: { engagement: Engagement }) {
   const { state: { reviewPrefill }, dispatch } = useAppContext();
   const [activeTab, setActiveTab] = useState<ReviewTab>("recon");
   const [manualPrefill, setManualPrefill] = useState<{ data: ManualTestFormState; epoch: number } | null>(null);
@@ -49,7 +49,7 @@ export default function ReviewSection({ program }: { program: Program }) {
         </div>
         <div className="flex rounded-lg border border-[#2e2e2e] bg-[#1a1a1a] p-0.5">
           {TABS.map((t) => {
-            const count = program[t.countKey] as number;
+            const count = engagement[t.countKey] as number;
             return (
               <button key={t.id} onClick={() => setActiveTab(t.id)}
                 className="flex items-center gap-1.5 rounded-md px-4 py-1.5 font-mono text-[11px] uppercase tracking-wider transition"
@@ -67,16 +67,16 @@ export default function ReviewSection({ program }: { program: Program }) {
         </div>
       </div>
 
-      {activeTab === "recon"    && <ReconSection    programId={program.id} hideHeader scopeItems={program.scope.in} />}
-      {activeTab === "scans"    && <ScanningSection programId={program.id} hideHeader scopeItems={program.scope.in} />}
+      {activeTab === "recon"    && <ReconSection    engagementId={engagement.id} hideHeader scopeItems={engagement.scope.in} />}
+      {activeTab === "scans"    && <ScanningSection engagementId={engagement.id} hideHeader scopeItems={engagement.scope.in} />}
       {activeTab === "manual"   && (
         <ManualSection
-          program={program}
+          engagement={engagement}
           hideHeader
           prefill={manualPrefill ?? undefined}
         />
       )}
-      {activeTab === "services" && <ServicesSection programId={program.id} hideHeader />}
+      {activeTab === "services" && <ServicesSection engagementId={engagement.id} hideHeader />}
     </div>
   );
 }

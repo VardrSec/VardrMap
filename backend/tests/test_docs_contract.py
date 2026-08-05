@@ -150,12 +150,12 @@ def test_stats_endpoint_keys(client, auth_headers, program_id):
 
 
 def test_program_object_has_services_count(client, auth_headers, program_id):
-    """GET /programs must include services_count in each program object."""
+    """GET /programs must include services_count in each engagement object."""
     res = client.get("/programs", headers=auth_headers)
     assert res.status_code == 200
     programs = res.json().get("programs", [])
     for p in programs:
         assert "services_count" in p, (
-            f"Program object missing 'services_count'. "
-            "Update serialize_program or docs/api.md."
+            f"Engagement object missing 'services_count'. "
+            "Update serialize_engagement or docs/api.md."
         )

@@ -1,4 +1,4 @@
-"""Program membership — invite collaborators to read and write a program."""
+"""Engagement membership — invite collaborators to read and write a engagement."""
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -6,8 +6,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from db import get_db
-from deps import get_current_user, get_program_or_404, log_action, require_program_owner
-from models import ProgramMember
+from deps import get_current_user, get_engagement_or_404, log_action, require_engagement_owner
+from models import EngagementMember
 
 router = APIRouter(tags=["members"])
 
@@ -19,7 +19,7 @@ class MemberAdd(BaseModel):
     role: Literal["member", "viewer"] = "member"
 
 
-def serialize(m: ProgramMember) -> dict:
+def serialize(m: EngagementMember) -> dict:
     return {
         "id":               m.id,
         "program_id":       m.program_id,
@@ -29,45 +29,45 @@ def serialize(m: ProgramMember) -> dict:
     }
 
 
-@router.get("/programs/{program_id}/members")
+@router.get("/engagements/{program_id}/members")
 def list_members(
     program_id: str,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    program = get_program_or_404(program_id, current_user, db)
-    rows = db.query(ProgramMember).filter(ProgramMember.program_id == program_id).all()
+    engagement = get_engagement_or_404(program_id, current_user, db)
+    rows = db.query(EngagementMember).filter(EngagementMember.program_id == program_id).all()
     return {
-        "owner_github_id": program.owner_github_id,
+        "owner_github_id": engagement.owner_github_id,
         "members": [serialize(m) for m in rows],
     }
 
 
-@router.post("/programs/{program_id}/members", status_code=201)
+@router.post("/engagements/{program_id}/members", status_code=201)
 def add_member(
     program_id: str,
     body: MemberAdd,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    program = get_program_or_404(program_id, current_user, db)
-    require_program_owner(program, current_user)
+    engagement = get_engagement_or_404(program_id, current_user, db)
+    require_engagement_owner(engagement, current_user)
 
     if body.github_id == current_user["github_id"]:
-        raise HTTPException(status_code=400, detail="Cannot add the program owner as a member")
+        raise HTTPException(status_code=400, detail="Cannot add the engagement owner as a member")
 
-    existing = db.query(ProgramMember).filter(
-        ProgramMember.program_id == program_id,
-        ProgramMember.member_github_id == body.github_id,
+    existing = db.query(EngagementMember).filter(
+        EngagementMember.program_id == program_id,
+        EngagementMember.member_github_id == body.github_id,
     ).first()
     if existing:
         raise HTTPException(status_code=409, detail="User is already a member")
 
-    count = db.query(ProgramMember).filter(ProgramMember.program_id == program_id).count()
+    count = db.query(EngagementMember).filter(EngagementMember.program_id == program_id).count()
     if count >= _MAX_MEMBERS:
-        raise HTTPException(status_code=400, detail=f"Maximum {_MAX_MEMBERS} members per program")
+        raise HTTPException(status_code=400, detail=f"Maximum {_MAX_MEMBERS} members per engagement")
 
-    member = ProgramMember(
+    member = EngagementMember(
         program_id=program_id,
         owner_github_id=current_user["github_id"],
         member_github_id=body.github_id,
@@ -81,19 +81,19 @@ def add_member(
     return serialize(member)
 
 
-@router.delete("/programs/{program_id}/members/{member_github_id}", status_code=200)
+@router.delete("/engagements/{program_id}/members/{member_github_id}", status_code=200)
 def remove_member(
     program_id: str,
     member_github_id: str,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    program = get_program_or_404(program_id, current_user, db)
-    require_program_owner(program, current_user)
+    engagement = get_engagement_or_404(program_id, current_user, db)
+    require_engagement_owner(engagement, current_user)
 
-    member = db.query(ProgramMember).filter(
-        ProgramMember.program_id == program_id,
-        ProgramMember.member_github_id == member_github_id,
+    member = db.query(EngagementMember).filter(
+        EngagementMember.program_id == program_id,
+        EngagementMember.member_github_id == member_github_id,
     ).first()
     if not member:
         raise HTTPException(status_code=404, detail="Member not found")

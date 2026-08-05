@@ -3,10 +3,17 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from db import get_db
-from deps import get_current_user, get_program_or_404, log_action, require_program_owner
-from models import Finding, ManualTest, Program, ProgramMember, ReconItem, Report, ScanItem, Submission, User
-from schemas import ProgramCreate, ProgramUpdate
-from serializers import serialize_program
+from deps import (
+    get_current_user,
+    get_engagement_or_404,
+    log_action,
+    parse_iso_datetime,
+    require_engagement_owner,
+    resolve_owned_client_id,
+)
+from models import Finding, ManualTest, Engagement, EngagementMember, ReconItem, Report, ScanItem, Submission, User
+from schemas import EngagementCreate, EngagementUpdate
+from serializers import serialize_engagement
 
 router = APIRouter()
 
@@ -38,40 +45,44 @@ def auth_sync(
 
 
 
-@router.get("/programs")
+@router.get("/engagements")
 def get_programs(
     current_user: dict[str, str] = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     github_id = current_user["github_id"]
-    owned = db.query(Program).filter(Program.owner_github_id == github_id).all()
+    owned = db.query(Engagement).filter(Engagement.owner_github_id == github_id).all()
 
     # Also include programs where this user is an invited member
-    member_program_ids = [
+    member_engagement_ids = [
         row[0]
-        for row in db.query(ProgramMember.program_id).filter(
-            ProgramMember.member_github_id == github_id
+        for row in db.query(EngagementMember.program_id).filter(
+            EngagementMember.member_github_id == github_id
         ).all()
     ]
     shared = (
-        db.query(Program)
-        .filter(Program.id.in_(member_program_ids))
+        db.query(Engagement)
+        .filter(Engagement.id.in_(member_engagement_ids))
         .all()
-        if member_program_ids else []
+        if member_engagement_ids else []
     )
 
     seen = {p.id for p in owned}
-    all_programs = owned + [p for p in shared if p.id not in seen]
-    return {"programs": [serialize_program(p, db, github_id=github_id) for p in all_programs]}
+    all_engagements = owned + [p for p in shared if p.id not in seen]
+    items = [serialize_engagement(p, db, github_id=github_id) for p in all_engagements]
+    # Both keys carry the same list. "engagements" is the name going forward;
+    # "programs" is kept because VardrRunner reads it (api.py: .get("programs"))
+    # and ships from its own repository on its own schedule.
+    return {"engagements": items, "programs": items}
 
 
-@router.post("/programs")
-def create_program(
-    payload: ProgramCreate,
+@router.post("/engagements")
+def create_engagement(
+    payload: EngagementCreate,
     current_user: dict[str, str] = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    # Ensure user row exists before creating program (FK safety)
+    # Ensure user row exists before creating engagement (FK safety)
     user = db.query(User).filter(User.github_id == current_user["github_id"]).first()
     if not user:
         user = User(
@@ -82,7 +93,7 @@ def create_program(
         db.add(user)
         db.flush()
 
-    program = Program(
+    engagement = Engagement(
         owner_github_id=current_user["github_id"],
         name=payload.name,
         platform=payload.platform or "",
@@ -90,51 +101,62 @@ def create_program(
         scope_summary=payload.scope_summary or "",
         severity_guidance=payload.severity_guidance or "",
         safe_harbor_notes=payload.safe_harbor_notes or "",
+        client_id=resolve_owned_client_id(payload.client_id, current_user, db),
+        engagement_type=payload.engagement_type,
+        engagement_status=payload.engagement_status,
+        starts_at=parse_iso_datetime(payload.starts_at, "starts_at"),
+        ends_at=parse_iso_datetime(payload.ends_at, "ends_at"),
     )
-    db.add(program)
+    db.add(engagement)
     db.flush()
-    log_action(db, current_user["github_id"], "create", "program", program.id)
+    log_action(db, current_user["github_id"], "create", "engagement", engagement.id)
     db.commit()
-    db.refresh(program)
-    return serialize_program(program, db, github_id=current_user["github_id"])
+    db.refresh(engagement)
+    return serialize_engagement(engagement, db, github_id=current_user["github_id"])
 
 
-@router.get("/programs/{program_id}")
-def get_program(
+@router.get("/engagements/{program_id}")
+def get_engagement(
     program_id: str,
     current_user: dict[str, str] = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    program = get_program_or_404(program_id, current_user, db)
-    return serialize_program(program, db, github_id=current_user["github_id"])
+    engagement = get_engagement_or_404(program_id, current_user, db)
+    return serialize_engagement(engagement, db, github_id=current_user["github_id"])
 
 
-@router.patch("/programs/{program_id}")
-def update_program(
+@router.patch("/engagements/{program_id}")
+def update_engagement(
     program_id: str,
-    payload: ProgramUpdate,
+    payload: EngagementUpdate,
     current_user: dict[str, str] = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    program = get_program_or_404(program_id, current_user, db)
-    require_program_owner(program, current_user)
+    engagement = get_engagement_or_404(program_id, current_user, db)
+    require_engagement_owner(engagement, current_user)
     for key, value in payload.model_dump(exclude_unset=True).items():
-        setattr(program, key, value)
-    log_action(db, current_user["github_id"], "update", "program", program_id, program_id)
+        # Dates arrive as strings and client_id must be proven owned; the rest
+        # of the fields are plain values and pass through as before.
+        if key in ("starts_at", "ends_at"):
+            value = parse_iso_datetime(value, key)
+        elif key == "client_id":
+            value = resolve_owned_client_id(value, current_user, db)
+        setattr(engagement, key, value)
+    log_action(db, current_user["github_id"], "update", "engagement", program_id, program_id)
     db.commit()
-    db.refresh(program)
-    return serialize_program(program, db, github_id=current_user["github_id"])
+    db.refresh(engagement)
+    return serialize_engagement(engagement, db, github_id=current_user["github_id"])
 
 
-@router.get("/programs/{program_id}/stats")
-def get_program_stats(
+@router.get("/engagements/{program_id}/stats")
+def get_engagement_stats(
     program_id: str,
     current_user: dict[str, str] = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Lightweight aggregate stats for a program — used by the Dashboard stat cards.
+    """Lightweight aggregate stats for a engagement — used by the Dashboard stat cards.
     Returns counts and breakdowns without serializing full objects."""
-    get_program_or_404(program_id, current_user, db)
+    get_engagement_or_404(program_id, current_user, db)
 
     def count(model, extra_filter=None):
         q = db.query(func.count(model.id)).filter(model.program_id == program_id)  # type: ignore[attr-defined]
@@ -168,15 +190,15 @@ def get_program_stats(
     }
 
 
-@router.delete("/programs/{program_id}")
-def delete_program(
+@router.delete("/engagements/{program_id}")
+def delete_engagement(
     program_id: str,
     current_user: dict[str, str] = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    program = get_program_or_404(program_id, current_user, db)
-    require_program_owner(program, current_user)
-    log_action(db, current_user["github_id"], "delete", "program", program_id)
-    db.delete(program)
+    engagement = get_engagement_or_404(program_id, current_user, db)
+    require_engagement_owner(engagement, current_user)
+    log_action(db, current_user["github_id"], "delete", "engagement", program_id)
+    db.delete(engagement)
     db.commit()
-    return {"message": "Program deleted"}
+    return {"message": "Engagement deleted"}

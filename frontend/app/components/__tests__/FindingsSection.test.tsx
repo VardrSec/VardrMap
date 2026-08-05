@@ -7,10 +7,10 @@ jest.mock("remark-gfm", () => ({ __esModule: true, default: () => {} }));
 
 import { renderWithApp } from "../../../test-utils/renderWithApp";
 import FindingsSection from "../FindingsSection";
-import type { Program } from "../../types";
+import type { Engagement } from "../../types";
 
-const PROGRAM: Program = {
-  id: "prog-1", name: "Test Program", platform: "", program_url: "",
+const PROGRAM: Engagement = {
+  id: "prog-1", name: "Test Engagement", platform: "", program_url: "",
   scope_summary: "", severity_guidance: "", safe_harbor_notes: "",
   scope: { in: [], out: [] }, imports: [],
   recon_count: 0, scans_count: 0, manual_tests_count: 0,
@@ -24,19 +24,19 @@ const FINDING = {
 };
 
 const EMPTY_ROUTES = {
-  "GET /programs/prog-1/findings?limit=50&offset=0": { body: { findings: [], total: 0 } },
+  "GET /engagements/prog-1/findings?limit=50&offset=0": { body: { findings: [], total: 0 } },
 };
 
 describe("FindingsSection", () => {
   it("shows empty state when there are no findings", async () => {
-    renderWithApp(<FindingsSection program={PROGRAM} />, { routes: EMPTY_ROUTES });
+    renderWithApp(<FindingsSection engagement={PROGRAM} />, { routes: EMPTY_ROUTES });
     expect(await screen.findByText("No findings yet.")).toBeInTheDocument();
   });
 
   it("renders loaded findings on mount", async () => {
-    renderWithApp(<FindingsSection program={PROGRAM} />, {
+    renderWithApp(<FindingsSection engagement={PROGRAM} />, {
       routes: {
-        "GET /programs/prog-1/findings?limit=50&offset=0": {
+        "GET /engagements/prog-1/findings?limit=50&offset=0": {
           body: { findings: [FINDING], total: 1 },
         },
       },
@@ -46,10 +46,10 @@ describe("FindingsSection", () => {
 
   it("adds a finding via POST and shows success message", async () => {
     const created = { ...FINDING, id: "f2", title: "XSS" };
-    const { authFetch, setMessage } = renderWithApp(<FindingsSection program={PROGRAM} />, {
+    const { authFetch, setMessage } = renderWithApp(<FindingsSection engagement={PROGRAM} />, {
       routes: {
         ...EMPTY_ROUTES,
-        "POST /programs/prog-1/findings": { body: created },
+        "POST /engagements/prog-1/findings": { body: created },
       },
     });
 
@@ -59,7 +59,7 @@ describe("FindingsSection", () => {
 
     await waitFor(() =>
       expect(authFetch).toHaveBeenCalledWith(
-        "/programs/prog-1/findings",
+        "/engagements/prog-1/findings",
         expect.objectContaining({ method: "POST" }),
       ),
     );
@@ -68,12 +68,12 @@ describe("FindingsSection", () => {
 
   it("deletes a finding via DELETE", async () => {
     window.confirm = jest.fn(() => true);
-    const { authFetch, setMessage } = renderWithApp(<FindingsSection program={PROGRAM} />, {
+    const { authFetch, setMessage } = renderWithApp(<FindingsSection engagement={PROGRAM} />, {
       routes: {
-        "GET /programs/prog-1/findings?limit=50&offset=0": {
+        "GET /engagements/prog-1/findings?limit=50&offset=0": {
           body: { findings: [FINDING], total: 1 },
         },
-        "DELETE /programs/prog-1/findings/f1": { body: {} },
+        "DELETE /engagements/prog-1/findings/f1": { body: {} },
       },
     });
 
@@ -82,7 +82,7 @@ describe("FindingsSection", () => {
 
     await waitFor(() =>
       expect(authFetch).toHaveBeenCalledWith(
-        "/programs/prog-1/findings/f1",
+        "/engagements/prog-1/findings/f1",
         expect.objectContaining({ method: "DELETE" }),
       ),
     );
@@ -90,9 +90,9 @@ describe("FindingsSection", () => {
   });
 
   it("promotes a finding to report via promoteToReport", async () => {
-    const { value } = renderWithApp(<FindingsSection program={PROGRAM} />, {
+    const { value } = renderWithApp(<FindingsSection engagement={PROGRAM} />, {
       routes: {
-        "GET /programs/prog-1/findings?limit=50&offset=0": {
+        "GET /engagements/prog-1/findings?limit=50&offset=0": {
           body: { findings: [FINDING], total: 1 },
         },
       },
@@ -107,12 +107,12 @@ describe("FindingsSection", () => {
   });
 
   it("applies AI suggestion via POST /suggest and enters edit mode", async () => {
-    const { authFetch, setMessage } = renderWithApp(<FindingsSection program={PROGRAM} />, {
+    const { authFetch, setMessage } = renderWithApp(<FindingsSection engagement={PROGRAM} />, {
       routes: {
-        "GET /programs/prog-1/findings?limit=50&offset=0": {
+        "GET /engagements/prog-1/findings?limit=50&offset=0": {
           body: { findings: [FINDING], total: 1 },
         },
-        "POST /programs/prog-1/findings/f1/suggest": {
+        "POST /engagements/prog-1/findings/f1/suggest": {
           body: { impact: "Database exfiltration", remediation: "Use parameterized queries", cvss: "9.8" },
         },
       },
@@ -123,7 +123,7 @@ describe("FindingsSection", () => {
 
     await waitFor(() =>
       expect(authFetch).toHaveBeenCalledWith(
-        "/programs/prog-1/findings/f1/suggest",
+        "/engagements/prog-1/findings/f1/suggest",
         expect.objectContaining({ method: "POST" }),
       ),
     );

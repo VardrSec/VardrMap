@@ -4,7 +4,7 @@ _SCHEDULE = {"tool_type": "httpx", "target_source": "scope", "config": {"limit":
 
 
 def _pending_for(client, auth_headers, program_id):
-    """Pending jobs filtered to one program (the shared test DB accumulates jobs)."""
+    """Pending jobs filtered to one engagement (the shared test DB accumulates jobs)."""
     jobs = client.get("/jobs/pending", headers=auth_headers).json()["jobs"]
     return [j for j in jobs if j["program_id"] == program_id]
 

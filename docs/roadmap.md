@@ -83,3 +83,27 @@ Smaller, non-urgent: API-key `last_used_at` writes on every authenticated reques
 - Minor releases (`vX.Y.0`) = new endpoints, models, env vars, or user-visible
   features. Every behavior-changing item updates `docs/` per the rules in
   `CLAUDE.md`.
+
+---
+
+## Deferred: physical rename of `programs` → `engagements`
+
+The entity became `Engagement` in v0.21, but the table is still `programs` and
+its 14 foreign keys are still `program_id`. That is deliberate, not an oversight.
+
+Renaming them means `ALTER TABLE` against the live Railway Postgres. `start.sh`
+runs `alembic upgrade head` and *then* starts uvicorn, so there is a window
+where the schema has moved and a process is still serving the old shape — a hard
+failure, not a degraded one. The benefit is zero: nobody sees a table name.
+
+If it is done later it needs its own commit, its own deploy, and a maintenance
+window — never bundled with code changes.
+
+Related cleanup that can happen independently, once VardrRunner is updated to
+call `/engagements/*` and read the `engagements` response key:
+
+- [ ] Update VardrRunner (`vardrrunner/api.py`) to `/engagements/*`
+- [ ] Delete `LegacyProgramPathMiddleware` from `backend/main.py`
+- [ ] Drop the duplicate `programs` key from `GET /engagements`
+- [ ] Delete `backend/tests/test_legacy_program_paths.py`
+- [ ] Remove the "Deprecated: `/programs/*`" section from `docs/api.md`

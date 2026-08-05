@@ -28,7 +28,7 @@ def test_httpx_enriches_existing_host_not_duplicate(client, auth_headers, progra
     body = r2.json()
     assert body["new_count"] == 0
     assert body["updated_count"] == 1
-    assert body["program"]["recon_count"] == 1  # one asset, enriched — not two rows
+    assert body["engagement"]["recon_count"] == 1  # one asset, enriched — not two rows
 
 
 def test_httpx_new_host_inserts(client, auth_headers, program_id):

@@ -25,11 +25,35 @@ class User(Base):
     notify_min_severity = Column(String(20), default="high")  # info|low|medium|high|critical
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
-    programs = relationship("Program", back_populates="owner", cascade="all, delete-orphan")
+    engagements = relationship("Engagement", back_populates="owner", cascade="all, delete-orphan")
     api_keys = relationship("ApiKey", back_populates="user", cascade="all, delete-orphan")
+    clients = relationship("Client", back_populates="owner", cascade="all, delete-orphan")
 
 
-class Program(Base):
+class Client(Base):
+    """An organisation that engagements are performed for.
+
+    Bug bounty work has no client — the engagement *is* the counterparty — so this
+    is optional on a Engagement. Consulting and internal work need one: several
+    engagements over time belong to the same organisation, and the deliverable
+    goes to a named contact.
+    """
+
+    __tablename__ = "clients"
+
+    id = Column(String, primary_key=True, default=new_uuid)
+    owner_github_id = Column(String, ForeignKey("users.github_id"), nullable=False, index=True)
+    name = Column(String(200), nullable=False)
+    contact_name = Column(String(200), default="")
+    contact_email = Column(String(200), default="")
+    notes = Column(Text, default="")
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    owner = relationship("User", back_populates="clients")
+    engagements = relationship("Engagement", back_populates="client")
+
+
+class Engagement(Base):
     __tablename__ = "programs"
 
     id = Column(String, primary_key=True, default=new_uuid)
@@ -40,21 +64,68 @@ class Program(Base):
     scope_summary = Column(Text, default="")
     severity_guidance = Column(Text, default="")
     safe_harbor_notes = Column(Text, default="")
+    # Engagement context. Every field below is optional and defaults to the
+    # bug bounty behaviour this table was built for, so existing rows and
+    # existing API callers are unaffected — pentest work is opt-in.
+    client_id = Column(String, ForeignKey("clients.id"), nullable=True, index=True)
+    engagement_type = Column(String(20), default="bug_bounty")  # bug_bounty|pentest|red_team|internal
+    engagement_status = Column(String(20), default="active")    # planned|active|reporting|closed
+    starts_at = Column(DateTime, nullable=True)
+    ends_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
-    owner = relationship("User", back_populates="programs")
-    scope_items = relationship("ScopeItem", back_populates="program", cascade="all, delete-orphan")
-    manual_tests = relationship("ManualTest", back_populates="program", cascade="all, delete-orphan")
-    findings = relationship("Finding", back_populates="program", cascade="all, delete-orphan")
-    reports = relationship("Report", back_populates="program", cascade="all, delete-orphan")
-    recon_items = relationship("ReconItem", back_populates="program", cascade="all, delete-orphan")
-    scan_items = relationship("ScanItem", back_populates="program", cascade="all, delete-orphan")
-    import_records = relationship("ImportRecord", back_populates="program", cascade="all, delete-orphan")
-    scan_jobs   = relationship("ScanJob",    back_populates="program", cascade="all, delete-orphan")
-    services    = relationship("Service",    back_populates="program", cascade="all, delete-orphan")
-    submissions = relationship("Submission", back_populates="program", cascade="all, delete-orphan")
-    scheduled_scans = relationship("ScheduledScan", back_populates="program", cascade="all, delete-orphan")
-    members = relationship("ProgramMember", back_populates="program", cascade="all, delete-orphan")
+    owner = relationship("User", back_populates="engagements")
+    client = relationship("Client", back_populates="engagements")
+    authorizations = relationship("Authorization", back_populates="engagement", cascade="all, delete-orphan")
+    scope_items = relationship("ScopeItem", back_populates="engagement", cascade="all, delete-orphan")
+    manual_tests = relationship("ManualTest", back_populates="engagement", cascade="all, delete-orphan")
+    findings = relationship("Finding", back_populates="engagement", cascade="all, delete-orphan")
+    reports = relationship("Report", back_populates="engagement", cascade="all, delete-orphan")
+    recon_items = relationship("ReconItem", back_populates="engagement", cascade="all, delete-orphan")
+    scan_items = relationship("ScanItem", back_populates="engagement", cascade="all, delete-orphan")
+    import_records = relationship("ImportRecord", back_populates="engagement", cascade="all, delete-orphan")
+    scan_jobs   = relationship("ScanJob",    back_populates="engagement", cascade="all, delete-orphan")
+    services    = relationship("Service",    back_populates="engagement", cascade="all, delete-orphan")
+    submissions = relationship("Submission", back_populates="engagement", cascade="all, delete-orphan")
+    scheduled_scans = relationship("ScheduledScan", back_populates="engagement", cascade="all, delete-orphan")
+    members = relationship("EngagementMember", back_populates="engagement", cascade="all, delete-orphan")
+
+
+class Authorization(Base):
+    """The record of permission to test, and the window it covers.
+
+    This is the artifact that distinguishes professional testing from bug
+    bounty hunting: a named person authorised named activity against named
+    scope, between two dates. For bounty work the equivalent is the engagement's
+    safe harbour policy, which is why `reference` and `permits` are free text
+    rather than a contract-shaped schema.
+
+    It is deliberately append-mostly. Superseding an authorisation creates a
+    new row and marks the old one `expired`, so the history of what was
+    permitted when survives — which is the whole point of holding it.
+    """
+
+    __tablename__ = "authorizations"
+
+    id = Column(String, primary_key=True, default=new_uuid)
+    program_id = Column(String, ForeignKey("programs.id"), nullable=False, index=True)
+    # Denormalised owner for the same fast BOLA filter every other table uses.
+    owner_github_id = Column(String, nullable=False, index=True)
+    # What the testing is permitted to do, in the authoriser's words.
+    permits = Column(Text, default="")
+    # Who granted it and how it can be evidenced later.
+    authorized_by = Column(String(200), default="")
+    authorized_at = Column(DateTime, nullable=True)
+    reference = Column(String(500), default="")  # SOW number, ticket, or policy URL
+    # The window testing is permitted in. Null end means open-ended, which is
+    # normal for a bounty programme and unusual for an engagement.
+    window_start = Column(DateTime, nullable=True)
+    window_end = Column(DateTime, nullable=True)
+    status = Column(String(20), default="active")  # active|expired|revoked
+    notes = Column(Text, default="")
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    engagement = relationship("Engagement", back_populates="authorizations")
 
 
 class ScopeItem(Base):
@@ -68,7 +139,7 @@ class ScopeItem(Base):
     notes = Column(Text, default="")
     created_at = Column(DateTime, nullable=True, default=lambda: datetime.now(timezone.utc))
 
-    program = relationship("Program", back_populates="scope_items")
+    engagement = relationship("Engagement", back_populates="scope_items")
 
 
 class ManualTest(Base):
@@ -83,7 +154,7 @@ class ManualTest(Base):
     status = Column(String(20), default="new")
     created_at = Column(DateTime, nullable=True, default=lambda: datetime.now(timezone.utc))
 
-    program = relationship("Program", back_populates="manual_tests")
+    engagement = relationship("Engagement", back_populates="manual_tests")
 
 
 class Finding(Base):
@@ -101,7 +172,7 @@ class Finding(Base):
     remediation = Column(Text, default="")
     created_at = Column(DateTime, nullable=True, default=lambda: datetime.now(timezone.utc))
 
-    program = relationship("Program", back_populates="findings")
+    engagement = relationship("Engagement", back_populates="findings")
 
 
 class Report(Base):
@@ -120,7 +191,7 @@ class Report(Base):
     status = Column(String(20), default="draft")
     created_at = Column(DateTime, nullable=True, default=lambda: datetime.now(timezone.utc))
 
-    program = relationship("Program", back_populates="reports")
+    engagement = relationship("Engagement", back_populates="reports")
 
 
 class ReconItem(Base):
@@ -147,7 +218,7 @@ class ReconItem(Base):
     job_id = Column(String, nullable=True)  # scan_job that produced this item, if any
     created_at = Column(DateTime, nullable=True, default=lambda: datetime.now(timezone.utc))
 
-    program = relationship("Program", back_populates="recon_items")
+    engagement = relationship("Engagement", back_populates="recon_items")
 
 
 class ScanItem(Base):
@@ -168,7 +239,7 @@ class ScanItem(Base):
     cvss = Column(String(50), default="")
     created_at = Column(DateTime, nullable=True, default=lambda: datetime.now(timezone.utc))
 
-    program = relationship("Program", back_populates="scan_items")
+    engagement = relationship("Engagement", back_populates="scan_items")
 
 
 class ImportRecord(Base):
@@ -181,17 +252,17 @@ class ImportRecord(Base):
     imported_count = Column(Integer, default=0)
     created_at = Column(DateTime, nullable=True, default=lambda: datetime.now(timezone.utc))
 
-    program = relationship("Program", back_populates="import_records")
+    engagement = relationship("Engagement", back_populates="import_records")
 
 
 class AuditLog(Base):
     __tablename__ = "audit_logs"
 
     id = Column(String, primary_key=True, default=new_uuid)
-    # No FK constraints — audit records are kept even if the user/program is deleted
+    # No FK constraints — audit records are kept even if the user/engagement is deleted
     github_id = Column(String, nullable=False, index=True)
     action = Column(String(20), nullable=False)        # "create" | "update" | "delete"
-    resource_type = Column(String(50), nullable=False)  # "program" | "finding" | etc.
+    resource_type = Column(String(50), nullable=False)  # "engagement" | "finding" | etc.
     resource_id = Column(String, nullable=False)
     program_id = Column(String, default="")             # context only, no FK
     timestamp = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
@@ -212,7 +283,7 @@ class ScanJob(Base):
     completed_at = Column(DateTime, nullable=True)
     error_message = Column(Text, default="")
 
-    program = relationship("Program", back_populates="scan_jobs")
+    engagement = relationship("Engagement", back_populates="scan_jobs")
     events = relationship("JobEvent", back_populates="job", cascade="all, delete-orphan", order_by="JobEvent.created_at")
 
 
@@ -277,7 +348,7 @@ class Service(Base):
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     last_scanned_at = Column(DateTime, nullable=True)   # stamped on every upsert
 
-    program = relationship("Program", back_populates="services")
+    engagement = relationship("Engagement", back_populates="services")
 
 
 class RadarProgram(Base):
@@ -312,7 +383,7 @@ class ScheduledScan(Base):
     next_run_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
-    program = relationship("Program", back_populates="scheduled_scans")
+    engagement = relationship("Engagement", back_populates="scheduled_scans")
 
 
 class Submission(Base):
@@ -335,20 +406,20 @@ class Submission(Base):
     notes = Column(Text, default="")
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
-    program = relationship("Program", back_populates="submissions")
+    engagement = relationship("Engagement", back_populates="submissions")
 
 
-class ProgramMember(Base):
-    """Invited collaborators on a program. Members can read and write program resources;
-    only the owner can delete the program or manage membership."""
+class EngagementMember(Base):
+    """Invited collaborators on a engagement. Members can read and write engagement resources;
+    only the owner can delete the engagement or manage membership."""
     __tablename__ = "program_members"
     __table_args__ = (UniqueConstraint("program_id", "member_github_id", name="uq_program_members"),)
 
     id = Column(String, primary_key=True, default=new_uuid)
     program_id = Column(String, ForeignKey("programs.id", ondelete="CASCADE"), nullable=False, index=True)
-    owner_github_id = Column(String, nullable=False, index=True)   # program owner — for fast BOLA checks
+    owner_github_id = Column(String, nullable=False, index=True)   # engagement owner — for fast BOLA checks
     member_github_id = Column(String, nullable=False, index=True)  # the invited collaborator
     role = Column(String(20), nullable=False, default="member")    # "member" (future: "admin")
     invited_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
-    program = relationship("Program", back_populates="members")
+    engagement = relationship("Engagement", back_populates="members")

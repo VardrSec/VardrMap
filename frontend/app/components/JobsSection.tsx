@@ -71,11 +71,11 @@ function mapToUI(job: ScanJob): ScanJobUI {
 }
 
 export default function JobsSection({
-  programId, defaultTool, prefillEpoch, hideHeader,
-}: { programId: string; defaultTool?: string; prefillEpoch?: number; hideHeader?: boolean }) {
-  const { authFetch, selectedProgram, navigate } = useAppContext();
-  const scopeCount  = selectedProgram?.scope.in.length ?? 0;
-  const programName = selectedProgram?.name            ?? "Active Program";
+  engagementId, defaultTool, prefillEpoch, hideHeader,
+}: { engagementId: string; defaultTool?: string; prefillEpoch?: number; hideHeader?: boolean }) {
+  const { authFetch, selectedEngagement, navigate } = useAppContext();
+  const scopeCount  = selectedEngagement?.scope.in.length ?? 0;
+  const programName = selectedEngagement?.name            ?? "Active Engagement";
 
   const [prefs, setPrefs] = useState<Prefs>(loadPrefs);
   function pref<K extends keyof Prefs>(key: K, val: Prefs[K]) {
@@ -99,9 +99,9 @@ export default function JobsSection({
 
   const runnerOnline = runnerStatus?.online ?? false;
   // Live recon count for the Composer's queue card — refreshed every poll so it
-  // reflects assets the runner just imported, not a stale program snapshot.
-  const reconCount = liveRecon ?? selectedProgram?.recon_count ?? 0;
-  useEffect(() => { setLiveRecon(null); }, [programId]);
+  // reflects assets the runner just imported, not a stale engagement snapshot.
+  const reconCount = liveRecon ?? selectedEngagement?.recon_count ?? 0;
+  useEffect(() => { setLiveRecon(null); }, [engagementId]);
 
   function flash(text: string) { setToast({ text, id: Date.now() }); }
   useEffect(() => {
@@ -116,9 +116,9 @@ export default function JobsSection({
   const loadJobs = useCallback(async () => {
     try {
       const [jobsRes, statusRes, reconRes] = await Promise.all([
-        authFetch(`/programs/${programId}/jobs`),
+        authFetch(`/engagements/${engagementId}/jobs`),
         authFetch(`/runner/status`),
-        authFetch(`/programs/${programId}/recon?limit=1`),
+        authFetch(`/engagements/${engagementId}/recon?limit=1`),
       ]);
       if (jobsRes.ok) {
         const data = await jobsRes.json();
@@ -140,16 +140,16 @@ export default function JobsSection({
     } catch { /* auth errors surfaced by authFetch */ } finally {
       setLoading(false);
     }
-  }, [authFetch, programId]);
+  }, [authFetch, engagementId]);
 
   const loadSchedules = useCallback(async () => {
     try {
-      const res = await authFetch(`/programs/${programId}/schedules`);
+      const res = await authFetch(`/engagements/${engagementId}/schedules`);
       if (!res.ok) return;
       const data = await res.json();
       setSchedules(Array.isArray(data?.schedules) ? data.schedules : []);
     } catch { /* schedules panel just stays hidden */ }
-  }, [authFetch, programId]);
+  }, [authFetch, engagementId]);
 
   // Initial load
   useEffect(() => {
@@ -159,13 +159,13 @@ export default function JobsSection({
 
   // SSE connection for real-time job updates
   useEffect(() => {
-    if (!programId) return;
+    if (!engagementId) return;
     let active = true;
     const ctrl = new AbortController();
 
     async function connectSSE() {
       try {
-        const res = await authFetch(`/programs/${programId}/jobs/stream`, {
+        const res = await authFetch(`/engagements/${engagementId}/jobs/stream`, {
           signal: ctrl.signal,
         });
         if (!res.ok || !res.body) return;
@@ -194,7 +194,7 @@ export default function JobsSection({
 
     void connectSSE();
     return () => { active = false; ctrl.abort(); };
-  }, [programId, authFetch, loadJobs]);
+  }, [engagementId, authFetch, loadJobs]);
 
   // Adaptive polling: 5s while any jobs are active, 30s when idle
   useEffect(() => {
@@ -218,7 +218,7 @@ export default function JobsSection({
     // Recurring specs become schedules; the backend materializes a job on each due poll
     if (spec.interval) {
       try {
-        const res = await authFetch(`/programs/${programId}/schedules`, {
+        const res = await authFetch(`/engagements/${engagementId}/schedules`, {
           method: "POST",
           body: JSON.stringify({
             tool_type:     spec.tool,
@@ -239,7 +239,7 @@ export default function JobsSection({
     }
 
     try {
-      const res = await authFetch(`/programs/${programId}/jobs`, {
+      const res = await authFetch(`/engagements/${engagementId}/jobs`, {
         method: "POST",
         body: JSON.stringify({
           tool_type:     spec.tool,
@@ -262,7 +262,7 @@ export default function JobsSection({
 
   async function toggleSchedule(id: string, enabled: boolean) {
     try {
-      const res = await authFetch(`/programs/${programId}/schedules/${id}`, {
+      const res = await authFetch(`/engagements/${engagementId}/schedules/${id}`, {
         method: "PATCH",
         body: JSON.stringify({ enabled }),
       });
@@ -274,7 +274,7 @@ export default function JobsSection({
 
   async function deleteSchedule(id: string) {
     try {
-      const res = await authFetch(`/programs/${programId}/schedules/${id}`, { method: "DELETE" });
+      const res = await authFetch(`/engagements/${engagementId}/schedules/${id}`, { method: "DELETE" });
       if (!res.ok) { flash("Failed to delete schedule."); return; }
       setSchedules((p) => p.filter((s) => s.id !== id));
       flash("Schedule deleted.");
@@ -302,7 +302,7 @@ export default function JobsSection({
     const original = jobsRef.current.find((j) => j.id === id);
     if (!original) return;
     try {
-      const res = await authFetch(`/programs/${programId}/jobs`, {
+      const res = await authFetch(`/engagements/${engagementId}/jobs`, {
         method: "POST",
         body: JSON.stringify({
           tool_type:     original.tool,

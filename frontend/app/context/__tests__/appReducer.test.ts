@@ -1,7 +1,7 @@
 import { appReducer, initialState, AppState } from "../appReducer";
-import type { Program } from "../../types";
+import type { Engagement } from "../../types";
 
-const makeProgram = (id: string, name = `Program ${id}`): Program => ({
+const makeEngagement = (id: string, name = `Engagement ${id}`): Engagement => ({
   id,
   name,
   platform: "HackerOne",
@@ -20,8 +20,8 @@ const makeProgram = (id: string, name = `Program ${id}`): Program => ({
   reports_count: 0,
 });
 
-const p1 = makeProgram("1");
-const p2 = makeProgram("2");
+const p1 = makeEngagement("1");
+const p2 = makeEngagement("2");
 
 describe("appReducer", () => {
   describe("AUTH_LOADED", () => {
@@ -39,77 +39,77 @@ describe("appReducer", () => {
     });
   });
 
-  describe("PROGRAMS_LOADED", () => {
-    it("selects first program when none previously selected", () => {
-      const state = appReducer(initialState, { type: "PROGRAMS_LOADED", programs: [p1, p2] });
-      expect(state.programs).toEqual([p1, p2]);
-      expect(state.selectedProgramId).toBe("1");
+  describe("ENGAGEMENTS_LOADED", () => {
+    it("selects first engagement when none previously selected", () => {
+      const state = appReducer(initialState, { type: "ENGAGEMENTS_LOADED", engagements: [p1, p2] });
+      expect(state.engagements).toEqual([p1, p2]);
+      expect(state.selectedEngagementId).toBe("1");
     });
 
-    it("preserves selection when selected program is still in the list", () => {
-      const base: AppState = { ...initialState, selectedProgramId: "2" };
-      const state = appReducer(base, { type: "PROGRAMS_LOADED", programs: [p1, p2] });
-      expect(state.selectedProgramId).toBe("2");
+    it("preserves selection when selected engagement is still in the list", () => {
+      const base: AppState = { ...initialState, selectedEngagementId: "2" };
+      const state = appReducer(base, { type: "ENGAGEMENTS_LOADED", engagements: [p1, p2] });
+      expect(state.selectedEngagementId).toBe("2");
     });
 
     it("falls back to first when previously selected id is gone", () => {
-      const base: AppState = { ...initialState, selectedProgramId: "99" };
-      const state = appReducer(base, { type: "PROGRAMS_LOADED", programs: [p1, p2] });
-      expect(state.selectedProgramId).toBe("1");
+      const base: AppState = { ...initialState, selectedEngagementId: "99" };
+      const state = appReducer(base, { type: "ENGAGEMENTS_LOADED", engagements: [p1, p2] });
+      expect(state.selectedEngagementId).toBe("1");
     });
 
     it("sets empty string when list is empty", () => {
-      const state = appReducer(initialState, { type: "PROGRAMS_LOADED", programs: [] });
-      expect(state.selectedProgramId).toBe("");
+      const state = appReducer(initialState, { type: "ENGAGEMENTS_LOADED", engagements: [] });
+      expect(state.selectedEngagementId).toBe("");
     });
   });
 
   describe("PROGRAM_SELECT", () => {
-    it("updates selectedProgramId", () => {
+    it("updates selectedEngagementId", () => {
       const state = appReducer(initialState, { type: "PROGRAM_SELECT", id: "42" });
-      expect(state.selectedProgramId).toBe("42");
+      expect(state.selectedEngagementId).toBe("42");
     });
   });
 
-  describe("PROGRAM_UPDATED", () => {
-    it("replaces an existing program by id", () => {
-      const base: AppState = { ...initialState, programs: [p1, p2] };
+  describe("ENGAGEMENT_UPDATED", () => {
+    it("replaces an existing engagement by id", () => {
+      const base: AppState = { ...initialState, engagements: [p1, p2] };
       const updated = { ...p1, name: "Renamed" };
-      const state = appReducer(base, { type: "PROGRAM_UPDATED", program: updated });
-      expect(state.programs[0].name).toBe("Renamed");
-      expect(state.programs).toHaveLength(2);
+      const state = appReducer(base, { type: "ENGAGEMENT_UPDATED", engagement: updated });
+      expect(state.engagements[0].name).toBe("Renamed");
+      expect(state.engagements).toHaveLength(2);
     });
 
-    it("appends program if id not found", () => {
-      const base: AppState = { ...initialState, programs: [p1] };
-      const state = appReducer(base, { type: "PROGRAM_UPDATED", program: p2 });
-      expect(state.programs).toHaveLength(2);
-      expect(state.programs[1].id).toBe("2");
+    it("appends engagement if id not found", () => {
+      const base: AppState = { ...initialState, engagements: [p1] };
+      const state = appReducer(base, { type: "ENGAGEMENT_UPDATED", engagement: p2 });
+      expect(state.engagements).toHaveLength(2);
+      expect(state.engagements[1].id).toBe("2");
     });
   });
 
-  describe("PROGRAM_DELETED", () => {
-    it("removes the deleted program", () => {
-      const base: AppState = { ...initialState, programs: [p1, p2], selectedProgramId: "1" };
-      const state = appReducer(base, { type: "PROGRAM_DELETED", id: "1" });
-      expect(state.programs).toEqual([p2]);
+  describe("ENGAGEMENT_DELETED", () => {
+    it("removes the deleted engagement", () => {
+      const base: AppState = { ...initialState, engagements: [p1, p2], selectedEngagementId: "1" };
+      const state = appReducer(base, { type: "ENGAGEMENT_DELETED", id: "1" });
+      expect(state.engagements).toEqual([p2]);
     });
 
-    it("selects next available program after deletion", () => {
-      const base: AppState = { ...initialState, programs: [p1, p2], selectedProgramId: "1" };
-      const state = appReducer(base, { type: "PROGRAM_DELETED", id: "1" });
-      expect(state.selectedProgramId).toBe("2");
+    it("selects next available engagement after deletion", () => {
+      const base: AppState = { ...initialState, engagements: [p1, p2], selectedEngagementId: "1" };
+      const state = appReducer(base, { type: "ENGAGEMENT_DELETED", id: "1" });
+      expect(state.selectedEngagementId).toBe("2");
     });
 
-    it("clears selection when last program is deleted", () => {
-      const base: AppState = { ...initialState, programs: [p1], selectedProgramId: "1" };
-      const state = appReducer(base, { type: "PROGRAM_DELETED", id: "1" });
-      expect(state.selectedProgramId).toBe("");
+    it("clears selection when last engagement is deleted", () => {
+      const base: AppState = { ...initialState, engagements: [p1], selectedEngagementId: "1" };
+      const state = appReducer(base, { type: "ENGAGEMENT_DELETED", id: "1" });
+      expect(state.selectedEngagementId).toBe("");
     });
 
     it("navigates to dashboard after deletion", () => {
-      const base: AppState = { ...initialState, programs: [p1], activeSection: "findings" };
-      const state = appReducer(base, { type: "PROGRAM_DELETED", id: "1" });
+      const base: AppState = { ...initialState, engagements: [p1], activeSection: "findings" };
+      const state = appReducer(base, { type: "ENGAGEMENT_DELETED", id: "1" });
       expect(state.activeSection).toBe("dashboard");
     });
   });

@@ -65,7 +65,7 @@ def validate_safe_url(value: str | None) -> str:
     """Return a cleaned URL if it is a safe http(s) link, else raise ValueError.
 
     Use this for any field that is rendered as a clickable link (program_url,
-    Radar program URLs, future platform references). `strip_html` is *not* enough
+    Radar engagement URLs, future platform references). `strip_html` is *not* enough
     for URLs: it leaves `javascript:`, `data:`, and `vbscript:` schemes intact,
     which become live XSS the moment the value lands in an `href`. This allows
     only http/https, rejects every other scheme, and rejects control-character /

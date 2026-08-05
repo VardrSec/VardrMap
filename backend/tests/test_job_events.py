@@ -144,11 +144,11 @@ class TestGetJobEvents:
         assert res.status_code == 404
 
     def test_events_cascade_delete_with_job(self, client, program_id, auth_headers):
-        """Deleting the program (which cascades to jobs) also deletes job events."""
+        """Deleting the engagement (which cascades to jobs) also deletes job events."""
         jid = _make_job(client, program_id, auth_headers)
         _post_event(client, jid, auth_headers, kind="started")
-        # Delete the program → jobs → events cascade
+        # Delete the engagement → jobs → events cascade
         client.delete(f"/programs/{program_id}", headers=auth_headers)
-        # Job and its events are gone; confirm by trying a new program-less fetch
+        # Job and its events are gone; confirm by trying a new engagement-less fetch
         res = client.get(f"/jobs/{jid}/events", headers=auth_headers)
         assert res.status_code == 404

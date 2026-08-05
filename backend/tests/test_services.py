@@ -5,7 +5,7 @@ Coverage:
 - Bulk create — basic success, 201 status, upsert on (host, port, protocol)
 - Delete — success, wrong-user 404, nonexistent 404
 - BOLA: unauthorized 401, wrong-user 404 on all endpoints
-- Cascade: services are deleted when program is deleted
+- Cascade: services are deleted when engagement is deleted
 - Scope: runner-scoped key can POST, cannot GET or DELETE
 """
 
@@ -242,9 +242,9 @@ class TestServicesCascade:
         # Verify services exist
         assert client.get(f"/programs/{pid}/services", headers=auth_headers).json()["total"] == 1
 
-        # Delete program
+        # Delete engagement
         client.delete(f"/programs/{pid}", headers=auth_headers)
 
-        # Program gone — services endpoint returns 404
+        # Engagement gone — services endpoint returns 404
         res = client.get(f"/programs/{pid}/services", headers=auth_headers)
         assert res.status_code == 404

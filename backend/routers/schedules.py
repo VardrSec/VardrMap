@@ -13,7 +13,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from db import get_db
-from deps import get_current_user, get_program_or_404, log_action
+from deps import get_current_user, get_engagement_or_404, log_action
 from models import ScheduledScan
 from routers.jobs import _validate_job_config, _VALID_SOURCES, _VALID_TOOLS, SCHEDULE_INTERVALS as INTERVALS
 
@@ -47,19 +47,19 @@ def serialize_schedule(s: ScheduledScan) -> dict:
     }
 
 
-@router.get("/programs/{program_id}/schedules")
+@router.get("/engagements/{program_id}/schedules")
 def list_schedules(
     program_id: str,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    # Use program.owner_github_id so members see the owner's schedules too
-    program = get_program_or_404(program_id, current_user, db)
+    # Use engagement.owner_github_id so members see the owner's schedules too
+    engagement = get_engagement_or_404(program_id, current_user, db)
     rows = (
         db.query(ScheduledScan)
         .filter(
             ScheduledScan.program_id == program_id,
-            ScheduledScan.owner_github_id == program.owner_github_id,
+            ScheduledScan.owner_github_id == engagement.owner_github_id,
         )
         .order_by(ScheduledScan.created_at.desc())
         .all()
@@ -67,14 +67,14 @@ def list_schedules(
     return {"schedules": [serialize_schedule(s) for s in rows], "total": len(rows)}
 
 
-@router.post("/programs/{program_id}/schedules")
+@router.post("/engagements/{program_id}/schedules")
 def create_schedule(
     program_id: str,
     body: ScheduleCreate,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    program = get_program_or_404(program_id, current_user, db)
+    engagement = get_engagement_or_404(program_id, current_user, db)
     if body.tool_type not in _VALID_TOOLS:
         raise HTTPException(status_code=400, detail=f"tool_type must be one of {sorted(_VALID_TOOLS)}")
     if body.target_source not in _VALID_SOURCES:
@@ -86,7 +86,7 @@ def create_schedule(
 
     schedule = ScheduledScan(
         program_id=program_id,
-        owner_github_id=program.owner_github_id,
+        owner_github_id=engagement.owner_github_id,
         tool_type=body.tool_type,
         target_source=body.target_source,
         config=body.config or {},
@@ -102,7 +102,7 @@ def create_schedule(
     return serialize_schedule(schedule)
 
 
-@router.patch("/programs/{program_id}/schedules/{schedule_id}")
+@router.patch("/engagements/{program_id}/schedules/{schedule_id}")
 def update_schedule(
     program_id: str,
     schedule_id: str,
@@ -110,13 +110,13 @@ def update_schedule(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    program = get_program_or_404(program_id, current_user, db)
+    engagement = get_engagement_or_404(program_id, current_user, db)
     schedule = (
         db.query(ScheduledScan)
         .filter(
             ScheduledScan.id == schedule_id,
             ScheduledScan.program_id == program_id,
-            ScheduledScan.owner_github_id == program.owner_github_id,
+            ScheduledScan.owner_github_id == engagement.owner_github_id,
         )
         .first()
     )
@@ -136,20 +136,20 @@ def update_schedule(
     return serialize_schedule(schedule)
 
 
-@router.delete("/programs/{program_id}/schedules/{schedule_id}")
+@router.delete("/engagements/{program_id}/schedules/{schedule_id}")
 def delete_schedule(
     program_id: str,
     schedule_id: str,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    program = get_program_or_404(program_id, current_user, db)
+    engagement = get_engagement_or_404(program_id, current_user, db)
     schedule = (
         db.query(ScheduledScan)
         .filter(
             ScheduledScan.id == schedule_id,
             ScheduledScan.program_id == program_id,
-            ScheduledScan.owner_github_id == program.owner_github_id,
+            ScheduledScan.owner_github_id == engagement.owner_github_id,
         )
         .first()
     )

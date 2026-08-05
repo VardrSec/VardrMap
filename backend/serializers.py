@@ -1,7 +1,7 @@
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from models import Finding, ImportRecord, ManualTest, Program, ProgramMember, ReconItem, Report, ScanItem, ScopeItem, Service
+from models import Authorization, Client, Finding, ImportRecord, ManualTest, Engagement, EngagementMember, ReconItem, Report, ScanItem, ScopeItem, Service
 
 
 def serialize_scope_item(item: ScopeItem) -> dict:
@@ -105,7 +105,7 @@ _SEVERITIES = ["critical", "high", "medium", "low", "info"]
 _FINDING_STATUSES = ["new", "candidate", "triaged", "in_progress", "closed"]
 
 
-def serialize_program(p: Program, db: Session, github_id: str | None = None) -> dict:
+def serialize_engagement(p: Engagement, db: Session, github_id: str | None = None) -> dict:
     # Single query per table using COUNT aggregation — avoids N+1 on list endpoints.
     counts: dict[str, int] = {}
     for model, key in [
@@ -143,9 +143,9 @@ def serialize_program(p: Program, db: Session, github_id: str | None = None) -> 
 
     my_role = "owner"
     if github_id and github_id != p.owner_github_id:
-        member = db.query(ProgramMember).filter(
-            ProgramMember.program_id == p.id,
-            ProgramMember.member_github_id == github_id,
+        member = db.query(EngagementMember).filter(
+            EngagementMember.program_id == p.id,
+            EngagementMember.member_github_id == github_id,
         ).first()
         my_role = member.role if member else "member"
 
@@ -158,6 +158,11 @@ def serialize_program(p: Program, db: Session, github_id: str | None = None) -> 
         "scope_summary": p.scope_summary or "",
         "severity_guidance": p.severity_guidance or "",
         "safe_harbor_notes": p.safe_harbor_notes or "",
+        "client_id":         p.client_id or "",
+        "engagement_type":   p.engagement_type or "bug_bounty",
+        "engagement_status": p.engagement_status or "active",
+        "starts_at":         _iso(p.starts_at),
+        "ends_at":           _iso(p.ends_at),
         "scope": {
             "in":  [serialize_scope_item(i) for i in p.scope_items if i.scope_type == "in"],
             "out": [serialize_scope_item(i) for i in p.scope_items if i.scope_type == "out"],
@@ -172,4 +177,36 @@ def serialize_program(p: Program, db: Session, github_id: str | None = None) -> 
         "reports_count":        counts["reports"],
         "services_count":       counts["services"],
         "my_role":              my_role,
+    }
+
+
+def _iso(value) -> str:
+    """Render a datetime as ISO-8601, or empty string when unset."""
+    return value.isoformat() if value else ""
+
+
+def serialize_client(c: Client) -> dict:
+    return {
+        "id": c.id,
+        "name": c.name,
+        "contact_name": c.contact_name or "",
+        "contact_email": c.contact_email or "",
+        "notes": c.notes or "",
+        "created_at": _iso(c.created_at),
+    }
+
+
+def serialize_authorization(a: Authorization) -> dict:
+    return {
+        "id": a.id,
+        "program_id": a.program_id,
+        "permits": a.permits or "",
+        "authorized_by": a.authorized_by or "",
+        "authorized_at": _iso(a.authorized_at),
+        "reference": a.reference or "",
+        "window_start": _iso(a.window_start),
+        "window_end": _iso(a.window_end),
+        "status": a.status or "active",
+        "notes": a.notes or "",
+        "created_at": _iso(a.created_at),
     }

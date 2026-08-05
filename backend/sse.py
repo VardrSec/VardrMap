@@ -20,7 +20,7 @@ def unsubscribe(program_id: str, q: asyncio.Queue) -> None:
 
 
 def notify(program_id: str, event: dict) -> None:
-    """Push an event to all clients watching this program. Dead queues are pruned."""
+    """Push an event to all clients watching this engagement. Dead queues are pruned."""
     dead = []
     for q in list(_subscribers.get(program_id, [])):
         try:

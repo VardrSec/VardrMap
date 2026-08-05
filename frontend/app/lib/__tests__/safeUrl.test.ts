@@ -8,7 +8,7 @@ describe("safeMarkdownUrl", () => {
   });
 
   it("allows relative, anchor, and path URLs", () => {
-    expect(safeMarkdownUrl("/programs/1")).toBe("/programs/1");
+    expect(safeMarkdownUrl("/engagements/1")).toBe("/engagements/1");
     expect(safeMarkdownUrl("#section")).toBe("#section");
     expect(safeMarkdownUrl("foo/bar")).toBe("foo/bar");
     expect(safeMarkdownUrl("/a:b")).toBe("/a:b"); // colon in a path segment is relative

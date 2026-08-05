@@ -1,12 +1,12 @@
-import { AppSession, FindingFormState, ManualTestFormState, Program, ReportFormState, Section, SubmissionPrefill } from "../types";
+import { AppSession, FindingFormState, ManualTestFormState, Engagement, ReportFormState, Section, SubmissionPrefill } from "../types";
 
 export type ReviewTab = "recon" | "scans" | "manual" | "services";
 
 export type AppState = {
   session: AppSession | null;
   authLoading: boolean;
-  programs: Program[];
-  selectedProgramId: string;
+  engagements: Engagement[];
+  selectedEngagementId: string;
   activeSection: Section;
   message: string;
   findingPrefill: FindingFormState | null;
@@ -18,10 +18,10 @@ export type AppState = {
 
 export type AppAction =
   | { type: "AUTH_LOADED"; session: AppSession | null }
-  | { type: "PROGRAMS_LOADED"; programs: Program[] }
+  | { type: "ENGAGEMENTS_LOADED"; engagements: Engagement[] }
   | { type: "PROGRAM_SELECT"; id: string }
-  | { type: "PROGRAM_UPDATED"; program: Program }
-  | { type: "PROGRAM_DELETED"; id: string }
+  | { type: "ENGAGEMENT_UPDATED"; engagement: Engagement }
+  | { type: "ENGAGEMENT_DELETED"; id: string }
   | { type: "NAVIGATE"; section: Section }
   | { type: "NAVIGATE_TO_DASHBOARD"; tool?: string; tab?: "import" }
   | { type: "DASHBOARD_PREFILL_CONSUMED" }
@@ -39,8 +39,8 @@ export type AppAction =
 export const initialState: AppState = {
   session: null,
   authLoading: true,
-  programs: [],
-  selectedProgramId: "",
+  engagements: [],
+  selectedEngagementId: "",
   activeSection: "dashboard",
   message: "",
   findingPrefill: null,
@@ -55,32 +55,32 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     case "AUTH_LOADED":
       return { ...state, session: action.session, authLoading: false };
 
-    case "PROGRAMS_LOADED": {
-      const programs = action.programs;
-      const selectedProgramId =
-        state.selectedProgramId && programs.some((p) => p.id === state.selectedProgramId)
-          ? state.selectedProgramId
-          : programs[0]?.id ?? "";
-      return { ...state, programs, selectedProgramId };
+    case "ENGAGEMENTS_LOADED": {
+      const engagements = action.engagements;
+      const selectedEngagementId =
+        state.selectedEngagementId && engagements.some((p) => p.id === state.selectedEngagementId)
+          ? state.selectedEngagementId
+          : engagements[0]?.id ?? "";
+      return { ...state, engagements, selectedEngagementId };
     }
 
     case "PROGRAM_SELECT":
-      return { ...state, selectedProgramId: action.id };
+      return { ...state, selectedEngagementId: action.id };
 
-    case "PROGRAM_UPDATED":
+    case "ENGAGEMENT_UPDATED":
       return {
         ...state,
-        programs: state.programs.some((p) => p.id === action.program.id)
-          ? state.programs.map((p) => (p.id === action.program.id ? action.program : p))
-          : [...state.programs, action.program],
+        engagements: state.engagements.some((p) => p.id === action.engagement.id)
+          ? state.engagements.map((p) => (p.id === action.engagement.id ? action.engagement : p))
+          : [...state.engagements, action.engagement],
       };
 
-    case "PROGRAM_DELETED": {
-      const remaining = state.programs.filter((p) => p.id !== action.id);
+    case "ENGAGEMENT_DELETED": {
+      const remaining = state.engagements.filter((p) => p.id !== action.id);
       return {
         ...state,
-        programs: remaining,
-        selectedProgramId: remaining[0]?.id ?? "",
+        engagements: remaining,
+        selectedEngagementId: remaining[0]?.id ?? "",
         activeSection: "dashboard",
       };
     }

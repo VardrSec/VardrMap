@@ -6,12 +6,12 @@ from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPExcepti
 from sqlalchemy.orm import Session
 
 from db import get_db
-from deps import get_current_user, get_program_or_404, log_action
-from models import ImportRecord, Program, ReconItem, User
+from deps import get_current_user, get_engagement_or_404, log_action
+from models import ImportRecord, Engagement, ReconItem, User
 from notifications import send_webhook, severity_meets_threshold
 from parsers import normalize_to_list, parse_ffuf, parse_httpx, parse_json_or_jsonl, parse_nuclei
 from schemas import ToolType
-from serializers import serialize_import_record, serialize_program
+from serializers import serialize_import_record, serialize_engagement
 
 router = APIRouter()
 
@@ -32,7 +32,7 @@ def _dedup_recon(
     program_id: str,
     source: str,
 ) -> tuple[list[ReconItem], int]:
-    """Filter incoming recon items down to only those not yet seen for this program+source.
+    """Filter incoming recon items down to only those not yet seen for this engagement+source.
 
     Dedup key: url when present, else host. Sets first_seen_at on each new item.
     Returns (new_items, new_count).
@@ -145,7 +145,7 @@ def _upsert_recon_httpx(
     return new_count, updated_count
 
 
-@router.post("/programs/{program_id}/imports")
+@router.post("/engagements/{program_id}/imports")
 async def import_results(
     program_id: str,
     background_tasks: BackgroundTasks,
@@ -154,7 +154,7 @@ async def import_results(
     current_user: dict[str, str] = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    get_program_or_404(program_id, current_user, db)
+    get_engagement_or_404(program_id, current_user, db)
 
     ext = Path(file.filename or "").suffix.lower()
     if ext not in ALLOWED_EXTENSIONS:
@@ -204,14 +204,14 @@ async def import_results(
     log_action(db, current_user["github_id"], "create", "import", record.id, program_id)
     db.commit()
 
-    program = db.query(Program).filter(Program.id == program_id).first()
+    engagement = db.query(Engagement).filter(Engagement.id == program_id).first()
     user = db.query(User).filter(User.github_id == current_user["github_id"]).first()
 
     # Webhook: new recon assets discovered via httpx
     if tool_type == "httpx" and new_count and user and user.webhook_url:
         message = (
             f"🔍 VardrMap: {new_count} new host(s) discovered for "
-            f"{program.name if program else program_id}"
+            f"{engagement.name if engagement else program_id}"
         )
         background_tasks.add_task(send_webhook, user.webhook_url, message)
 
@@ -223,7 +223,7 @@ async def import_results(
             top = max(notable, key=lambda s: ["info", "low", "medium", "high", "critical"].index(s.severity))
             message = (
                 f"🚨 VardrMap: {len(notable)} {threshold}+ finding(s) imported for "
-                f"{program.name if program else program_id} — top: [{top.severity}] {top.title or top.template_id}"
+                f"{engagement.name if engagement else program_id} — top: [{top.severity}] {top.title or top.template_id}"
             )
             background_tasks.add_task(send_webhook, user.webhook_url, message)
 
@@ -233,5 +233,5 @@ async def import_results(
         "new_count":      new_count,
         "updated_count":  updated_count,
         "import_record":  serialize_import_record(record),
-        "program":        serialize_program(program, db),
+        "engagement":        serialize_engagement(engagement, db),
     }
