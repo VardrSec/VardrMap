@@ -149,6 +149,27 @@ def test_authorization_from_another_program_is_not_reachable(client, auth_header
     client.delete(f"/programs/{other}", headers=auth_headers)
 
 
+def test_patch_can_clear_window_end(client, auth_headers, program_id):
+    """Setting window_end to null via PATCH should clear the date, making the auth open-ended."""
+    created = _create(
+        client, auth_headers, program_id,
+        window_start=_iso(NOW - timedelta(days=1)),
+        window_end=_iso(NOW + timedelta(days=7)),
+    ).json()
+    assert created["window_end"] != ""
+
+    patched = client.patch(
+        f"/programs/{program_id}/authorizations/{created['id']}",
+        json={"window_end": None},
+        headers=auth_headers,
+    )
+    assert patched.status_code == 200
+    assert patched.json()["window_end"] == ""
+
+    active = client.get(f"/programs/{program_id}/authorization/active", headers=auth_headers).json()
+    assert active is not None, "Auth should be active now that window_end is cleared"
+
+
 def test_missing_authorization_returns_404(client, auth_headers, program_id):
     res = client.patch(
         f"/programs/{program_id}/authorizations/nope",

@@ -31,11 +31,9 @@ _DATE_FIELDS = ("authorized_at", "window_start", "window_end")
 
 
 def _get_authorization_or_404(
-    program_id: str, authorization_id: str, current_user: dict[str, str], db: Session
+    program_id: str, authorization_id: str, db: Session
 ) -> Authorization:
-    # Engagement access is checked first, so a bad engagement id fails before the
-    # authorisation is ever looked up.
-    get_engagement_or_404(program_id, current_user, db)
+    """Fetch auth by id scoped to program_id. Caller must have already verified engagement access."""
     auth = db.query(Authorization).filter(
         Authorization.id == authorization_id,
         Authorization.program_id == program_id,
@@ -98,13 +96,14 @@ def update_authorization(
 ):
     engagement = get_engagement_or_404(program_id, current_user, db)
     require_member_write(engagement, current_user, db)
-    auth = _get_authorization_or_404(program_id, authorization_id, current_user, db)
+    auth = _get_authorization_or_404(program_id, authorization_id, db)
 
     for field, value in payload.model_dump(exclude_unset=True).items():
-        if value is None:
-            continue
         if field in _DATE_FIELDS:
+            # None is valid here — it clears the window bound or the authorized_at timestamp.
             setattr(auth, field, parse_iso_datetime(value, field))
+        elif value is None:
+            continue
         else:
             setattr(auth, field, value)
 

@@ -53,7 +53,7 @@ def get_programs(
     github_id = current_user["github_id"]
     owned = db.query(Engagement).filter(Engagement.owner_github_id == github_id).all()
 
-    # Also include programs where this user is an invited member
+    # Also include engagements where this user is an invited member
     member_engagement_ids = [
         row[0]
         for row in db.query(EngagementMember.program_id).filter(

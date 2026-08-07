@@ -37,7 +37,7 @@ def upgrade() -> None:
         sa.Column("contact_name", sa.String(length=200), server_default=""),
         sa.Column("contact_email", sa.String(length=200), server_default=""),
         sa.Column("notes", sa.Text(), server_default=""),
-        sa.Column("created_at", sa.DateTime(), nullable=True),
+        sa.Column("created_at", sa.DateTime(), nullable=False, server_default=sa.text("CURRENT_TIMESTAMP")),
     )
     op.create_index("ix_clients_owner_github_id", "clients", ["owner_github_id"])
 
@@ -54,7 +54,7 @@ def upgrade() -> None:
         sa.Column("window_end", sa.DateTime(), nullable=True),
         sa.Column("status", sa.String(length=20), server_default="active"),
         sa.Column("notes", sa.Text(), server_default=""),
-        sa.Column("created_at", sa.DateTime(), nullable=True),
+        sa.Column("created_at", sa.DateTime(), nullable=False, server_default=sa.text("CURRENT_TIMESTAMP")),
     )
     op.create_index("ix_authorizations_program_id", "authorizations", ["program_id"])
     op.create_index("ix_authorizations_owner_github_id", "authorizations", ["owner_github_id"])
@@ -70,8 +70,29 @@ def upgrade() -> None:
     op.create_index("ix_programs_client_id", "programs", ["client_id"])
     op.create_foreign_key("fk_programs_client_id", "programs", "clients", ["client_id"], ["id"])
 
+    # CHECK constraints on the two new enum-valued columns.
+    # Skipped on SQLite (used in tests) since ALTER TABLE ADD CONSTRAINT is not
+    # supported there; Pydantic validates the same values at the API boundary.
+    bind = op.get_bind()
+    if bind.dialect.name == "postgresql":
+        op.create_check_constraint(
+            "ck_programs_engagement_type",
+            "programs",
+            "engagement_type IN ('bug_bounty', 'pentest', 'red_team', 'internal')",
+        )
+        op.create_check_constraint(
+            "ck_programs_engagement_status",
+            "programs",
+            "engagement_status IN ('planned', 'active', 'reporting', 'closed')",
+        )
+
 
 def downgrade() -> None:
+    bind = op.get_bind()
+    if bind.dialect.name == "postgresql":
+        op.drop_constraint("ck_programs_engagement_status", "programs", type_="check")
+        op.drop_constraint("ck_programs_engagement_type", "programs", type_="check")
+
     op.drop_constraint("fk_programs_client_id", "programs", type_="foreignkey")
     op.drop_index("ix_programs_client_id", table_name="programs")
     op.drop_column("programs", "ends_at")

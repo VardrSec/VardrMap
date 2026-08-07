@@ -1,11 +1,13 @@
 # VardrMap — Claude Instructions
 
-Personal bug bounty workflow tool. FastAPI backend (Railway) + Next.js 16 frontend (Vercel) + PostgreSQL (Railway). GitHub OAuth login; frontend mints short-lived HS256 JWTs for backend requests.
+Professional security testing platform for penetration testing and bug bounty work. FastAPI backend (Railway) + Next.js 16 frontend (Vercel) + PostgreSQL (Railway). GitHub OAuth login; frontend mints short-lived HS256 JWTs for backend requests.
+
+VardrMap is transitioning from a bug bounty dashboard to a full pentest engagement platform. Bug bounty work is now one `engagement_type` (`bug_bounty`) alongside `pentest`, `red_team`, and `internal`. New features should be designed with all engagement types in mind, not just bounty hunting.
 
 ## Where things live
 - `backend/` — FastAPI app, SQLAlchemy models, Alembic migrations, tests
 - `backend/routers/` — one file per resource (engagements, findings, reports, etc.)
-- `backend/tests/` — pytest suite (431 tests, uses SQLite)
+- `backend/tests/` — pytest suite (486 tests, uses SQLite)
 - `frontend/app/` — Next.js App Router pages and components
 - `frontend/app/components/` — one component per section (FindingsSection, ReportsSection, JobsSection, etc.)
 - `frontend/app/context/` — AppContext.tsx + appReducer.ts (global state)
@@ -62,5 +64,13 @@ Note: `create_all` runs only in dev/test. Production: Railway runs `bash start.s
 
 Frontend: `cd frontend && npm run dev`
 
+## Engagement types and statuses
+`engagement_type`: `bug_bounty` | `pentest` | `red_team` | `internal`
+`engagement_status`: `planned` | `active` | `reporting` | `closed`
+
+New engagements default to `bug_bounty` / `active` so existing API callers are unaffected.
+Authorization records (`routers/authorizations.py`) track the permission-to-test window — required for pentest/red_team; optional for bug bounty.
+Clients (`routers/clients.py`) track the organisation being tested — required for pentest/internal; not applicable for bug bounty.
+
 ## Roadmap
-Remaining: RBAC / multi-user support
+Remaining: DB table rename (`programs` → `engagements`, retire legacy path middleware), RBAC / multi-user support, client-facing deliverable generation

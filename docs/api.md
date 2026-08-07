@@ -1373,6 +1373,11 @@ Update an authorisation, most often to set `status` to `expired` or `revoked`.
 
 `status` values: `active`, `expired`, `revoked`.
 
+Fields are updated only when present in the request body. For the three date
+fields (`authorized_at`, `window_start`, `window_end`), sending `null`
+explicitly clears that date (e.g. to make a fixed-window authorisation
+open-ended); omitting the field leaves it unchanged.
+
 **Response:** authorization object
 
 ### `GET /engagements/{program_id}/authorization/active`

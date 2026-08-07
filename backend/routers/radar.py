@@ -1,4 +1,4 @@
-"""Target Radar — fetches public bug bounty engagement listings and surfaces new ones.
+"""Target Radar — fetches public bug bounty program listings and surfaces new ones.
 
 Supported sources (all require no auth):
   - bugcrowd: https://bugcrowd.com/programs.json
