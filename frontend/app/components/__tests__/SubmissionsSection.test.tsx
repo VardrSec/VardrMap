@@ -15,6 +15,7 @@ const PROGRAM: Program = {
   scope: { in: [], out: [] }, imports: [],
   recon_count: 0, scans_count: 0, manual_tests_count: 0,
   findings_count: 0, findings_by_severity: {}, findings_by_status: {}, reports_count: 0,
+  services_count: 0,
 };
 
 const SUBMISSION = {
