@@ -18,6 +18,7 @@ const makeEngagement = (id: string, name = `Engagement ${id}`): Engagement => ({
   findings_by_severity: {},
   findings_by_status: {},
   reports_count: 0,
+  services_count: 0,
 });
 
 const p1 = makeEngagement("1");
@@ -26,7 +27,10 @@ const p2 = makeEngagement("2");
 describe("appReducer", () => {
   describe("AUTH_LOADED", () => {
     it("stores session and clears authLoading", () => {
-      const session = { github_id: "123", username: "user", jwt: "tok" };
+      const session = {
+        user: { githubId: "123", username: "user" },
+        backendToken: "tok",
+      };
       const state = appReducer(initialState, { type: "AUTH_LOADED", session });
       expect(state.session).toBe(session);
       expect(state.authLoading).toBe(false);

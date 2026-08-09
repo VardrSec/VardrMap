@@ -77,6 +77,12 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      # `next build` only type-checks what the app graph reaches, and ts-jest
+      # transpiles without checking, so nothing here ever type-checked the test
+      # files — three fixtures had drifted from their types since v0.14.
+      - name: Typecheck
+        run: npm run typecheck
+
       - name: Test
         run: npm test
 
