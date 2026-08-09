@@ -139,8 +139,7 @@ def test_stats_endpoint_keys(client, auth_headers, program_id):
     body = res.json()
     expected_keys = {
         "recon_count", "scans_count", "findings_count", "manual_tests_count",
-        "reports_count", "submissions_count",
-        "findings_by_severity", "submissions_by_status",
+        "reports_count", "findings_by_severity",
     }
     missing = expected_keys - body.keys()
     assert not missing, (

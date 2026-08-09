@@ -86,7 +86,6 @@ class Engagement(Base):
     import_records = relationship("ImportRecord", back_populates="engagement", cascade="all, delete-orphan")
     scan_jobs   = relationship("ScanJob",    back_populates="engagement", cascade="all, delete-orphan")
     services    = relationship("Service",    back_populates="engagement", cascade="all, delete-orphan")
-    submissions = relationship("Submission", back_populates="engagement", cascade="all, delete-orphan")
     scheduled_scans = relationship("ScheduledScan", back_populates="engagement", cascade="all, delete-orphan")
     members = relationship("EngagementMember", back_populates="engagement", cascade="all, delete-orphan")
     scan_profiles = relationship("ScanProfile", back_populates="engagement", cascade="all, delete-orphan")
@@ -390,29 +389,6 @@ class ScheduledScan(Base):
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
     engagement = relationship("Engagement", back_populates="scheduled_scans")
-
-
-class Submission(Base):
-    __tablename__ = "submissions"
-
-    id = Column(String, primary_key=True, default=new_uuid)
-    program_id = Column(String, ForeignKey("programs.id", ondelete="CASCADE"), nullable=False, index=True)
-    owner_github_id = Column(String, nullable=False, index=True)
-    # Soft references — no FK constraints so records survive finding/report deletion
-    finding_id = Column(String, default="")
-    report_id = Column(String, default="")
-    platform = Column(String(50), default="")            # "HackerOne" | "Bugcrowd" | etc.
-    platform_reference = Column(String(200), default="") # report ID / slug on the platform
-    title = Column(String(200), default="")
-    status = Column(String(30), default="submitted")     # submitted | triaged | accepted | duplicate | na | paid | rejected
-    payout_usd = Column(Float, nullable=True)
-    severity = Column(String(20), default="")            # copied from finding for quick display
-    submitted_at = Column(DateTime, nullable=True, default=lambda: datetime.now(timezone.utc))
-    resolved_at = Column(DateTime, nullable=True)
-    notes = Column(Text, default="")
-    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
-
-    engagement = relationship("Engagement", back_populates="submissions")
 
 
 class EngagementMember(Base):

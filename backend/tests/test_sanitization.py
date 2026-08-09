@@ -91,12 +91,6 @@ def test_settings_rejects_overlong_webhook_url(client, auth_headers):
     assert res.status_code == 422
 
 
-def test_submission_rejects_xss_platform_reference(client, auth_headers, program_id):
-    res = client.post(f"/programs/{program_id}/submissions",
-                      json={"title": "ref test", "platform_reference": "javascript:alert(1)"}, headers=auth_headers)
-    assert res.status_code == 422
-
-
 def test_parsers_strip_html_from_imported_tool_output():
     from parsers import parse_httpx, parse_nuclei
     recon = parse_httpx(

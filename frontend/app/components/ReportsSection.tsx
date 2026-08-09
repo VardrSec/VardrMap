@@ -55,7 +55,7 @@ function ReportFields({ value, onChange }: { value: ReportFormState; onChange: (
 
 export default function ReportsSection({ engagement }: { engagement: Engagement }) {
   const {
-    authFetch, setMessage, refreshSelectedEngagement, promoteToSubmission,
+    authFetch, setMessage, refreshSelectedEngagement,
     state: { reportPrefill }, dispatch,
   } = useAppContext();
   const [reports,     setReports]     = useState<Report[]>([]);
@@ -234,7 +234,7 @@ export default function ReportsSection({ engagement }: { engagement: Engagement 
 
   return (
     <div className="space-y-7">
-      <SectionHeader title="Reports" description="Draft submission-ready reports from validated findings." />
+      <SectionHeader title="Reports" description="Draft client-ready reports from validated findings." />
       <div className="grid gap-5 xl:grid-cols-2">
         {!isViewer && (
           <Panel title="Draft Report">
@@ -306,11 +306,6 @@ export default function ReportsSection({ engagement }: { engagement: Engagement 
                     </div>
                   </div>
                   <div className="flex gap-2">
-                    <button onClick={() => promoteToSubmission(report)}
-                      className="rounded-md border border-[#f59e0b]/40 px-2.5 py-1 text-xs text-[#f59e0b] transition hover:border-[#f59e0b] hover:bg-[#f59e0b]/10"
-                      title="Log as a platform submission">
-                      Submit →
-                    </button>
                     {!isViewer && (
                       <button onClick={() => startEdit(report)} className="rounded-md border border-[#2e2e2e] px-2.5 py-1 text-xs text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#94a3b8]">
                         Edit

@@ -10,7 +10,6 @@ import OverviewSection   from "./components/OverviewSection";
 import ReviewSection     from "./components/ReviewSection";
 import FindingsSection   from "./components/FindingsSection";
 import ReportsSection      from "./components/ReportsSection";
-import SubmissionsSection  from "./components/SubmissionsSection";
 import SettingsSection     from "./components/SettingsSection";
 
 // ---------------------------------------------------------------------------
@@ -24,7 +23,6 @@ const NAV_ITEMS: { section: Section; label: string; icon: string }[] = [
   { section: "findings",  label: "Findings",  icon: "⚑" },
   { section: "overview",  label: "Overview",  icon: "⬡" },
   { section: "reports",      label: "Reports",      icon: "◧" },
-  { section: "submissions",  label: "Submissions",  icon: "⊞" },
   { section: "settings",     label: "Settings",     icon: "◆" },
 ];
 
@@ -199,7 +197,6 @@ function AppShell() {
               {activeSection === "findings"  && <FindingsSection  engagement={selectedEngagement} />}
               {activeSection === "overview"  && <OverviewSection  engagement={selectedEngagement} />}
               {activeSection === "reports"      && <ReportsSection      engagement={selectedEngagement} />}
-              {activeSection === "submissions" && <SubmissionsSection  engagement={selectedEngagement} />}
             </>
           )}
         </section>

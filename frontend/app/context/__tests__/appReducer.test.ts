@@ -233,28 +233,6 @@ describe("appReducer", () => {
     });
   });
 
-  describe("PROMOTE_TO_SUBMISSION / SUBMISSION_PREFILL_CONSUMED", () => {
-    const prefill = { title: "XSS report", report_id: "r1", finding_id: "f1" };
-
-    it("navigates to submissions and stores prefill", () => {
-      const state = appReducer(initialState, { type: "PROMOTE_TO_SUBMISSION", prefill });
-      expect(state.activeSection).toBe("submissions");
-      expect(state.submissionPrefill).toEqual(prefill);
-    });
-
-    it("clears submissionPrefill on CONSUMED", () => {
-      const base: AppState = { ...initialState, submissionPrefill: prefill };
-      const state = appReducer(base, { type: "SUBMISSION_PREFILL_CONSUMED" });
-      expect(state.submissionPrefill).toBeNull();
-    });
-
-    it("does not clear other state on CONSUMED", () => {
-      const base: AppState = { ...initialState, submissionPrefill: prefill, message: "hi" };
-      const state = appReducer(base, { type: "SUBMISSION_PREFILL_CONSUMED" });
-      expect(state.message).toBe("hi");
-    });
-  });
-
   it("returns same state for unknown action type", () => {
     // @ts-expect-error testing unknown action
     const state = appReducer(initialState, { type: "UNKNOWN" });

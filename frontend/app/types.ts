@@ -75,7 +75,6 @@ export type RadarProgram = {
   max_payout: number | null; is_new: boolean;
   discovered_at: string | null; last_fetched_at: string | null;
 };
-export type SubmissionPrefill = { title: string; report_id: string; finding_id: string };
 export type ManualTestFormState = {
   title: string; hypothesis: string; payload: string; evidence: string; status: string;
 };
@@ -154,15 +153,7 @@ export type ScheduledScan = {
   last_run_at: string | null; next_run_at: string | null; created_at: string | null;
 };
 export type UserSettings = { webhook_url: string; notify_min_severity: string };
-export type Submission = {
-  id: string; program_id: string;
-  finding_id: string; report_id: string;
-  platform: string; platform_reference: string;
-  title: string; status: string; severity: string;
-  payout_usd: number | null; notes: string;
-  submitted_at: string | null; resolved_at: string | null; created_at: string | null;
-};
-export type Section = "dashboard" | "scope" | "overview" | "review" | "findings" | "reports" | "submissions" | "settings";
+export type Section = "dashboard" | "scope" | "overview" | "review" | "findings" | "reports" | "settings";
 export type AppSession = {
   user?: { name?: string | null; email?: string | null; image?: string | null; githubId?: string; username?: string };
   backendToken?: string;

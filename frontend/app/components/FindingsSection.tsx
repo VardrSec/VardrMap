@@ -28,14 +28,10 @@ function FindingForm({ value, onChange }: { value: FindingFormState; onChange: (
 
 export default function FindingsSection({ engagement }: { engagement: Engagement }) {
   const {
-    authFetch, setMessage, refreshSelectedEngagement, promoteToReport, navigate,
+    authFetch, setMessage, refreshSelectedEngagement, promoteToReport,
     state: { findingPrefill }, dispatch,
   } = useAppContext();
 
-  function logSubmission(finding: Finding) {
-    dispatch({ type: "PROMOTE_TO_SUBMISSION", prefill: { title: finding.title, report_id: "", finding_id: finding.id } });
-    navigate("submissions");
-  }
   const [findings,       setFindings]       = useState<Finding[]>([]);
   const [total,          setTotal]          = useState(0);
   const [offset,         setOffset]         = useState(0);
@@ -253,9 +249,6 @@ export default function FindingsSection({ engagement }: { engagement: Engagement
                             {suggesting === finding.id ? "…" : "AI Suggest"}
                           </button>
                         )}
-                        <button onClick={() => logSubmission(finding)} className="rounded-md border border-[#2e2e2e] px-2.5 py-1 text-xs text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#a6e3a1]">
-                          Log Submission →
-                        </button>
                         <button onClick={() => promoteToReport(finding)} className="rounded-md border border-[#2e2e2e] px-2.5 py-1 text-xs text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#94a3b8]">
                           Draft Report →
                         </button>
