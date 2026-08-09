@@ -8,13 +8,10 @@ import JobsSection from "./JobsSection";
 
 type RunTab = "jobs" | "import";
 
+// Only the fields this component renders. The endpoint returns more.
 type Stats = {
-  recon_count: number;
-  scans_count: number;
   findings_count: number;
   findings_by_severity: Record<string, number>;
-  submissions_count: number;
-  submissions_by_status: Record<string, number>;
 };
 
 export default function DashboardSection({ engagement }: { engagement: Engagement }) {
@@ -104,26 +101,6 @@ export default function DashboardSection({ engagement }: { engagement: Engagemen
           ))}
         </div>
       </div>
-
-      {/* Engagement stats */}
-      {stats && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {[
-            { label: "Recon assets",  value: stats.recon_count,                                                               section: "review"      as const },
-            { label: "Findings",      value: stats.findings_count,                                                            section: "findings"    as const },
-            { label: "Accepted",      value: (stats.submissions_by_status["accepted"] ?? 0) + (stats.submissions_by_status["paid"] ?? 0), section: "submissions" as const },
-            { label: "Paid",          value: stats.submissions_by_status["paid"] ?? 0,                                        section: "submissions" as const },
-          ].map(({ label, value, section }) => (
-            <button
-              key={label}
-              onClick={() => navigate(section)}
-              className="group flex flex-col items-start rounded-xl border border-[#2e2e2e] bg-[#161616] px-4 py-3 text-left transition hover:border-[#3a3a3a]">
-              <span className="font-mono text-2xl font-bold text-[#f1f5f9]">{value}</span>
-              <span className="mt-0.5 text-[10px] font-semibold uppercase tracking-widest text-[#52525b] group-hover:text-[#6b7280]">{label}</span>
-            </button>
-          ))}
-        </div>
-      )}
 
       {stats && stats.findings_count > 0 && (
         <div className="flex flex-wrap gap-2">
