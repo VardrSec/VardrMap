@@ -94,7 +94,7 @@ programs
   scope_summary, severity_guidance, safe_harbor_notes
   created_at
   → scope_items, findings, reports, manual_tests,
-    recon_items, scan_items, import_records, scan_jobs, services, submissions (all cascade delete)
+    recon_items, scan_items, import_records, scan_jobs, services (all cascade delete)
 
 scope_items
   id (PK), program_id (FK), scope_type ("in"|"out")
@@ -185,21 +185,6 @@ radar_programs
   last_fetched_at (UTC datetime — updated on every POST /radar/refresh)
   Indexes: owner_github_id; (platform, platform_id)
 
-submissions
-  id (PK)
-  program_id (FK → programs.id, CASCADE DELETE, indexed)
-  owner_github_id (indexed)
-  finding_id, report_id (soft refs — no FK constraints)
-  platform (VARCHAR 50 — "HackerOne", "Bugcrowd", etc.)
-  platform_reference (VARCHAR 200 — report ID or URL)
-  title (VARCHAR 200)
-  status ("submitted"|"triaged"|"accepted"|"duplicate"|"na"|"paid"|"rejected")
-  payout_usd (nullable FLOAT)
-  severity (VARCHAR 20 — copied from finding for display)
-  submitted_at (nullable datetime), resolved_at (nullable datetime)
-  notes (TEXT)
-  created_at
-
 runner_heartbeats
   id (PK)
   owner_github_id (indexed)
@@ -262,12 +247,11 @@ audit_logs
 - `api_keys.key_hash` stores the SHA-256 hex digest of the plaintext token. The plaintext is never stored. `last_used_at` is stamped on every successful API key authentication. `scope` restricts runner-scoped keys to jobs/imports/heartbeat endpoints — all other endpoints return `403` for runner keys.
 - `recon_items.first_seen_at` is set once when an item is first imported and never overwritten. Dedup key is `(program_id, source, url)`: re-importing the same URL produces `new_count: 0` with no duplicate row.
 - `program_members` grant collaborators access to a program's resources, with two roles: **`member`** (read + write) and **`viewer`** (read-only). Only the owner can manage members and delete/PATCH the program itself. `GET /programs` returns both owned programs and programs where the user is a member.
-- **Viewer enforcement:** every program-scoped write endpoint (create/update/delete of findings, reports, manual tests, scans, submissions, schedules, scan profiles, services, scope, imports, jobs, pipelines) calls `require_member_write` after `get_program_or_404`, which raises `403` for a viewer-role member. The guard fires before any resource lookup, so a viewer gets `403` even for a non-existent target id. Owners always pass; runner-scoped API keys resolve to the owner and therefore also pass (so uploads/heartbeats are unaffected). AI actions (`findings/{id}/suggest`, `scans/triage`) are gated too, since they incur cost. Read (`GET`) endpoints remain open to viewers.
+- **Viewer enforcement:** every program-scoped write endpoint (create/update/delete of findings, reports, manual tests, scans, schedules, scan profiles, services, scope, imports, jobs, pipelines) calls `require_member_write` after `get_program_or_404`, which raises `403` for a viewer-role member. The guard fires before any resource lookup, so a viewer gets `403` even for a non-existent target id. Owners always pass; runner-scoped API keys resolve to the owner and therefore also pass (so uploads/heartbeats are unaffected). AI actions (`findings/{id}/suggest`, `scans/triage`) are gated too, since they incur cost. Read (`GET`) endpoints remain open to viewers.
 - `scan_jobs.config` is a JSON column with optional tool options. VardrRunner reads this dict when executing the job. Unknown config keys are rejected at creation time.
 - `scan_jobs` are scoped to the owning user via `owner_github_id` — a user can only see/update their own jobs. Claiming a job uses `POST /jobs/{id}/claim` which atomically sets `status = "running"` only if currently `"pending"`, returning 409 otherwise.
 - `services` rows are bulk-upserted on `(host, port, protocol)` — repeated nmap scans update metadata rather than creating duplicates. `last_scanned_at` is stamped on both insert and update so freshness is always visible.
 - `radar_programs` are upserted per user on `(owner_github_id, platform, platform_id)`. New programs land with `is_new = "1"` so the Overview Radar widget can badge them; `GET /radar` marks all returned rows as seen.
-- `submissions` track the full lifecycle of a bug bounty submission. `finding_id` and `report_id` are soft references — submissions survive finding/report deletion. Transitioning `status` to a terminal state (`accepted`, `duplicate`, `na`, `paid`, `rejected`) via `PATCH` auto-stamps `resolved_at` if it was not already set.
 - Deleting a `scan_job` (via `DELETE /jobs/{id}`) also deletes all its `job_events` via CASCADE.
 - `runner_heartbeats` is upserted per `(owner_github_id, hostname)` so multiple machines (laptop + VPS) report independently. VardrRunner calls `POST /runner/heartbeat` at the start of `jobs run`, every 60 s inside the daemon, and via `vardrrunner heartbeat`. The frontend polls `GET /runner/status` which returns all runners and derives per-runner `online: true` if `last_seen` is within 5 minutes. Rate-limited to 60/min.
 - `scheduled_scans` have no backend cron. Due schedules (`enabled` and `next_run_at <= now`) are materialized into pending `scan_jobs` inside `GET /jobs/pending` — the runner's poll drives the clock. `next_run_at` advances from *now* rather than the previous `next_run_at`, so a runner that was offline for a week creates one catch-up job, not seven.
@@ -316,10 +300,9 @@ The sidebar exposes **8 top-level sections** mapped to the bug bounty workflow:
 | Review | `"review"` | Recon / Scans / Manual / Services tab switcher |
 | Findings | `"findings"` | Finding log with severity, status, promote-to-report flow |
 | Reports | `"reports"` | Report drafting and PDF export |
-| Submissions | `"submissions"` | Bug bounty submission tracker with payout analytics |
 | Settings | `"settings"` | API key management and webhook notifications |
 
-`DashboardSection` and `ReviewSection` are thin tab containers. They render child section components (`JobsSection`, `ReconSection`, etc.) with `hideHeader={true}` to suppress duplicate section headings. The `Section` type union in `frontend/app/types.ts` has exactly these 8 values.
+`DashboardSection` and `ReviewSection` are thin tab containers. They render child section components (`JobsSection`, `ReconSection`, etc.) with `hideHeader={true}` to suppress duplicate section headings. The `Section` type union in `frontend/app/types.ts` has exactly these 7 values.
 
 **Deep-link navigation** — the Overview quick-action buttons dispatch `NAVIGATE_TO_DASHBOARD` which sets `state.dashboardPrefill = { tool?, tab? }` and navigates to `"dashboard"`. `DashboardSection` consumes the prefill via `useEffect`, increments `prefillEpoch` (so `Composer` remounts even when the same tool is clicked twice), sets the active tab and forwards `defaultTool` to `JobsSection` → `Composer`, then dispatches `DASHBOARD_PREFILL_CONSUMED`.
 

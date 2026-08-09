@@ -11,7 +11,7 @@ from deps import (
     require_engagement_owner,
     resolve_owned_client_id,
 )
-from models import Finding, ManualTest, Engagement, EngagementMember, ReconItem, Report, ScanItem, Submission, User
+from models import Finding, ManualTest, Engagement, EngagementMember, ReconItem, Report, ScanItem, User
 from schemas import EngagementCreate, EngagementUpdate
 from serializers import serialize_engagement
 
@@ -171,22 +171,13 @@ def get_engagement_stats(
         .all()
     )
 
-    sub_status_rows = (
-        db.query(Submission.status, func.count(Submission.id))
-        .filter(Submission.program_id == program_id)
-        .group_by(Submission.status)
-        .all()
-    )
-
     return {
         "recon_count":          count(ReconItem),
         "scans_count":          count(ScanItem),
         "findings_count":       count(Finding),
         "manual_tests_count":   count(ManualTest),
         "reports_count":        count(Report),
-        "submissions_count":    count(Submission),
         "findings_by_severity": {sev: cnt for sev, cnt in sev_rows},
-        "submissions_by_status": {status: cnt for status, cnt in sub_status_rows},
     }
 
 

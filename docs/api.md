@@ -160,9 +160,7 @@ Lightweight aggregate stats for a engagement — used by the Dashboard stat card
   "findings_count": 7,
   "manual_tests_count": 3,
   "reports_count": 3,
-  "submissions_count": 5,
-  "findings_by_severity": { "critical": 1, "high": 2, "medium": 3, "low": 1, "info": 0 },
-  "submissions_by_status": { "submitted": 2, "accepted": 2, "paid": 1 }
+  "findings_by_severity": { "critical": 1, "high": 2, "medium": 3, "low": 1, "info": 0 }
 }
 ```
 
@@ -1006,75 +1004,6 @@ Fetch program listings from platform APIs and upsert into the database. Programs
 - `400` — unknown platform name
 - `502` — upstream platform API request failed
 
-
-## Submissions
-
-Tracks the full lifecycle of a bug bounty submission from filed to resolved. Statuses: `submitted` → `triaged` → `accepted` | `duplicate` | `na` | `paid` | `rejected`.
-
-**Submission object shape**
-```json
-{
-  "id":                 "uuid",
-  "program_id":         "uuid",
-  "finding_id":         "uuid or empty string",
-  "report_id":          "uuid or empty string",
-  "platform":           "HackerOne",
-  "platform_reference": "report-12345",
-  "title":              "XSS in search parameter",
-  "status":             "submitted",
-  "payout_usd":         500.0,
-  "severity":           "high",
-  "notes":              "Triaged within 2 hours.",
-  "submitted_at":       "2026-06-12T10:00:00+00:00",
-  "resolved_at":        null,
-  "created_at":         "2026-06-12T10:00:00+00:00"
-}
-```
-
-### `GET /engagements/{program_id}/submissions`
-List all submissions for a engagement, ordered newest-first.
-
-**Query parameters**
-| Parameter | Default | Description |
-|---|---|---|
-| `status` | (none) | Exact match filter: `submitted`, `triaged`, `accepted`, `duplicate`, `na`, `paid`, `rejected` |
-| `platform` | (none) | Case-insensitive `ILIKE` filter on the platform name |
-
-**Response**
-```json
-{ "submissions": [ <submission_object>, ... ], "total": 5 }
-```
-
-### `POST /engagements/{program_id}/submissions`
-Log a new submission.
-
-**Request body**
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `title` | string | yes | Short report title |
-| `platform` | string | no | Platform name (e.g. `HackerOne`, `Bugcrowd`) |
-| `platform_reference` | string | no | Report ID or URL on the platform |
-| `finding_id` | string | no | Soft reference to a finding |
-| `report_id` | string | no | Soft reference to a report |
-| `severity` | string | no | `critical`, `high`, `medium`, `low`, or `info` |
-| `status` | string | no | Initial status (default: `submitted`) |
-| `payout_usd` | number | no | Payout amount in USD |
-| `notes` | string | no | Free-form notes |
-
-### `PATCH /engagements/{program_id}/submissions/{submission_id}`
-Update a submission. Partial update — only provided fields are changed. When `status` transitions to a terminal state (`accepted`, `duplicate`, `na`, `paid`, `rejected`) and `resolved_at` is not set, it is auto-stamped to the current UTC time.
-
-**Errors**
-- `404` — submission not found or belongs to another user
-- `400` — malformed `resolved_at` datetime
-
-### `DELETE /engagements/{program_id}/submissions/{submission_id}`
-Permanently delete a submission.
-
-**Errors**
-- `404` — submission not found or belongs to another user
-
----
 
 ## Scan Jobs (updated)
 

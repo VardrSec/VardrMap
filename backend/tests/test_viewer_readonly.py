@@ -31,7 +31,7 @@ def viewer_program(client, auth_headers):
 
 @pytest.mark.parametrize("path", [
     "", "/findings", "/scans", "/recon", "/manual-tests", "/reports",
-    "/submissions", "/schedules", "/scan-profiles", "/services", "/jobs", "/members",
+    "/schedules", "/scan-profiles", "/services", "/jobs", "/members",
 ])
 def test_viewer_can_read(client, other_headers, viewer_program, path):
     res = client.get(f"/programs/{viewer_program}{path}", headers=other_headers)
@@ -88,12 +88,6 @@ def test_viewer_cannot_update_finding(client, other_headers, viewer_program):
 
 def test_viewer_cannot_suggest_finding(client, other_headers, viewer_program):
     res = _post(client, other_headers, f"/programs/{viewer_program}/findings/any/suggest", {})
-    assert res.status_code == 403
-
-
-def test_viewer_cannot_create_submission(client, other_headers, viewer_program):
-    res = _post(client, other_headers, f"/programs/{viewer_program}/submissions",
-                {"title": "t", "platform": "HackerOne"})
     assert res.status_code == 403
 
 

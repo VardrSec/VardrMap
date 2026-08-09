@@ -205,7 +205,7 @@ export default function OverviewSection({ engagement }: { engagement: Engagement
     { label: "Run Nuclei",        sub: "Scan for vulnerabilities",   onClick: () => navigateToDashboard("nuclei")    },
     { label: "Import File",       sub: "Upload tool output",         onClick: () => navigateToDashboard("import")    },
     { label: "Add Finding",       sub: "Log a manual finding",       onClick: () => navigate("findings")       },
-    { label: "Create Report",     sub: "Draft a submission report",  onClick: () => navigate("reports")        },
+    { label: "Create Report",     sub: "Draft a client report"    ,  onClick: () => navigate("reports")        },
   ];
 
   return (
