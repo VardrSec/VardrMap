@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 import sse as _sse
 from db import get_db
-from deps import get_current_user, get_program_or_404, log_action, require_member_write
+from deps import get_current_user, get_engagement_or_404, log_action, require_member_write
 from limiter import limiter
 from models import JobEvent, ReconItem, ScanJob, ScheduledScan, ScopeItem, User
 from notifications import send_webhook
@@ -114,15 +114,15 @@ def serialize_job(j: ScanJob) -> dict:
     }
 
 
-@router.post("/programs/{program_id}/jobs")
+@router.post("/engagements/{program_id}/jobs")
 def create_job(
     program_id: str,
     body: JobCreate,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    program = get_program_or_404(program_id, current_user, db)
-    require_member_write(program, current_user, db)
+    engagement = get_engagement_or_404(program_id, current_user, db)
+    require_member_write(engagement, current_user, db)
     if body.tool_type not in _VALID_TOOLS:
         raise HTTPException(status_code=400, detail=f"tool_type must be one of {sorted(_VALID_TOOLS)}")
     if body.target_source not in _VALID_SOURCES:
@@ -150,8 +150,8 @@ def create_job(
 
 
 def _validate_dependency(parent_id: str, program_id: str, github_id: str, db: Session) -> None:
-    """A dependency must be an existing job the caller owns in the same program.
-    Prevents dangling waits and cross-program/cross-user references."""
+    """A dependency must be an existing job the caller owns in the same engagement.
+    Prevents dangling waits and cross-engagement/cross-user references."""
     parent = (
         db.query(ScanJob)
         .filter(
@@ -162,10 +162,10 @@ def _validate_dependency(parent_id: str, program_id: str, github_id: str, db: Se
         .first()
     )
     if not parent:
-        raise HTTPException(status_code=400, detail="depends_on must reference an existing job in this program")
+        raise HTTPException(status_code=400, detail="depends_on must reference an existing job in this engagement")
 
 
-@router.post("/programs/{program_id}/pipelines", status_code=201)
+@router.post("/engagements/{program_id}/pipelines", status_code=201)
 def create_pipeline(
     program_id: str,
     body: PipelineCreate,
@@ -179,8 +179,8 @@ def create_pipeline(
     parent completes. Validation is per-stage and identical to single-job creation,
     so a bad stage rejects the whole pipeline before anything is written.
     """
-    program = get_program_or_404(program_id, current_user, db)
-    require_member_write(program, current_user, db)
+    engagement = get_engagement_or_404(program_id, current_user, db)
+    require_member_write(engagement, current_user, db)
     for i, stage in enumerate(body.stages):
         if stage.tool_type not in _VALID_TOOLS:
             raise HTTPException(status_code=400, detail=f"stage {i}: tool_type must be one of {sorted(_VALID_TOOLS)}")
@@ -248,7 +248,7 @@ def _resolve_targets(program_id: str, target_source: str, config: dict, db: Sess
     return deduped
 
 
-@router.post("/programs/{program_id}/jobs/preview")
+@router.post("/engagements/{program_id}/jobs/preview")
 def preview_job(
     program_id: str,
     body: JobPreview,
@@ -257,7 +257,7 @@ def preview_job(
 ):
     """Dry-run: resolve the targets a job would run against without queuing anything.
     Returns the total count and a capped sample so the Composer can confirm intent."""
-    get_program_or_404(program_id, current_user, db)
+    get_engagement_or_404(program_id, current_user, db)
     if body.tool_type not in _VALID_TOOLS:
         raise HTTPException(status_code=400, detail=f"tool_type must be one of {sorted(_VALID_TOOLS)}")
     if body.target_source not in _VALID_SOURCES:
@@ -274,13 +274,13 @@ def preview_job(
     }
 
 
-@router.get("/programs/{program_id}/jobs")
+@router.get("/engagements/{program_id}/jobs")
 def list_jobs(
     program_id: str,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    get_program_or_404(program_id, current_user, db)
+    get_engagement_or_404(program_id, current_user, db)
     jobs = (
         db.query(ScanJob)
         .filter(ScanJob.program_id == program_id)
@@ -416,7 +416,7 @@ def update_job(
     if body.status == "failed" and not is_cancel:
         user = db.query(User).filter(User.github_id == current_user["github_id"]).first()
         if user and user.webhook_url:
-            program_name = job.program.name if job.program else job.program_id
+            program_name = job.engagement.name if job.engagement else job.program_id
             message = (
                 f"❌ VardrMap: {job.tool_type} job failed for {program_name}"
                 + (f" — {job.error_message[:300]}" if job.error_message else "")

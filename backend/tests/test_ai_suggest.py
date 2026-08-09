@@ -2,7 +2,7 @@
 
 Coverage:
 - 503 when ANTHROPIC_API_KEY is not set
-- 404 for wrong program (BOLA)
+- 404 for wrong engagement (BOLA)
 - 404 for wrong finding
 - 401 unauthorized
 - 200 success with mocked Claude response
@@ -21,7 +21,7 @@ import pytest
 # ---------------------------------------------------------------------------
 
 def _create_program(client, headers):
-    res = client.post("/programs", json={"name": "AI Test Program"}, headers=headers)
+    res = client.post("/programs", json={"name": "AI Test Engagement"}, headers=headers)
     assert res.status_code == 200
     return res.json()["id"]
 

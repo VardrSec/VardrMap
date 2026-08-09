@@ -26,13 +26,13 @@ function isInScope(item: ReconItem, scopeItems: ScopeItem[]): boolean {
   });
 }
 
-// Recon and scans are fetched independently (not embedded in the program object)
+// Recon and scans are fetched independently (not embedded in the engagement object)
 // because a real ffuf/httpx run can return thousands of rows — we don't want
-// all of that coming down on every program refresh.
+// all of that coming down on every engagement refresh.
 export default function ReconSection({
-  programId, hideHeader, scopeItems, jobFilter, onClearJobFilter,
+  engagementId, hideHeader, scopeItems, jobFilter, onClearJobFilter,
 }: {
-  programId: string; hideHeader?: boolean; scopeItems?: ScopeItem[];
+  engagementId: string; hideHeader?: boolean; scopeItems?: ScopeItem[];
   jobFilter?: string | null; onClearJobFilter?: () => void;
 }) {
   const { authFetch, setMessage } = useAppContext();
@@ -45,12 +45,12 @@ export default function ReconSection({
   const [scopeOnly,    setScopeOnly]    = useState(false);
   const [detailItem,   setDetailItem]   = useState<ReconItem | null>(null);
 
-  // replace=true on initial load or program/search change; false for "Load more"
+  // replace=true on initial load or engagement/search change; false for "Load more"
   const load = useCallback(async (off: number, replace: boolean, q: string, signal?: AbortSignal) => {
     setLoading(true);
     try {
       const params = `limit=${PAGE_SIZE}&offset=${off}${q ? `&search=${encodeURIComponent(q)}` : ""}${jobFilter ? `&job_id=${encodeURIComponent(jobFilter)}` : ""}`;
-      const res = await authFetch(`/programs/${programId}/recon?${params}`, { signal });
+      const res = await authFetch(`/engagements/${engagementId}/recon?${params}`, { signal });
       if (!res.ok) throw new Error();
       const data = await res.json();
       setTotal(data.total ?? 0);
@@ -59,7 +59,7 @@ export default function ReconSection({
     } catch (e) {
       if ((e as { name?: string }).name !== "AbortError") setMessage("Failed to load recon.");
     } finally { setLoading(false); }
-  }, [programId, authFetch, setMessage, jobFilter]);
+  }, [engagementId, authFetch, setMessage, jobFilter]);
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -87,7 +87,7 @@ export default function ReconSection({
       {detailItem && (
         <HostDetailPanel
           key={detailItem.id}
-          programId={programId}
+          engagementId={engagementId}
           item={detailItem}
           onClose={() => setDetailItem(null)}
         />

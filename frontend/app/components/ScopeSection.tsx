@@ -1,12 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { Program } from "../types";
+import { Engagement } from "../types";
 import { useAppContext } from "../context/AppContext";
 import { Panel, Input, Textarea, PrimaryButton, ListCard, SectionHeader } from "./ui";
 
-export default function ScopeSection({ program }: { program: Program }) {
-  const { authFetch, setMessage, refreshSelectedProgram } = useAppContext();
+export default function ScopeSection({ engagement }: { engagement: Engagement }) {
+  const { authFetch, setMessage, refreshSelectedEngagement } = useAppContext();
   const [scopeIn,  setScopeIn]  = useState({ value: "", kind: "domain", notes: "" });
   const [scopeOut, setScopeOut] = useState({ value: "", kind: "domain", notes: "" });
 
@@ -14,19 +14,19 @@ export default function ScopeSection({ program }: { program: Program }) {
     const payload = scopeType === "in" ? scopeIn : scopeOut;
     if (!payload.value.trim()) return;
     try {
-      const res = await authFetch(`/programs/${program.id}/scope/${scopeType}`, { method: "POST", body: JSON.stringify(payload) });
+      const res = await authFetch(`/engagements/${engagement.id}/scope/${scopeType}`, { method: "POST", body: JSON.stringify(payload) });
       if (!res.ok) throw new Error();
       if (scopeType === "in") setScopeIn({ value: "", kind: "domain", notes: "" });
       else setScopeOut({ value: "", kind: "domain", notes: "" });
-      await refreshSelectedProgram(program.id);
+      await refreshSelectedEngagement(engagement.id);
       setMessage("Scope updated.");
     } catch { setMessage("Failed to add scope item."); }
   }
 
   async function deleteScopeItem(scopeType: "in" | "out", itemId: string) {
     try {
-      await authFetch(`/programs/${program.id}/scope/${scopeType}/${itemId}`, { method: "DELETE" });
-      await refreshSelectedProgram(program.id);
+      await authFetch(`/engagements/${engagement.id}/scope/${scopeType}/${itemId}`, { method: "DELETE" });
+      await refreshSelectedEngagement(engagement.id);
       setMessage("Scope item deleted.");
     } catch { setMessage("Failed to delete scope item."); }
   }
@@ -43,7 +43,7 @@ export default function ScopeSection({ program }: { program: Program }) {
             <PrimaryButton onClick={() => addScopeItem("in")} label="Add In-Scope Asset" />
           </div>
           <div className="mt-5 space-y-2">
-            {(program.scope?.in ?? []).map((item) => (
+            {(engagement.scope?.in ?? []).map((item) => (
               <ListCard key={item.id} title={item.value} subtitle={`${item.kind}${item.notes ? ` — ${item.notes}` : ""}`} onDelete={() => deleteScopeItem("in", item.id)} />
             ))}
           </div>
@@ -56,7 +56,7 @@ export default function ScopeSection({ program }: { program: Program }) {
             <PrimaryButton onClick={() => addScopeItem("out")} label="Add Out-of-Scope Asset" />
           </div>
           <div className="mt-5 space-y-2">
-            {(program.scope?.out ?? []).map((item) => (
+            {(engagement.scope?.out ?? []).map((item) => (
               <ListCard key={item.id} title={item.value} subtitle={`${item.kind}${item.notes ? ` — ${item.notes}` : ""}`} onDelete={() => deleteScopeItem("out", item.id)} />
             ))}
           </div>

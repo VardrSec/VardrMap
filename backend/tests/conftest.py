@@ -78,8 +78,8 @@ def other_headers() -> dict:
 
 @pytest.fixture
 def program_id(client, auth_headers) -> str:
-    """Creates a fresh program owned by user1, yields its ID, then deletes it."""
-    res = client.post("/programs", json={"name": "Test Program"}, headers=auth_headers)
+    """Creates a fresh engagement owned by user1, yields its ID, then deletes it."""
+    res = client.post("/programs", json={"name": "Test Engagement"}, headers=auth_headers)
     assert res.status_code == 200
     pid = res.json()["id"]
     yield pid

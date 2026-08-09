@@ -7,7 +7,7 @@ from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 
 from db import get_db
-from models import ApiKey, AuditLog, Program, ProgramMember, User
+from models import ApiKey, AuditLog, Engagement, EngagementMember, User
 
 BACKEND_JWT_SECRET = os.getenv("BACKEND_JWT_SECRET", "")
 JWT_ALGORITHM = "HS256"
@@ -74,40 +74,40 @@ def _resolve_jwt(token: str) -> dict[str, str]:
     }
 
 
-def get_program_or_404(program_id: str, current_user: dict[str, str], db: Session) -> Program:
-    """Return program if the user is the owner or an invited member. 404 in all other cases."""
-    program = db.query(Program).filter(Program.id == program_id).first()
-    if not program:
-        raise HTTPException(status_code=404, detail="Program not found")
-    if program.owner_github_id == current_user["github_id"]:
-        return program
-    member = db.query(ProgramMember).filter(
-        ProgramMember.program_id == program_id,
-        ProgramMember.member_github_id == current_user["github_id"],
+def get_engagement_or_404(program_id: str, current_user: dict[str, str], db: Session) -> Engagement:
+    """Return engagement if the user is the owner or an invited member. 404 in all other cases."""
+    engagement = db.query(Engagement).filter(Engagement.id == program_id).first()
+    if not engagement:
+        raise HTTPException(status_code=404, detail="Engagement not found")
+    if engagement.owner_github_id == current_user["github_id"]:
+        return engagement
+    member = db.query(EngagementMember).filter(
+        EngagementMember.program_id == program_id,
+        EngagementMember.member_github_id == current_user["github_id"],
     ).first()
     if not member:
-        raise HTTPException(status_code=404, detail="Program not found")
-    return program
+        raise HTTPException(status_code=404, detail="Engagement not found")
+    return engagement
 
 
-def require_program_owner(program: Program, current_user: dict[str, str]) -> None:
+def require_engagement_owner(engagement: Engagement, current_user: dict[str, str]) -> None:
     """Raise 403 when a member (non-owner) attempts a write that requires ownership.
-    Call after get_program_or_404 so the program is already verified accessible."""
-    if program.owner_github_id != current_user["github_id"]:
-        raise HTTPException(status_code=403, detail="This action requires program ownership")
+    Call after get_engagement_or_404 so the engagement is already verified accessible."""
+    if engagement.owner_github_id != current_user["github_id"]:
+        raise HTTPException(status_code=403, detail="This action requires engagement ownership")
 
 
-def require_member_write(program: Program, current_user: dict, db: Session) -> None:
+def require_member_write(engagement: Engagement, current_user: dict, db: Session) -> None:
     """Raise 403 if the current user is a viewer-role member.
-    Call after get_program_or_404. Owners always pass."""
-    if program.owner_github_id == current_user["github_id"]:
+    Call after get_engagement_or_404. Owners always pass."""
+    if engagement.owner_github_id == current_user["github_id"]:
         return
-    member = db.query(ProgramMember).filter(
-        ProgramMember.program_id == program.id,
-        ProgramMember.member_github_id == current_user["github_id"],
+    member = db.query(EngagementMember).filter(
+        EngagementMember.program_id == engagement.id,
+        EngagementMember.member_github_id == current_user["github_id"],
     ).first()
     if member and member.role == "viewer":
-        raise HTTPException(status_code=403, detail="Viewers cannot make changes to this program")
+        raise HTTPException(status_code=403, detail="Viewers cannot make changes to this engagement")
 
 
 def require_full_scope(
@@ -138,3 +138,41 @@ def log_action(
         resource_id=resource_id,
         program_id=program_id or "",
     ))
+
+
+def parse_iso_datetime(value: str | None, field: str) -> datetime | None:
+    """Accept an ISO-8601 string, including a trailing Z, or None.
+
+    Datetimes cross this API as strings, matching how they are serialised on
+    the way out. Parsing here keeps string values from being written straight
+    into DateTime columns by a bulk setattr loop.
+    """
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        raise HTTPException(
+            status_code=422,
+            detail=f"{field} must be an ISO-8601 datetime, e.g. 2026-08-04T09:00:00Z",
+        )
+
+
+def resolve_owned_client_id(client_id: str | None, current_user: dict[str, str], db: Session) -> str | None:
+    """Validate that a client belongs to the caller before linking an engagement to it.
+
+    Without this check the field would be an existence oracle: attaching a
+    engagement to another user's client id would either succeed or fail
+    differently, revealing whether that id exists.
+    """
+    if not client_id:
+        return None
+    from models import Client  # local import; models imports nothing from deps
+
+    owned = db.query(Client).filter(
+        Client.id == client_id,
+        Client.owner_github_id == current_user["github_id"],
+    ).first()
+    if not owned:
+        raise HTTPException(status_code=404, detail="Client not found")
+    return owned.id

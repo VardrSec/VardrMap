@@ -25,9 +25,9 @@ function assetMatchesScope(asset: string, scopeItems: ScopeItem[]): boolean {
 }
 
 export default function ScanningSection({
-  programId, hideHeader, scopeItems, jobFilter, onClearJobFilter,
+  engagementId, hideHeader, scopeItems, jobFilter, onClearJobFilter,
 }: {
-  programId: string; hideHeader?: boolean; scopeItems?: ScopeItem[];
+  engagementId: string; hideHeader?: boolean; scopeItems?: ScopeItem[];
   jobFilter?: string | null; onClearJobFilter?: () => void;
 }) {
   const { authFetch, setMessage, promoteScanToFinding } = useAppContext();
@@ -45,14 +45,14 @@ export default function ScanningSection({
     setLoading(true);
     try {
       const params = `limit=${PAGE_SIZE}&offset=${off}${filter !== "all" ? `&status=${filter}` : ""}${jobFilter ? `&job_id=${encodeURIComponent(jobFilter)}` : ""}`;
-      const res = await authFetch(`/programs/${programId}/scans?${params}`);
+      const res = await authFetch(`/engagements/${engagementId}/scans?${params}`);
       if (!res.ok) throw new Error();
       const data = await res.json();
       setTotal(data.total ?? 0);
       setItems((prev) => replace ? data.scans : [...prev, ...data.scans]);
       setOffset(off);
     } catch { setMessage("Failed to load scans."); } finally { setLoading(false); }
-  }, [programId, authFetch, setMessage, jobFilter]);
+  }, [engagementId, authFetch, setMessage, jobFilter]);
 
   // When arriving from a job provenance link, default to "all" so results in any
   // status are visible — a job's output isn't only "new" after prior review.
@@ -80,7 +80,7 @@ export default function ScanningSection({
 
   async function updateStatus(scan: ScanItem, status: string) {
     try {
-      await authFetch(`/programs/${programId}/scans/${scan.id}`, {
+      await authFetch(`/engagements/${engagementId}/scans/${scan.id}`, {
         method: "PATCH",
         body: JSON.stringify({ status }),
       });
@@ -92,7 +92,7 @@ export default function ScanningSection({
     const ids = [...selected];
     const count = ids.length;
     try {
-      const res = await authFetch(`/programs/${programId}/scans/bulk-status`, {
+      const res = await authFetch(`/engagements/${engagementId}/scans/bulk-status`, {
         method: "POST",
         body: JSON.stringify({ ids, status }),
       });
@@ -114,7 +114,7 @@ export default function ScanningSection({
     if (ids.length === 0) { setMessage("No scan results to triage."); return; }
     setTriaging(true);
     try {
-      const res = await authFetch(`/programs/${programId}/scans/triage`, {
+      const res = await authFetch(`/engagements/${engagementId}/scans/triage`, {
         method: "POST",
         body: JSON.stringify({ ids }),
       });

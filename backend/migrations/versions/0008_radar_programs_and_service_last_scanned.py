@@ -5,7 +5,7 @@ Revises: 0007servicesapikey
 Create Date: 2026-06-11
 
 Adds:
-  - radar_programs table: program opportunities discovered from platform APIs
+  - radar_programs table: engagement opportunities discovered from platform APIs
   - services.last_scanned_at: stamped on every nmap upsert for freshness tracking
 """
 from typing import Sequence, Union

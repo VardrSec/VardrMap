@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { safeMarkdownUrl } from "../lib/safeUrl";
-import { Program, Finding, Report, ReportFormState } from "../types";
+import { Engagement, Finding, Report, ReportFormState } from "../types";
 import { useAppContext } from "../context/AppContext";
 import { Panel, Input, Textarea, SelectField, PrimaryButton, DangerButton, StatusBadge, SectionHeader } from "./ui";
 
@@ -53,9 +53,9 @@ function ReportFields({ value, onChange }: { value: ReportFormState; onChange: (
   );
 }
 
-export default function ReportsSection({ program }: { program: Program }) {
+export default function ReportsSection({ engagement }: { engagement: Engagement }) {
   const {
-    authFetch, setMessage, refreshSelectedProgram, promoteToSubmission,
+    authFetch, setMessage, refreshSelectedEngagement, promoteToSubmission,
     state: { reportPrefill }, dispatch,
   } = useAppContext();
   const [reports,     setReports]     = useState<Report[]>([]);
@@ -71,20 +71,20 @@ export default function ReportsSection({ program }: { program: Program }) {
 
   const loadReports = useCallback(async () => {
     try {
-      const res = await authFetch(`/programs/${program.id}/reports?limit=${PAGE}&offset=0`);
+      const res = await authFetch(`/engagements/${engagement.id}/reports?limit=${PAGE}&offset=0`);
       if (!res.ok) throw new Error();
       const data = await res.json();
       setReports(Array.isArray(data?.reports) ? data.reports : []);
       setTotal(data?.total ?? 0);
       setOffset(0);
     } catch { setMessage("Failed to load reports."); }
-  }, [program.id, authFetch, setMessage]);
+  }, [engagement.id, authFetch, setMessage]);
 
   async function loadMore() {
     const next = offset + PAGE;
     setLoadingMore(true);
     try {
-      const res = await authFetch(`/programs/${program.id}/reports?limit=${PAGE}&offset=${next}`);
+      const res = await authFetch(`/engagements/${engagement.id}/reports?limit=${PAGE}&offset=${next}`);
       if (!res.ok) throw new Error();
       const data = await res.json();
       setReports((prev) => [...prev, ...(Array.isArray(data?.reports) ? data.reports : [])]);
@@ -94,12 +94,12 @@ export default function ReportsSection({ program }: { program: Program }) {
 
   const loadFindings = useCallback(async () => {
     try {
-      const res = await authFetch(`/programs/${program.id}/findings`);
+      const res = await authFetch(`/engagements/${engagement.id}/findings`);
       if (!res.ok) throw new Error();
       const data = await res.json();
       setFindings(Array.isArray(data?.findings) ? data.findings : []);
     } catch { /* non-blocking — dropdown just stays empty */ }
-  }, [program.id, authFetch]);
+  }, [engagement.id, authFetch]);
 
   useEffect(() => {
     void loadReports();
@@ -194,11 +194,11 @@ export default function ReportsSection({ program }: { program: Program }) {
   async function addReport() {
     if (!form.title.trim()) return;
     try {
-      const res = await authFetch(`/programs/${program.id}/reports`, { method: "POST", body: JSON.stringify(form) });
+      const res = await authFetch(`/engagements/${engagement.id}/reports`, { method: "POST", body: JSON.stringify(form) });
       if (!res.ok) throw new Error();
       setForm(EMPTY);
       await loadReports();
-      await refreshSelectedProgram(program.id);
+      await refreshSelectedEngagement(engagement.id);
       setMessage("Report saved.");
     } catch { setMessage("Failed to save report."); }
   }
@@ -206,9 +206,9 @@ export default function ReportsSection({ program }: { program: Program }) {
   async function deleteReport(reportId: string) {
     if (!confirm("Delete this report? This cannot be undone.")) return;
     try {
-      await authFetch(`/programs/${program.id}/reports/${reportId}`, { method: "DELETE" });
+      await authFetch(`/engagements/${engagement.id}/reports/${reportId}`, { method: "DELETE" });
       await loadReports();
-      await refreshSelectedProgram(program.id);
+      await refreshSelectedEngagement(engagement.id);
       setMessage("Report deleted.");
     } catch { setMessage("Failed to delete report."); }
   }
@@ -220,16 +220,16 @@ export default function ReportsSection({ program }: { program: Program }) {
 
   async function saveEdit(reportId: string) {
     try {
-      const res = await authFetch(`/programs/${program.id}/reports/${reportId}`, { method: "PATCH", body: JSON.stringify(editForm) });
+      const res = await authFetch(`/engagements/${engagement.id}/reports/${reportId}`, { method: "PATCH", body: JSON.stringify(editForm) });
       if (!res.ok) throw new Error();
       setEditingId(null);
       await loadReports();
-      await refreshSelectedProgram(program.id);
+      await refreshSelectedEngagement(engagement.id);
       setMessage("Report updated.");
     } catch { setMessage("Failed to update report."); }
   }
 
-  const isViewer = program.my_role === 'viewer';
+  const isViewer = engagement.my_role === 'viewer';
   const mdPreview = generateMarkdown(form);
 
   return (

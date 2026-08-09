@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { signIn, signOut } from "next-auth/react";
 import { Section } from "./types";
-import { AppProvider, normalizeProgram, useAppContext } from "./context/AppContext";
+import { AppProvider, normalizeEngagement, useAppContext } from "./context/AppContext";
 import DashboardSection  from "./components/DashboardSection";
 import ScopeSection      from "./components/ScopeSection";
 import OverviewSection   from "./components/OverviewSection";
@@ -34,27 +34,27 @@ const NAV_ITEMS: { section: Section; label: string; icon: string }[] = [
 
 function AppShell() {
   const {
-    state, selectedProgram, authFetch, setMessage,
-    selectProgram, navigate, loadPrograms,
+    state, selectedEngagement, authFetch, setMessage,
+    selectEngagement, navigate, loadEngagements,
   } = useAppContext();
-  const { session, authLoading, programs, selectedProgramId, activeSection, message } = state;
+  const { session, authLoading, engagements, selectedEngagementId, activeSection, message } = state;
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [newProgram, setNewProgram] = useState({ name: "", platform: "", program_url: "" });
+  const [newEngagement, setNewEngagement] = useState({ name: "", platform: "", program_url: "" });
   const [loading, setLoading] = useState(false);
 
-  async function createProgram() {
-    if (!newProgram.name.trim()) return;
+  async function createEngagement() {
+    if (!newEngagement.name.trim()) return;
     setLoading(true);
     try {
-      const res = await authFetch("/programs", { method: "POST", body: JSON.stringify(newProgram) });
+      const res = await authFetch("/engagements", { method: "POST", body: JSON.stringify(newEngagement) });
       if (!res.ok) throw new Error();
-      const created = normalizeProgram(await res.json());
-      await loadPrograms();
-      selectProgram(created.id);
-      setNewProgram({ name: "", platform: "", program_url: "" });
-      setMessage("Program created.");
-    } catch { setMessage("Failed to create program."); } finally { setLoading(false); }
+      const created = normalizeEngagement(await res.json());
+      await loadEngagements();
+      selectEngagement(created.id);
+      setNewEngagement({ name: "", platform: "", program_url: "" });
+      setMessage("Engagement created.");
+    } catch { setMessage("Failed to create engagement."); } finally { setLoading(false); }
   }
 
   const isError = message.toLowerCase().includes("fail") ||
@@ -128,14 +128,14 @@ function AppShell() {
             </button>
           </div>
 
-          {/* Program selector */}
+          {/* Engagement selector */}
           {!sidebarCollapsed && (
             <div className="border-b border-[#2e2e2e] px-3 py-3">
-              <label className="mb-1.5 block text-[9px] font-semibold uppercase tracking-widest text-[#52525b]">Active Program</label>
+              <label className="mb-1.5 block text-[9px] font-semibold uppercase tracking-widest text-[#52525b]">Active Engagement</label>
               <select className="w-full rounded-md border border-[#2e2e2e] bg-[#161616] px-2.5 py-1.5 text-xs text-[#f1f5f9] transition focus:border-[#f59e0b] focus:outline-none"
-                value={selectedProgramId} onChange={(e) => selectProgram(e.target.value)}>
-                <option value="">Choose a program</option>
-                {programs.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                value={selectedEngagementId} onChange={(e) => selectEngagement(e.target.value)}>
+                <option value="">Choose an engagement</option>
+                {engagements.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </div>
           )}
@@ -153,19 +153,19 @@ function AppShell() {
             ))}
           </nav>
 
-          {/* Create program + sign out */}
+          {/* Create engagement + sign out */}
           {!sidebarCollapsed && (
             <div className="border-t border-[#2e2e2e] px-3 py-4 space-y-2">
-              <p className="text-[9px] font-semibold uppercase tracking-widest text-[#52525b]">New Program</p>
+              <p className="text-[9px] font-semibold uppercase tracking-widest text-[#52525b]">New Engagement</p>
               <input className="w-full rounded-md border border-[#2e2e2e] bg-[#161616] px-2.5 py-1.5 text-xs text-[#f1f5f9] placeholder-[#3a3a3a] transition focus:border-[#f59e0b] focus:outline-none"
-                placeholder="Program name" value={newProgram.name} onChange={(e) => setNewProgram({ ...newProgram, name: e.target.value })} />
+                placeholder="Engagement name" value={newEngagement.name} onChange={(e) => setNewEngagement({ ...newEngagement, name: e.target.value })} />
               <input className="w-full rounded-md border border-[#2e2e2e] bg-[#161616] px-2.5 py-1.5 text-xs text-[#f1f5f9] placeholder-[#3a3a3a] transition focus:border-[#f59e0b] focus:outline-none"
-                placeholder="Platform" value={newProgram.platform} onChange={(e) => setNewProgram({ ...newProgram, platform: e.target.value })} />
+                placeholder="Platform" value={newEngagement.platform} onChange={(e) => setNewEngagement({ ...newEngagement, platform: e.target.value })} />
               <input className="w-full rounded-md border border-[#2e2e2e] bg-[#161616] px-2.5 py-1.5 text-xs text-[#f1f5f9] placeholder-[#3a3a3a] transition focus:border-[#f59e0b] focus:outline-none"
-                placeholder="Program URL" value={newProgram.program_url} onChange={(e) => setNewProgram({ ...newProgram, program_url: e.target.value })} />
-              <button onClick={createProgram} disabled={loading}
+                placeholder="Engagement URL" value={newEngagement.program_url} onChange={(e) => setNewEngagement({ ...newEngagement, program_url: e.target.value })} />
+              <button onClick={createEngagement} disabled={loading}
                 className="w-full rounded-md bg-[#f59e0b] px-3 py-1.5 text-xs font-semibold text-[#161616] transition hover:bg-[#fbbf24] active:scale-[0.98] disabled:opacity-50">
-                {loading ? "Working…" : "Create Program"}
+                {loading ? "Working…" : "Create Engagement"}
               </button>
               <button onClick={() => signOut({ callbackUrl: "/" })}
                 className="w-full rounded-md border border-[#2e2e2e] px-3 py-1.5 text-xs text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#94a3b8]">
@@ -187,19 +187,19 @@ function AppShell() {
 
           {activeSection === "settings" ? (
             <SettingsSection />
-          ) : !selectedProgram ? (
+          ) : !selectedEngagement ? (
             <div className="rounded-2xl border border-dashed border-[#2e2e2e] p-14 text-center">
-              <p className="text-sm text-[#3a3a3a]">Create or select a program to begin.</p>
+              <p className="text-sm text-[#3a3a3a]">Create or select an engagement to begin.</p>
             </div>
           ) : (
             <>
-              {activeSection === "dashboard" && <DashboardSection program={selectedProgram} />}
-              {activeSection === "scope"     && <ScopeSection     program={selectedProgram} />}
-              {activeSection === "review"    && <ReviewSection    program={selectedProgram} />}
-              {activeSection === "findings"  && <FindingsSection  program={selectedProgram} />}
-              {activeSection === "overview"  && <OverviewSection  program={selectedProgram} />}
-              {activeSection === "reports"      && <ReportsSection      program={selectedProgram} />}
-              {activeSection === "submissions" && <SubmissionsSection  program={selectedProgram} />}
+              {activeSection === "dashboard" && <DashboardSection engagement={selectedEngagement} />}
+              {activeSection === "scope"     && <ScopeSection     engagement={selectedEngagement} />}
+              {activeSection === "review"    && <ReviewSection    engagement={selectedEngagement} />}
+              {activeSection === "findings"  && <FindingsSection  engagement={selectedEngagement} />}
+              {activeSection === "overview"  && <OverviewSection  engagement={selectedEngagement} />}
+              {activeSection === "reports"      && <ReportsSection      engagement={selectedEngagement} />}
+              {activeSection === "submissions" && <SubmissionsSection  engagement={selectedEngagement} />}
             </>
           )}
         </section>

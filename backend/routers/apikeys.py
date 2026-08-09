@@ -22,7 +22,7 @@ def create_api_key(
     db: Session = Depends(get_db),
 ):
     # Ensure user row exists before inserting the API key (FK safety, same
-    # pattern as create_program — JWT auth gives us the user's info directly).
+    # pattern as create_engagement — JWT auth gives us the user's info directly).
     user = db.query(User).filter(User.github_id == current_user["github_id"]).first()
     if not user:
         user = User(

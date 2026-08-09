@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Program, RadarProgram } from "../types";
+import { Engagement, RadarProgram } from "../types";
 import { useAppContext } from "../context/AppContext";
 import { Panel, SectionHeader, Input, Textarea, PrimaryButton, DangerButton } from "./ui";
 
@@ -49,7 +49,7 @@ function QuickActionButton({ label, sub, onClick }: QuickAction) {
 const PLATFORM_LABELS: Record<string, string> = { bugcrowd: "Bugcrowd", hackerone: "HackerOne" };
 
 function RadarWidget({ authFetch, setMessage }: { authFetch: (p: string, i?: RequestInit) => Promise<Response>; setMessage: (m: string) => void }) {
-  const { loadPrograms, selectProgram, navigate } = useAppContext();
+  const { loadEngagements, selectEngagement, navigate } = useAppContext();
   const [programs, setPrograms] = useState<RadarProgram[]>([]);
   const [newCount, setNewCount] = useState(0);
   const [lastFetched, setLastFetched] = useState<string | null>(null);
@@ -93,7 +93,7 @@ function RadarWidget({ authFetch, setMessage }: { authFetch: (p: string, i?: Req
   async function track(rp: RadarProgram) {
     setTrackingId(rp.id);
     try {
-      const res = await authFetch("/programs", {
+      const res = await authFetch("/engagements", {
         method: "POST",
         body: JSON.stringify({
           name: rp.name,
@@ -103,8 +103,8 @@ function RadarWidget({ authFetch, setMessage }: { authFetch: (p: string, i?: Req
       });
       if (!res.ok) throw new Error();
       const created = await res.json();
-      await loadPrograms();
-      selectProgram(created.id as string);
+      await loadEngagements();
+      selectEngagement(created.id as string);
       navigate("scope");
       setMessage(`Now tracking ${rp.name} — add its scope to get started.`);
     } catch { setMessage("Failed to track program."); } finally { setTrackingId(null); }
@@ -163,38 +163,38 @@ function RadarWidget({ authFetch, setMessage }: { authFetch: (p: string, i?: Req
   );
 }
 
-export default function OverviewSection({ program }: { program: Program }) {
-  const { authFetch, setMessage, refreshSelectedProgram, deleteProgram, navigate, navigateToDashboard } = useAppContext();
+export default function OverviewSection({ engagement }: { engagement: Engagement }) {
+  const { authFetch, setMessage, refreshSelectedEngagement, deleteEngagement, navigate, navigateToDashboard } = useAppContext();
 
   const [form, setForm] = useState({
-    name: program.name, platform: program.platform, program_url: program.program_url,
-    scope_summary: program.scope_summary, severity_guidance: program.severity_guidance,
-    safe_harbor_notes: program.safe_harbor_notes,
+    name: engagement.name, platform: engagement.platform, program_url: engagement.program_url,
+    scope_summary: engagement.scope_summary, severity_guidance: engagement.severity_guidance,
+    safe_harbor_notes: engagement.safe_harbor_notes,
   });
 
   useEffect(() => {
     setForm({
-      name: program.name, platform: program.platform, program_url: program.program_url,
-      scope_summary: program.scope_summary, severity_guidance: program.severity_guidance,
-      safe_harbor_notes: program.safe_harbor_notes,
+      name: engagement.name, platform: engagement.platform, program_url: engagement.program_url,
+      scope_summary: engagement.scope_summary, severity_guidance: engagement.severity_guidance,
+      safe_harbor_notes: engagement.safe_harbor_notes,
     });
-  // Intentionally keyed on program.id only — re-running on every field change
+  // Intentionally keyed on engagement.id only — re-running on every field change
   // would overwrite edits the user is currently typing.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [program.id]);
+  }, [engagement.id]);
 
   async function saveProfile() {
     try {
-      const res = await authFetch(`/programs/${program.id}`, { method: "PATCH", body: JSON.stringify(form) });
+      const res = await authFetch(`/engagements/${engagement.id}`, { method: "PATCH", body: JSON.stringify(form) });
       if (!res.ok) throw new Error();
-      await refreshSelectedProgram(program.id);
-      setMessage("Program saved.");
-    } catch { setMessage("Failed to save program."); }
+      await refreshSelectedEngagement(engagement.id);
+      setMessage("Engagement saved.");
+    } catch { setMessage("Failed to save engagement."); }
   }
 
-  const total      = program.findings_count;
-  const bySeverity = program.findings_by_severity;
-  const byStatus   = program.findings_by_status;
+  const total      = engagement.findings_count;
+  const bySeverity = engagement.findings_by_severity;
+  const byStatus   = engagement.findings_by_status;
   const closed     = byStatus["closed"] ?? 0;
   const closedPct  = total > 0 ? Math.round((closed / total) * 100) : 0;
   const maxSevCount = Math.max(...SEVERITY_CONFIG.map((s) => bySeverity[s.key] ?? 0), 1);
@@ -210,7 +210,7 @@ export default function OverviewSection({ program }: { program: Program }) {
 
   return (
     <div className="space-y-7">
-      <SectionHeader title={program.name} description="Mission control for this program — launch scans, review data, and track findings." />
+      <SectionHeader title={engagement.name} description="Mission control for this engagement — launch scans, review data, and track findings." />
 
       {/* Quick actions */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
@@ -221,12 +221,12 @@ export default function OverviewSection({ program }: { program: Program }) {
 
       {/* Stats */}
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        <DashboardCard title="In-Scope Assets" value={program.scope?.in?.length ?? 0}    accent="#f59e0b" />
-        <DashboardCard title="Recon Entries"   value={program.recon_count}                accent="#89b4fa" />
-        <DashboardCard title="Scan Results"    value={program.scans_count}                accent="#f38ba8" />
-        <DashboardCard title="Manual Tests"    value={program.manual_tests_count}         accent="#fab387" />
+        <DashboardCard title="In-Scope Assets" value={engagement.scope?.in?.length ?? 0}    accent="#f59e0b" />
+        <DashboardCard title="Recon Entries"   value={engagement.recon_count}                accent="#89b4fa" />
+        <DashboardCard title="Scan Results"    value={engagement.scans_count}                accent="#f38ba8" />
+        <DashboardCard title="Manual Tests"    value={engagement.manual_tests_count}         accent="#fab387" />
         <DashboardCard title="Findings"        value={total}                              accent="#f9e2af" />
-        <DashboardCard title="Reports"         value={program.reports_count}              accent="#a6e3a1" />
+        <DashboardCard title="Reports"         value={engagement.reports_count}              accent="#a6e3a1" />
       </div>
 
       {/* Target Radar */}
@@ -285,11 +285,11 @@ export default function OverviewSection({ program }: { program: Program }) {
       {/* Imports summary + edit form */}
       <div className="grid gap-5 xl:grid-cols-2">
         <Panel title="Imports Summary">
-          {program.imports.length === 0 ? (
+          {engagement.imports.length === 0 ? (
             <p className="text-sm text-[#3a3a3a]">No imports yet.</p>
           ) : (
             <div className="space-y-2">
-              {program.imports.map((item) => (
+              {engagement.imports.map((item) => (
                 <div key={item.id} className="flex items-center justify-between rounded-lg border border-[#2e2e2e] bg-[#161616] px-4 py-3">
                   <span className="font-mono text-xs font-semibold uppercase text-[#f59e0b]">{item.tool_type}</span>
                   <span className="text-xs text-[#52525b]">{item.imported_count} records</span>
@@ -299,11 +299,11 @@ export default function OverviewSection({ program }: { program: Program }) {
           )}
         </Panel>
 
-        <Panel title="Edit Program">
+        <Panel title="Edit Engagement">
           <div className="grid gap-4 md:grid-cols-2">
-            <Input label="Program Name"      value={form.name}              onChange={(v) => setForm({ ...form, name: v })} />
+            <Input label="Engagement Name"      value={form.name}              onChange={(v) => setForm({ ...form, name: v })} />
             <Input label="Platform"          value={form.platform}          onChange={(v) => setForm({ ...form, platform: v })} />
-            <Input label="Program URL"       value={form.program_url}       onChange={(v) => setForm({ ...form, program_url: v })} />
+            <Input label="Engagement URL"       value={form.program_url}       onChange={(v) => setForm({ ...form, program_url: v })} />
             <Input label="Severity Guidance" value={form.severity_guidance} onChange={(v) => setForm({ ...form, severity_guidance: v })} />
           </div>
           <div className="mt-4 grid gap-4">
@@ -312,7 +312,7 @@ export default function OverviewSection({ program }: { program: Program }) {
           </div>
           <div className="mt-5 flex gap-3">
             <PrimaryButton onClick={saveProfile}   label="Save Profile"    />
-            <DangerButton  onClick={deleteProgram}  label="Delete Program" />
+            <DangerButton  onClick={deleteEngagement}  label="Delete Engagement" />
           </div>
         </Panel>
       </div>

@@ -5,7 +5,7 @@ Revises: 0006addjobeevents
 Create Date: 2026-06-11
 
 Adds:
-  - services table: nmap/service-discovery results per program
+  - services table: nmap/service-discovery results per engagement
   - api_keys.last_used_at: stamped on every successful API key auth
 """
 from typing import Sequence, Union

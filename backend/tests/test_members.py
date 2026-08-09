@@ -1,4 +1,4 @@
-"""Program membership — invite collaborators, BOLA isolation, ownership guards."""
+"""Engagement membership — invite collaborators, BOLA isolation, ownership guards."""
 import pytest
 
 
@@ -6,7 +6,7 @@ import pytest
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _create_program(client, headers, name="Shared Program"):
+def _create_program(client, headers, name="Shared Engagement"):
     res = client.post("/programs", json={"name": name}, headers=headers)
     assert res.status_code == 200
     return res.json()["id"]

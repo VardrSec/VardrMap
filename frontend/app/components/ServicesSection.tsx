@@ -5,7 +5,7 @@ import { Service } from "../types";
 import { useAppContext } from "../context/AppContext";
 import { Panel, SectionHeader } from "./ui";
 
-export default function ServicesSection({ programId, hideHeader }: { programId: string; hideHeader?: boolean }) {
+export default function ServicesSection({ engagementId, hideHeader }: { engagementId: string; hideHeader?: boolean }) {
   const { authFetch, setMessage, dispatch } = useAppContext();
   const [services, setServices] = useState<Service[]>([]);
   const [loading,  setLoading]  = useState(false);
@@ -14,19 +14,19 @@ export default function ServicesSection({ programId, hideHeader }: { programId: 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await authFetch(`/programs/${programId}/services`);
+      const res = await authFetch(`/engagements/${engagementId}/services`);
       if (!res.ok) throw new Error();
       const data = await res.json();
       setServices(data.services ?? []);
     } catch { setMessage("Failed to load services."); } finally { setLoading(false); }
-  }, [programId, authFetch, setMessage]);
+  }, [engagementId, authFetch, setMessage]);
 
   useEffect(() => { void load(); }, [load]);
 
   async function handleDelete(id: string) {
     setDeleting(id);
     try {
-      const res = await authFetch(`/programs/${programId}/services/${id}`, { method: "DELETE" });
+      const res = await authFetch(`/engagements/${engagementId}/services/${id}`, { method: "DELETE" });
       if (!res.ok) throw new Error();
       setServices((prev) => prev.filter((s) => s.id !== id));
     } catch { setMessage("Failed to delete service."); } finally { setDeleting(null); }

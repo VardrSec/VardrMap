@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from db import get_db
-from deps import get_current_user, get_program_or_404, log_action, require_member_write
+from deps import get_current_user, get_engagement_or_404, log_action, require_member_write
 from models import Finding
 from schemas import FindingCreate, FindingUpdate
 from serializers import serialize_finding
@@ -13,7 +13,7 @@ from serializers import serialize_finding
 router = APIRouter()
 
 
-@router.get("/programs/{program_id}/findings")
+@router.get("/engagements/{program_id}/findings")
 def get_findings(
     program_id: str,
     limit: int = Query(default=50, ge=1, le=200),
@@ -23,7 +23,7 @@ def get_findings(
     current_user: dict[str, str] = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    get_program_or_404(program_id, current_user, db)
+    get_engagement_or_404(program_id, current_user, db)
     query = db.query(Finding).filter(Finding.program_id == program_id)
     if search:
         like = f"%{search}%"
@@ -35,15 +35,15 @@ def get_findings(
     return {"findings": [serialize_finding(f) for f in findings], "total": total, "offset": offset, "limit": limit}
 
 
-@router.post("/programs/{program_id}/findings")
+@router.post("/engagements/{program_id}/findings")
 def add_finding(
     program_id: str,
     payload: FindingCreate,
     current_user: dict[str, str] = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    program = get_program_or_404(program_id, current_user, db)
-    require_member_write(program, current_user, db)
+    engagement = get_engagement_or_404(program_id, current_user, db)
+    require_member_write(engagement, current_user, db)
     finding = Finding(
         program_id=program_id,
         title=payload.title,
@@ -63,7 +63,7 @@ def add_finding(
     return serialize_finding(finding)
 
 
-@router.patch("/programs/{program_id}/findings/{finding_id}")
+@router.patch("/engagements/{program_id}/findings/{finding_id}")
 def update_finding(
     program_id: str,
     finding_id: str,
@@ -71,8 +71,8 @@ def update_finding(
     current_user: dict[str, str] = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    program = get_program_or_404(program_id, current_user, db)
-    require_member_write(program, current_user, db)
+    engagement = get_engagement_or_404(program_id, current_user, db)
+    require_member_write(engagement, current_user, db)
     finding = db.query(Finding).filter(
         Finding.id == finding_id,
         Finding.program_id == program_id,
@@ -101,7 +101,7 @@ Respond with valid JSON only — no markdown fences, no explanation:
 {{"cvss": "<score and label e.g. 7.5 (High)>", "impact": "<2-3 sentence impact>", "remediation": "<2-3 sentence remediation>"}}"""
 
 
-@router.post("/programs/{program_id}/findings/{finding_id}/suggest")
+@router.post("/engagements/{program_id}/findings/{finding_id}/suggest")
 def suggest_finding(
     program_id: str,
     finding_id: str,
@@ -110,8 +110,8 @@ def suggest_finding(
 ):
     """Call Claude API to draft CVSS, impact, and remediation for a finding."""
     # BOLA scope check first — wrong-user gets 404, not a 503 that leaks API state
-    program = get_program_or_404(program_id, current_user, db)
-    require_member_write(program, current_user, db)  # AI actions cost money — viewers can't trigger them
+    engagement = get_engagement_or_404(program_id, current_user, db)
+    require_member_write(engagement, current_user, db)  # AI actions cost money — viewers can't trigger them
     finding = db.query(Finding).filter(
         Finding.id == finding_id,
         Finding.program_id == program_id,
@@ -156,15 +156,15 @@ def suggest_finding(
         raise HTTPException(status_code=502, detail=f"AI request failed: {exc}")
 
 
-@router.delete("/programs/{program_id}/findings/{finding_id}")
+@router.delete("/engagements/{program_id}/findings/{finding_id}")
 def delete_finding(
     program_id: str,
     finding_id: str,
     current_user: dict[str, str] = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    program = get_program_or_404(program_id, current_user, db)
-    require_member_write(program, current_user, db)
+    engagement = get_engagement_or_404(program_id, current_user, db)
+    require_member_write(engagement, current_user, db)
     finding = db.query(Finding).filter(
         Finding.id == finding_id,
         Finding.program_id == program_id,

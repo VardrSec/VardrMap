@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from db import get_db
-from deps import get_current_user, get_program_or_404, log_action, require_member_write
+from deps import get_current_user, get_engagement_or_404, log_action, require_member_write
 from models import ManualTest
 from schemas import ManualTestCreate, ManualTestUpdate
 from serializers import serialize_manual_test
@@ -10,7 +10,7 @@ from serializers import serialize_manual_test
 router = APIRouter()
 
 
-@router.get("/programs/{program_id}/manual-tests")
+@router.get("/engagements/{program_id}/manual-tests")
 def get_manual_tests(
     program_id: str,
     limit: int = Query(default=50, ge=1, le=200),
@@ -18,22 +18,22 @@ def get_manual_tests(
     current_user: dict[str, str] = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    get_program_or_404(program_id, current_user, db)
+    get_engagement_or_404(program_id, current_user, db)
     query = db.query(ManualTest).filter(ManualTest.program_id == program_id)
     total = query.count()
     tests = query.order_by(ManualTest.created_at.desc()).offset(offset).limit(limit).all()
     return {"manual_tests": [serialize_manual_test(t) for t in tests], "total": total, "offset": offset, "limit": limit}
 
 
-@router.post("/programs/{program_id}/manual-tests")
+@router.post("/engagements/{program_id}/manual-tests")
 def add_manual_test(
     program_id: str,
     payload: ManualTestCreate,
     current_user: dict[str, str] = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    program = get_program_or_404(program_id, current_user, db)
-    require_member_write(program, current_user, db)
+    engagement = get_engagement_or_404(program_id, current_user, db)
+    require_member_write(engagement, current_user, db)
     test = ManualTest(
         program_id=program_id,
         title=payload.title,
@@ -50,7 +50,7 @@ def add_manual_test(
     return serialize_manual_test(test)
 
 
-@router.patch("/programs/{program_id}/manual-tests/{test_id}")
+@router.patch("/engagements/{program_id}/manual-tests/{test_id}")
 def update_manual_test(
     program_id: str,
     test_id: str,
@@ -58,8 +58,8 @@ def update_manual_test(
     current_user: dict[str, str] = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    program = get_program_or_404(program_id, current_user, db)
-    require_member_write(program, current_user, db)
+    engagement = get_engagement_or_404(program_id, current_user, db)
+    require_member_write(engagement, current_user, db)
     test = db.query(ManualTest).filter(
         ManualTest.id == test_id,
         ManualTest.program_id == program_id,
@@ -74,15 +74,15 @@ def update_manual_test(
     return serialize_manual_test(test)
 
 
-@router.delete("/programs/{program_id}/manual-tests/{test_id}")
+@router.delete("/engagements/{program_id}/manual-tests/{test_id}")
 def delete_manual_test(
     program_id: str,
     test_id: str,
     current_user: dict[str, str] = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    program = get_program_or_404(program_id, current_user, db)
-    require_member_write(program, current_user, db)
+    engagement = get_engagement_or_404(program_id, current_user, db)
+    require_member_write(engagement, current_user, db)
     test = db.query(ManualTest).filter(
         ManualTest.id == test_id,
         ManualTest.program_id == program_id,

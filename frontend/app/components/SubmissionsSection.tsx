@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useState } from "react";
-import { Finding, Program, Submission } from "../types";
+import { Finding, Engagement, Submission } from "../types";
 import { useAppContext } from "../context/AppContext";
 
 type SubmissionStatus = "submitted" | "triaged" | "accepted" | "duplicate" | "na" | "paid" | "rejected";
@@ -48,7 +48,7 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-export default function SubmissionsSection({ program }: { program: Program }) {
+export default function SubmissionsSection({ engagement }: { engagement: Engagement }) {
   const { authFetch, setMessage, navigate, state: { submissionPrefill }, dispatch } = useAppContext();
   const [submissions,    setSubmissions]    = useState<Submission[]>([]);
   const [loading,        setLoading]        = useState(true);
@@ -69,14 +69,14 @@ export default function SubmissionsSection({ program }: { program: Program }) {
       if (status)   p.set("status",   status);
       if (platform) p.set("platform", platform);
       const qs = p.toString() ? `?${p.toString()}` : "";
-      const res = await authFetch(`/programs/${program.id}/submissions${qs}`, { signal });
+      const res = await authFetch(`/engagements/${engagement.id}/submissions${qs}`, { signal });
       if (!res.ok) throw new Error();
       const data = await res.json();
       setSubmissions(Array.isArray(data?.submissions) ? data.submissions : []);
     } catch (e) {
       if ((e as { name?: string }).name !== "AbortError") setMessage("Failed to load submissions.");
     } finally { setLoading(false); }
-  }, [program.id, authFetch, setMessage]);
+  }, [engagement.id, authFetch, setMessage]);
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -107,10 +107,10 @@ export default function SubmissionsSection({ program }: { program: Program }) {
   // Load findings lazily the first time the form opens so the picker is populated.
   useEffect(() => {
     if (!showForm || findings.length > 0) return;
-    void authFetch(`/programs/${program.id}/findings?limit=200&offset=0`)
+    void authFetch(`/engagements/${engagement.id}/findings?limit=200&offset=0`)
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => { if (d?.findings) setFindings(d.findings as Finding[]); });
-  }, [showForm, findings.length, authFetch, program.id]);
+  }, [showForm, findings.length, authFetch, engagement.id]);
 
   async function create() {
     if (!form.title.trim()) return;
@@ -127,7 +127,7 @@ export default function SubmissionsSection({ program }: { program: Program }) {
         report_id: form.report_id || "",
         finding_id: form.finding_id || "",
       };
-      const res = await authFetch(`/programs/${program.id}/submissions`, { method: "POST", body: JSON.stringify(body) });
+      const res = await authFetch(`/engagements/${engagement.id}/submissions`, { method: "POST", body: JSON.stringify(body) });
       if (!res.ok) throw new Error();
       const created: Submission = await res.json();
       setSubmissions((p) => [created, ...p]);
@@ -146,7 +146,7 @@ export default function SubmissionsSection({ program }: { program: Program }) {
         body.payout_usd = parseFloat(editForm.payout_usd as string);
       if (editForm.notes !== undefined) body.notes = editForm.notes;
       if (editForm.platform_reference !== undefined) body.platform_reference = editForm.platform_reference;
-      const res = await authFetch(`/programs/${program.id}/submissions/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+      const res = await authFetch(`/engagements/${engagement.id}/submissions/${id}`, { method: "PATCH", body: JSON.stringify(body) });
       if (!res.ok) throw new Error();
       const updated: Submission = await res.json();
       setSubmissions((p) => p.map((s) => (s.id === id ? updated : s)));
@@ -158,7 +158,7 @@ export default function SubmissionsSection({ program }: { program: Program }) {
   async function remove(id: string) {
     if (!confirm("Delete this submission? This cannot be undone.")) return;
     try {
-      const res = await authFetch(`/programs/${program.id}/submissions/${id}`, { method: "DELETE" });
+      const res = await authFetch(`/engagements/${engagement.id}/submissions/${id}`, { method: "DELETE" });
       if (!res.ok) throw new Error();
       setSubmissions((p) => p.filter((s) => s.id !== id));
       if (editingId === id) setEditingId(null);

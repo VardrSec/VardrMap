@@ -1,6 +1,6 @@
-"""A viewer-role member may read a program but must not write anything.
+"""A viewer-role member may read an engagement but must not write anything.
 
-Setup: owner (gh_user1) creates a program and invites gh_user2 as a "viewer".
+Setup: owner (gh_user1) creates an engagement and invites gh_user2 as a "viewer".
 gh_user2's headers are `other_headers`. Every write must return 403; reads 200.
 The write guard (`require_member_write`) fires before any resource lookup, so a
 403 is expected even when the target id does not exist.
@@ -12,8 +12,8 @@ import pytest
 
 @pytest.fixture
 def viewer_program(client, auth_headers):
-    """Program owned by gh_user1 with gh_user2 invited as a viewer. Yields its id."""
-    pid = client.post("/programs", json={"name": "Viewer Program"}, headers=auth_headers).json()["id"]
+    """Engagement owned by gh_user1 with gh_user2 invited as a viewer. Yields its id."""
+    pid = client.post("/programs", json={"name": "Viewer Engagement"}, headers=auth_headers).json()["id"]
     res = client.post(
         f"/programs/{pid}/members",
         json={"github_id": "gh_user2", "role": "viewer"},
@@ -133,7 +133,7 @@ def test_viewer_cannot_add_scope(client, other_headers, viewer_program):
 
 def test_regular_member_can_write(client, auth_headers, other_headers):
     """Sanity check: a non-viewer 'member' CAN write, so the guard targets viewers only."""
-    pid = client.post("/programs", json={"name": "Member Program"}, headers=auth_headers).json()["id"]
+    pid = client.post("/programs", json={"name": "Member Engagement"}, headers=auth_headers).json()["id"]
     client.post(f"/programs/{pid}/members", json={"github_id": "gh_user2", "role": "member"}, headers=auth_headers)
     res = _post(client, other_headers, f"/programs/{pid}/manual-tests", {"title": "member can write"})
     assert res.status_code == 200

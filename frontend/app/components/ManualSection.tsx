@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ManualTestFormState, Program, ManualTest } from "../types";
+import { ManualTestFormState, Engagement, ManualTest } from "../types";
 import { useAppContext } from "../context/AppContext";
 import { Panel, Input, Textarea, SelectField, PrimaryButton, DangerButton, StatusBadge, SectionHeader } from "./ui";
 
@@ -22,12 +22,12 @@ function ManualForm({ value, onChange }: { value: ManualFormState; onChange: (v:
 }
 
 export default function ManualSection({
-  program, hideHeader, prefill,
+  engagement, hideHeader, prefill,
 }: {
-  program: Program; hideHeader?: boolean;
+  engagement: Engagement; hideHeader?: boolean;
   prefill?: { data: ManualFormState; epoch: number };
 }) {
-  const { authFetch, setMessage, refreshSelectedProgram, navigate, dispatch } = useAppContext();
+  const { authFetch, setMessage, refreshSelectedEngagement, navigate, dispatch } = useAppContext();
   const [manualTests, setManualTests] = useState<ManualTest[]>([]);
   const [form,        setForm]        = useState<ManualFormState>(EMPTY);
   const [editingId,   setEditingId]   = useState<string | null>(null);
@@ -42,23 +42,23 @@ export default function ManualSection({
 
   const loadManualTests = useCallback(async () => {
     try {
-      const res = await authFetch(`/programs/${program.id}/manual-tests`);
+      const res = await authFetch(`/engagements/${engagement.id}/manual-tests`);
       if (!res.ok) throw new Error();
       const data = await res.json();
       setManualTests(Array.isArray(data?.manual_tests) ? data.manual_tests : []);
     } catch { setMessage("Failed to load manual tests."); }
-  }, [program.id, authFetch, setMessage]); // authFetch and setMessage are stable (context useCallback with [] deps)
+  }, [engagement.id, authFetch, setMessage]); // authFetch and setMessage are stable (context useCallback with [] deps)
 
   useEffect(() => { void loadManualTests(); }, [loadManualTests]);
 
   async function addManualTest() {
     if (!form.title.trim()) return;
     try {
-      const res = await authFetch(`/programs/${program.id}/manual-tests`, { method: "POST", body: JSON.stringify(form) });
+      const res = await authFetch(`/engagements/${engagement.id}/manual-tests`, { method: "POST", body: JSON.stringify(form) });
       if (!res.ok) throw new Error();
       setForm(EMPTY);
       await loadManualTests();
-      await refreshSelectedProgram(program.id);
+      await refreshSelectedEngagement(engagement.id);
       setMessage("Manual test added.");
     } catch { setMessage("Failed to add manual test."); }
   }
@@ -66,9 +66,9 @@ export default function ManualSection({
   async function deleteManualTest(testId: string) {
     if (!confirm("Delete this manual test? This cannot be undone.")) return;
     try {
-      await authFetch(`/programs/${program.id}/manual-tests/${testId}`, { method: "DELETE" });
+      await authFetch(`/engagements/${engagement.id}/manual-tests/${testId}`, { method: "DELETE" });
       await loadManualTests();
-      await refreshSelectedProgram(program.id);
+      await refreshSelectedEngagement(engagement.id);
       setMessage("Manual test deleted.");
     } catch { setMessage("Failed to delete manual test."); }
   }
@@ -97,11 +97,11 @@ export default function ManualSection({
 
   async function saveEdit(testId: string) {
     try {
-      const res = await authFetch(`/programs/${program.id}/manual-tests/${testId}`, { method: "PATCH", body: JSON.stringify(editForm) });
+      const res = await authFetch(`/engagements/${engagement.id}/manual-tests/${testId}`, { method: "PATCH", body: JSON.stringify(editForm) });
       if (!res.ok) throw new Error();
       setEditingId(null);
       await loadManualTests();
-      await refreshSelectedProgram(program.id);
+      await refreshSelectedEngagement(engagement.id);
       setMessage("Manual test updated.");
     } catch { setMessage("Failed to update manual test."); }
   }

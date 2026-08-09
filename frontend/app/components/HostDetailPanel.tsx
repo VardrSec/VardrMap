@@ -5,7 +5,7 @@ import type { Finding, ReconItem, ScanItem, Service } from "../types";
 import { useAppContext } from "../context/AppContext";
 
 type Props = {
-  programId: string;
+  engagementId: string;
   item: ReconItem;
   onClose: () => void;
 };
@@ -23,7 +23,7 @@ function Empty() {
   return <p className="text-xs text-[#3a3a3a]">None found.</p>;
 }
 
-export default function HostDetailPanel({ programId, item, onClose }: Props) {
+export default function HostDetailPanel({ engagementId, item, onClose }: Props) {
   const { authFetch, navigate } = useAppContext();
   const [services,  setServices]  = useState<Service[]>([]);
   const [scans,     setScans]     = useState<ScanItem[]>([]);
@@ -37,9 +37,9 @@ export default function HostDetailPanel({ programId, item, onClose }: Props) {
     let cancelled = false;
 
     Promise.all([
-      authFetch(`/programs/${programId}/services`),
-      authFetch(`/programs/${programId}/scans?limit=500&offset=0`),
-      authFetch(`/programs/${programId}/findings?limit=500&offset=0`),
+      authFetch(`/engagements/${engagementId}/services`),
+      authFetch(`/engagements/${engagementId}/scans?limit=500&offset=0`),
+      authFetch(`/engagements/${engagementId}/findings?limit=500&offset=0`),
     ]).then(async ([svcRes, scanRes, findRes]) => {
       if (cancelled) return;
       const svcData  = svcRes.ok  ? await svcRes.json()  : null;
@@ -56,7 +56,7 @@ export default function HostDetailPanel({ programId, item, onClose }: Props) {
     });
 
     return () => { cancelled = true; };
-  }, [programId, host, authFetch]);
+  }, [engagementId, host, authFetch]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) { if (e.key === "Escape") onClose(); }

@@ -1,14 +1,14 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef } from "react";
-import { AppSession, AuthFetch, Finding, Program, Report, ScanItem, Section } from "../types";
+import { AppSession, AuthFetch, EngagementStatus, EngagementType, Finding, Engagement, Report, ScanItem, Section } from "../types";
 import { AppAction, AppState, appReducer, initialState } from "./appReducer";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
 // Defensively coerce every field so components never have to deal with undefined
 // coming from the API — e.g. a missing recon_count just becomes 0.
-function normalizeProgram(raw: unknown): Program {
+function normalizeEngagement(raw: unknown): Engagement {
   const p = raw && typeof raw === "object" ? raw as Record<string, unknown> : {};
   const scope = p.scope && typeof p.scope === "object" ? p.scope as Record<string, unknown> : {};
   const n = (v: unknown) => (typeof v === "number" ? v : 0);
@@ -24,6 +24,13 @@ function normalizeProgram(raw: unknown): Program {
     scope_summary:        String(p.scope_summary ?? ""),
     severity_guidance:    String(p.severity_guidance ?? ""),
     safe_harbor_notes:    String(p.safe_harbor_notes ?? ""),
+    // Engagement context. Defaults match the backend's, so an engagement
+    // created before these existed normalises to a bug bounty programme.
+    client_id:            String(p.client_id ?? ""),
+    engagement_type:      (p.engagement_type as EngagementType) ?? "bug_bounty",
+    engagement_status:    (p.engagement_status as EngagementStatus) ?? "active",
+    starts_at:            String(p.starts_at ?? ""),
+    ends_at:              String(p.ends_at ?? ""),
     scope: {
       in:  Array.isArray(scope.in)  ? scope.in  : [],
       out: Array.isArray(scope.out) ? scope.out : [],
@@ -41,7 +48,7 @@ function normalizeProgram(raw: unknown): Program {
   };
 }
 
-export { normalizeProgram };
+export { normalizeEngagement };
 
 async function getFrontendSession(): Promise<AppSession | null> {
   try {
@@ -55,15 +62,15 @@ async function getFrontendSession(): Promise<AppSession | null> {
 
 export type AppContextValue = {
   state: AppState;
-  selectedProgram: Program | null;
+  selectedEngagement: Engagement | null;
   authFetch: AuthFetch;
   setMessage: (msg: string) => void;
-  selectProgram: (id: string) => void;
+  selectEngagement: (id: string) => void;
   navigate: (section: Section) => void;
   navigateToDashboard: (toolOrAction?: string) => void;
-  refreshSelectedProgram: (programId?: string) => Promise<void>;
-  loadPrograms: () => Promise<void>;
-  deleteProgram: () => Promise<void>;
+  refreshSelectedEngagement: (engagementId?: string) => Promise<void>;
+  loadEngagements: () => Promise<void>;
+  deleteEngagement: () => Promise<void>;
   promoteScanToFinding: (scan: ScanItem) => void;
   promoteToReport: (finding: Finding) => void;
   promoteToSubmission: (report: Report) => void;
@@ -107,7 +114,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     dispatch({ type: "SET_MESSAGE", message: msg });
   }, []);
 
-  const selectProgram = useCallback((id: string) => {
+  const selectEngagement = useCallback((id: string) => {
     dispatch({ type: "PROGRAM_SELECT", id });
   }, []);
 
@@ -123,41 +130,41 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const loadPrograms = useCallback(async () => {
+  const loadEngagements = useCallback(async () => {
     try {
-      const res = await authFetch("/programs");
+      const res = await authFetch("/engagements");
       if (!res.ok) throw new Error();
       const data = await res.json();
-      const programs = Array.isArray(data?.programs) ? data.programs.map(normalizeProgram) : [];
-      dispatch({ type: "PROGRAMS_LOADED", programs });
+      const engagements = Array.isArray(data?.engagements) ? data.engagements.map(normalizeEngagement) : [];
+      dispatch({ type: "ENGAGEMENTS_LOADED", engagements });
     } catch {
-      dispatch({ type: "SET_MESSAGE", message: "Failed to load programs." });
+      dispatch({ type: "SET_MESSAGE", message: "Failed to load engagements." });
     }
   }, [authFetch]);
 
-  const refreshSelectedProgram = useCallback(async (programId?: string) => {
-    const id = programId || state.selectedProgramId;
+  const refreshSelectedEngagement = useCallback(async (engagementId?: string) => {
+    const id = engagementId || state.selectedEngagementId;
     if (!id) return;
     try {
-      const res = await authFetch(`/programs/${id}`);
+      const res = await authFetch(`/engagements/${id}`);
       if (!res.ok) throw new Error();
-      dispatch({ type: "PROGRAM_UPDATED", program: normalizeProgram(await res.json()) });
+      dispatch({ type: "ENGAGEMENT_UPDATED", engagement: normalizeEngagement(await res.json()) });
     } catch {
-      dispatch({ type: "SET_MESSAGE", message: "Failed to refresh program." });
+      dispatch({ type: "SET_MESSAGE", message: "Failed to refresh engagement." });
     }
-  }, [state.selectedProgramId, authFetch]);
+  }, [state.selectedEngagementId, authFetch]);
 
-  const deleteProgram = useCallback(async () => {
-    if (!state.selectedProgramId || !confirm("Delete this program?")) return;
+  const deleteEngagement = useCallback(async () => {
+    if (!state.selectedEngagementId || !confirm("Delete this engagement?")) return;
     try {
-      const res = await authFetch(`/programs/${state.selectedProgramId}`, { method: "DELETE" });
+      const res = await authFetch(`/engagements/${state.selectedEngagementId}`, { method: "DELETE" });
       if (!res.ok) throw new Error();
-      dispatch({ type: "PROGRAM_DELETED", id: state.selectedProgramId });
-      dispatch({ type: "SET_MESSAGE", message: "Program deleted." });
+      dispatch({ type: "ENGAGEMENT_DELETED", id: state.selectedEngagementId });
+      dispatch({ type: "SET_MESSAGE", message: "Engagement deleted." });
     } catch {
-      dispatch({ type: "SET_MESSAGE", message: "Failed to delete program." });
+      dispatch({ type: "SET_MESSAGE", message: "Failed to delete engagement." });
     }
-  }, [state.selectedProgramId, authFetch]);
+  }, [state.selectedEngagementId, authFetch]);
 
   const promoteScanToFinding = useCallback((scan: ScanItem) => {
     dispatch({
@@ -211,33 +218,33 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     })();
   }, []);
 
-  // Load programs once auth completes
+  // Load engagements once auth completes
   useEffect(() => {
     if (!state.authLoading && state.session?.backendToken) {
       void authFetch("/auth/sync", { method: "POST" }).catch(() => {});
-      void loadPrograms();
+      void loadEngagements();
     }
-  // syncUser and loadPrograms are stable (empty or auth-token deps) but including
+  // syncUser and loadEngagements are stable (empty or auth-token deps) but including
   // them here would re-fire on every context render. Intentional omission.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.authLoading, state.session?.backendToken]);
 
-  const selectedProgram = useMemo(
-    () => state.programs.find((p) => p.id === state.selectedProgramId) ?? null,
-    [state.programs, state.selectedProgramId],
+  const selectedEngagement = useMemo(
+    () => state.engagements.find((p) => p.id === state.selectedEngagementId) ?? null,
+    [state.engagements, state.selectedEngagementId],
   );
 
   const value: AppContextValue = {
     state,
-    selectedProgram,
+    selectedEngagement,
     authFetch,
     setMessage,
-    selectProgram,
+    selectEngagement,
     navigate,
     navigateToDashboard,
-    refreshSelectedProgram,
-    loadPrograms,
-    deleteProgram,
+    refreshSelectedEngagement,
+    loadEngagements,
+    deleteEngagement,
     promoteScanToFinding,
     promoteToReport,
     promoteToSubmission,

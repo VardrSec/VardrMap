@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from db import get_db
-from deps import get_current_user, get_program_or_404, log_action, require_member_write
+from deps import get_current_user, get_engagement_or_404, log_action, require_member_write
 from models import ScanItem
 from schemas import BulkScanStatusUpdate, ScanStatusUpdate
 from serializers import serialize_scan_item
@@ -19,7 +19,7 @@ _TRIAGE_BATCH_MAX = 25
 
 _TRIAGE_PROMPT = """\
 You are a bug bounty triage assistant. Below is a JSON array of raw nuclei scan results \
-for a single program. For each result, judge how much a hunter should prioritize it and \
+for a single engagement. For each result, judge how much a hunter should prioritize it and \
 whether it is likely a false positive or low-value noise.
 
 Scan results:
@@ -32,7 +32,7 @@ each element is:
 Return exactly one element per input id, preserving ids verbatim."""
 
 
-@router.get("/programs/{program_id}/scans")
+@router.get("/engagements/{program_id}/scans")
 def get_scans(
     program_id: str,
     limit: int = Query(default=100, ge=1, le=500),
@@ -42,7 +42,7 @@ def get_scans(
     current_user: dict[str, str] = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    get_program_or_404(program_id, current_user, db)
+    get_engagement_or_404(program_id, current_user, db)
     query = db.query(ScanItem).filter(ScanItem.program_id == program_id)
     if status:
         query = query.filter(ScanItem.status == status)
@@ -53,15 +53,15 @@ def get_scans(
     return {"scans": [serialize_scan_item(s) for s in items], "total": total, "offset": offset, "limit": limit}
 
 
-@router.post("/programs/{program_id}/scans/bulk-status")
+@router.post("/engagements/{program_id}/scans/bulk-status")
 def bulk_update_scan_status(
     program_id: str,
     payload: BulkScanStatusUpdate,
     current_user: dict[str, str] = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    program = get_program_or_404(program_id, current_user, db)
-    require_member_write(program, current_user, db)
+    engagement = get_engagement_or_404(program_id, current_user, db)
+    require_member_write(engagement, current_user, db)
     scans = db.query(ScanItem).filter(
         ScanItem.program_id == program_id,
         ScanItem.id.in_(payload.ids),
@@ -78,7 +78,7 @@ class ScanTriageRequest(BaseModel):
     ids: list[str] = Field(default_factory=list)
 
 
-@router.post("/programs/{program_id}/scans/triage")
+@router.post("/engagements/{program_id}/scans/triage")
 def triage_scans(
     program_id: str,
     payload: ScanTriageRequest,
@@ -91,8 +91,8 @@ def triage_scans(
     Unlike the per-finding suggest endpoint, this operates on un-promoted ScanItems —
     it is the first pass over raw tool output, before anything becomes a Finding.
     """
-    program = get_program_or_404(program_id, current_user, db)
-    require_member_write(program, current_user, db)  # AI actions cost money — viewers can't trigger them
+    engagement = get_engagement_or_404(program_id, current_user, db)
+    require_member_write(engagement, current_user, db)  # AI actions cost money — viewers can't trigger them
 
     query = db.query(ScanItem).filter(ScanItem.program_id == program_id)
     if payload.ids:
@@ -158,7 +158,7 @@ def triage_scans(
     return {"triage": triage}
 
 
-@router.patch("/programs/{program_id}/scans/{scan_id}")
+@router.patch("/engagements/{program_id}/scans/{scan_id}")
 def update_scan_status(
     program_id: str,
     scan_id: str,
@@ -166,8 +166,8 @@ def update_scan_status(
     current_user: dict[str, str] = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    program = get_program_or_404(program_id, current_user, db)
-    require_member_write(program, current_user, db)
+    engagement = get_engagement_or_404(program_id, current_user, db)
+    require_member_write(engagement, current_user, db)
     scan = db.query(ScanItem).filter(
         ScanItem.id == scan_id,
         ScanItem.program_id == program_id,

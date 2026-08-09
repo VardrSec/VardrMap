@@ -11,15 +11,25 @@ ScanStatus = Literal["new", "reviewed", "false_positive", "promoted"]
 ScopeKind = Literal["domain", "subdomain", "url", "cidr", "api", "mobile"]
 ReportStatus = Literal["draft", "submitted", "accepted", "duplicate", "informative", "resolved"]
 ToolType = Literal["ffuf", "httpx", "nuclei"]
+EngagementType = Literal["bug_bounty", "pentest", "red_team", "internal"]
+EngagementStatus = Literal["planned", "active", "reporting", "closed"]
+AuthorizationStatus = Literal["active", "expired", "revoked"]
 
 
-class ProgramCreate(BaseModel):
+class EngagementCreate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     platform: Optional[str] = Field(default="", max_length=80)
     program_url: Optional[str] = Field(default="", max_length=500)
     scope_summary: Optional[str] = Field(default="", max_length=5000)
     severity_guidance: Optional[str] = Field(default="", max_length=5000)
     safe_harbor_notes: Optional[str] = Field(default="", max_length=5000)
+    # Engagement context. Defaults keep an unmodified caller creating exactly
+    # what it created before: a bug bounty programme.
+    client_id: Optional[str] = Field(default=None, max_length=64)
+    engagement_type: EngagementType = "bug_bounty"
+    engagement_status: EngagementStatus = "active"
+    starts_at: Optional[str] = Field(default=None, max_length=40)
+    ends_at: Optional[str] = Field(default=None, max_length=40)
 
     @field_validator("name", "platform", mode="before")
     @classmethod
@@ -34,13 +44,18 @@ class ProgramCreate(BaseModel):
     def sanitize_url(cls, v): return validate_safe_url(v)
 
 
-class ProgramUpdate(BaseModel):
+class EngagementUpdate(BaseModel):
     name: Optional[str] = Field(default=None, min_length=1, max_length=120)
     platform: Optional[str] = Field(default=None, max_length=80)
     program_url: Optional[str] = Field(default=None, max_length=500)
     scope_summary: Optional[str] = Field(default=None, max_length=5000)
     severity_guidance: Optional[str] = Field(default=None, max_length=5000)
     safe_harbor_notes: Optional[str] = Field(default=None, max_length=5000)
+    client_id: Optional[str] = Field(default=None, max_length=64)
+    engagement_type: Optional[EngagementType] = None
+    engagement_status: Optional[EngagementStatus] = None
+    starts_at: Optional[str] = Field(default=None, max_length=40)
+    ends_at: Optional[str] = Field(default=None, max_length=40)
 
     @field_validator("name", "platform", mode="before")
     @classmethod
@@ -240,3 +255,76 @@ class ApiKeyCreate(BaseModel):
     @field_validator("label", mode="before")
     @classmethod
     def sanitize_label(cls, v): return sanitize_identifier(v) if v else ""
+
+
+class ClientCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    contact_name: Optional[str] = Field(default="", max_length=200)
+    contact_email: Optional[str] = Field(default="", max_length=200)
+    notes: Optional[str] = Field(default="", max_length=5000)
+
+    @field_validator("name", "contact_name", "contact_email", mode="before")
+    @classmethod
+    def sanitize_short(cls, v): return sanitize_identifier(v)
+
+    @field_validator("notes", mode="before")
+    @classmethod
+    def sanitize_notes(cls, v): return strip_html(v)
+
+
+class ClientUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    contact_name: Optional[str] = Field(default=None, max_length=200)
+    contact_email: Optional[str] = Field(default=None, max_length=200)
+    notes: Optional[str] = Field(default=None, max_length=5000)
+
+    @field_validator("name", "contact_name", "contact_email", mode="before")
+    @classmethod
+    def sanitize_short(cls, v): return sanitize_identifier(v)
+
+    @field_validator("notes", mode="before")
+    @classmethod
+    def sanitize_notes(cls, v): return strip_html(v)
+
+
+class AuthorizationCreate(BaseModel):
+    """Permission to test, and the window it covers.
+
+    Dates are ISO-8601 strings rather than datetimes so the payload matches the
+    rest of this API, which serialises timestamps as strings throughout.
+    """
+
+    permits: Optional[str] = Field(default="", max_length=10000)
+    authorized_by: Optional[str] = Field(default="", max_length=200)
+    authorized_at: Optional[str] = Field(default=None, max_length=40)
+    reference: Optional[str] = Field(default="", max_length=500)
+    window_start: Optional[str] = Field(default=None, max_length=40)
+    window_end: Optional[str] = Field(default=None, max_length=40)
+    notes: Optional[str] = Field(default="", max_length=5000)
+
+    @field_validator("authorized_by", "reference", mode="before")
+    @classmethod
+    def sanitize_short(cls, v): return sanitize_identifier(v)
+
+    @field_validator("permits", "notes", mode="before")
+    @classmethod
+    def sanitize_long(cls, v): return strip_html(v)
+
+
+class AuthorizationUpdate(BaseModel):
+    permits: Optional[str] = Field(default=None, max_length=10000)
+    authorized_by: Optional[str] = Field(default=None, max_length=200)
+    authorized_at: Optional[str] = Field(default=None, max_length=40)
+    reference: Optional[str] = Field(default=None, max_length=500)
+    window_start: Optional[str] = Field(default=None, max_length=40)
+    window_end: Optional[str] = Field(default=None, max_length=40)
+    status: Optional[AuthorizationStatus] = None
+    notes: Optional[str] = Field(default=None, max_length=5000)
+
+    @field_validator("authorized_by", "reference", mode="before")
+    @classmethod
+    def sanitize_short(cls, v): return sanitize_identifier(v)
+
+    @field_validator("permits", "notes", mode="before")
+    @classmethod
+    def sanitize_long(cls, v): return strip_html(v)

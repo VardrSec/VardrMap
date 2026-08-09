@@ -7,11 +7,13 @@ jest.mock("remark-gfm", () => ({ __esModule: true, default: () => {} }));
 
 import { renderWithApp } from "../../../test-utils/renderWithApp";
 import SubmissionsSection from "../SubmissionsSection";
-import type { Program } from "../../types";
+import type { Engagement } from "../../types";
 
-const PROGRAM: Program = {
-  id: "prog-1", name: "Test Program", platform: "", program_url: "",
+const PROGRAM: Engagement = {
+  id: "prog-1", name: "Test Engagement", platform: "", program_url: "",
   scope_summary: "", severity_guidance: "", safe_harbor_notes: "",
+  client_id: "", engagement_type: "bug_bounty", engagement_status: "active",
+  starts_at: "", ends_at: "",
   scope: { in: [], out: [] }, imports: [],
   recon_count: 0, scans_count: 0, manual_tests_count: 0,
   findings_count: 0, findings_by_severity: {}, findings_by_status: {}, reports_count: 0,
@@ -27,19 +29,19 @@ const SUBMISSION = {
 };
 
 const EMPTY_ROUTES = {
-  "GET /programs/prog-1/submissions": { body: { submissions: [] } },
+  "GET /engagements/prog-1/submissions": { body: { submissions: [] } },
 };
 
 describe("SubmissionsSection", () => {
   it("renders stats row after loading with no submissions", async () => {
-    renderWithApp(<SubmissionsSection program={PROGRAM} />, { routes: EMPTY_ROUTES });
+    renderWithApp(<SubmissionsSection engagement={PROGRAM} />, { routes: EMPTY_ROUTES });
     expect(await screen.findByText("Total submitted")).toBeInTheDocument();
   });
 
   it("renders loaded submissions in the table", async () => {
-    renderWithApp(<SubmissionsSection program={PROGRAM} />, {
+    renderWithApp(<SubmissionsSection engagement={PROGRAM} />, {
       routes: {
-        "GET /programs/prog-1/submissions": { body: { submissions: [SUBMISSION] } },
+        "GET /engagements/prog-1/submissions": { body: { submissions: [SUBMISSION] } },
       },
     });
     expect(await screen.findByText("SSRF via redirect")).toBeInTheDocument();
@@ -50,10 +52,10 @@ describe("SubmissionsSection", () => {
 
   it("creates a submission via POST and appends it to the list", async () => {
     const created = { ...SUBMISSION, id: "s2", title: "Open Redirect" };
-    const { authFetch, setMessage } = renderWithApp(<SubmissionsSection program={PROGRAM} />, {
+    const { authFetch, setMessage } = renderWithApp(<SubmissionsSection engagement={PROGRAM} />, {
       routes: {
         ...EMPTY_ROUTES,
-        "POST /programs/prog-1/submissions": { body: created },
+        "POST /engagements/prog-1/submissions": { body: created },
       },
     });
 
@@ -67,7 +69,7 @@ describe("SubmissionsSection", () => {
 
     await waitFor(() =>
       expect(authFetch).toHaveBeenCalledWith(
-        "/programs/prog-1/submissions",
+        "/engagements/prog-1/submissions",
         expect.objectContaining({ method: "POST" }),
       ),
     );
@@ -76,10 +78,10 @@ describe("SubmissionsSection", () => {
 
   it("deletes a submission via DELETE and removes it from the list", async () => {
     window.confirm = jest.fn(() => true);
-    const { authFetch, setMessage } = renderWithApp(<SubmissionsSection program={PROGRAM} />, {
+    const { authFetch, setMessage } = renderWithApp(<SubmissionsSection engagement={PROGRAM} />, {
       routes: {
-        "GET /programs/prog-1/submissions": { body: { submissions: [SUBMISSION] } },
-        "DELETE /programs/prog-1/submissions/s1": { body: {} },
+        "GET /engagements/prog-1/submissions": { body: { submissions: [SUBMISSION] } },
+        "DELETE /engagements/prog-1/submissions/s1": { body: {} },
       },
     });
 
@@ -88,7 +90,7 @@ describe("SubmissionsSection", () => {
 
     await waitFor(() =>
       expect(authFetch).toHaveBeenCalledWith(
-        "/programs/prog-1/submissions/s1",
+        "/engagements/prog-1/submissions/s1",
         expect.objectContaining({ method: "DELETE" }),
       ),
     );
@@ -96,7 +98,7 @@ describe("SubmissionsSection", () => {
   });
 
   it("applies submissionPrefill: opens form with title pre-filled and clears the prefill", async () => {
-    const { dispatch } = renderWithApp(<SubmissionsSection program={PROGRAM} />, {
+    const { dispatch } = renderWithApp(<SubmissionsSection engagement={PROGRAM} />, {
       routes: EMPTY_ROUTES,
       state: {
         submissionPrefill: { title: "Prefilled Bug", report_id: "r1", finding_id: "f1" },

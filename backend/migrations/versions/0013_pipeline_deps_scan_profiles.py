@@ -10,7 +10,7 @@ Three additive changes supporting the premium-automation work:
   eligible in GET /jobs/pending (subfinder -> httpx -> nuclei chains).
 - scan_items.job_id / recon_items already had job_id; scan_items gains it for
   job -> results provenance (which run produced this finding).
-- scan_profiles — reusable saved tool + config presets per program.
+- scan_profiles — reusable saved tool + config presets per engagement.
 """
 from typing import Sequence, Union
 

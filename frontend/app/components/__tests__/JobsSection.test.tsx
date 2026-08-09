@@ -14,11 +14,11 @@ import JobsSection from "../JobsSection";
 const PROGRAM_ID = "prog-1";
 
 const BASE_ROUTES = {
-  [`GET /programs/${PROGRAM_ID}/jobs`]: { body: { jobs: [] } },
+  [`GET /engagements/${PROGRAM_ID}/jobs`]: { body: { jobs: [] } },
   "GET /runner/status": { body: { online: false } },
-  [`GET /programs/${PROGRAM_ID}/recon?limit=1`]: { body: { total: 0 } },
-  [`GET /programs/${PROGRAM_ID}/schedules`]: { body: { schedules: [] } },
-  [`GET /programs/${PROGRAM_ID}/scan-profiles`]: { body: { profiles: [] } },
+  [`GET /engagements/${PROGRAM_ID}/recon?limit=1`]: { body: { total: 0 } },
+  [`GET /engagements/${PROGRAM_ID}/schedules`]: { body: { schedules: [] } },
+  [`GET /engagements/${PROGRAM_ID}/scan-profiles`]: { body: { profiles: [] } },
 };
 
 const NEW_JOB = {
@@ -30,28 +30,28 @@ const NEW_JOB = {
 describe("JobsSection", () => {
   it("fetches jobs, runner status, recon count, and schedules on mount", async () => {
     const { authFetch } = renderWithApp(
-      <JobsSection programId={PROGRAM_ID} />,
+      <JobsSection engagementId={PROGRAM_ID} />,
       { routes: BASE_ROUTES },
     );
 
     await waitFor(() => {
-      expect(authFetch).toHaveBeenCalledWith(`/programs/${PROGRAM_ID}/jobs`);
+      expect(authFetch).toHaveBeenCalledWith(`/engagements/${PROGRAM_ID}/jobs`);
       expect(authFetch).toHaveBeenCalledWith("/runner/status");
-      expect(authFetch).toHaveBeenCalledWith(`/programs/${PROGRAM_ID}/recon?limit=1`);
-      expect(authFetch).toHaveBeenCalledWith(`/programs/${PROGRAM_ID}/schedules`);
+      expect(authFetch).toHaveBeenCalledWith(`/engagements/${PROGRAM_ID}/recon?limit=1`);
+      expect(authFetch).toHaveBeenCalledWith(`/engagements/${PROGRAM_ID}/schedules`);
     });
   });
 
   it("renders the Composer panel", async () => {
-    renderWithApp(<JobsSection programId={PROGRAM_ID} />, { routes: BASE_ROUTES });
+    renderWithApp(<JobsSection engagementId={PROGRAM_ID} />, { routes: BASE_ROUTES });
     expect(await screen.findByText("Queue a Job")).toBeInTheDocument();
   });
 
   it("queues a subfinder→httpx→nuclei chain via POST /pipelines from the Recon Pipeline button", async () => {
-    const { authFetch } = renderWithApp(<JobsSection programId={PROGRAM_ID} />, {
+    const { authFetch } = renderWithApp(<JobsSection engagementId={PROGRAM_ID} />, {
       routes: {
         ...BASE_ROUTES,
-        [`POST /programs/${PROGRAM_ID}/pipelines`]: { body: { jobs: [] } },
+        [`POST /engagements/${PROGRAM_ID}/pipelines`]: { body: { jobs: [] } },
       },
     });
 
@@ -60,20 +60,20 @@ describe("JobsSection", () => {
 
     await waitFor(() =>
       expect(authFetch).toHaveBeenCalledWith(
-        `/programs/${PROGRAM_ID}/pipelines`,
+        `/engagements/${PROGRAM_ID}/pipelines`,
         expect.objectContaining({ method: "POST" }),
       ),
     );
-    const call = authFetch.mock.calls.find((c: unknown[]) => c[0] === `/programs/${PROGRAM_ID}/pipelines`);
+    const call = authFetch.mock.calls.find((c: unknown[]) => c[0] === `/engagements/${PROGRAM_ID}/pipelines`);
     const stages = JSON.parse((call![1] as { body: string }).body).stages;
     expect(stages.map((s: { tool_type: string }) => s.tool_type)).toEqual(["subfinder", "httpx", "nuclei"]);
   });
 
   it("queues a one-time job via POST /jobs when Queue Job is clicked", async () => {
-    const { authFetch } = renderWithApp(<JobsSection programId={PROGRAM_ID} />, {
+    const { authFetch } = renderWithApp(<JobsSection engagementId={PROGRAM_ID} />, {
       routes: {
         ...BASE_ROUTES,
-        [`POST /programs/${PROGRAM_ID}/jobs`]: { body: NEW_JOB },
+        [`POST /engagements/${PROGRAM_ID}/jobs`]: { body: NEW_JOB },
       },
     });
 
@@ -82,7 +82,7 @@ describe("JobsSection", () => {
 
     await waitFor(() =>
       expect(authFetch).toHaveBeenCalledWith(
-        `/programs/${PROGRAM_ID}/jobs`,
+        `/engagements/${PROGRAM_ID}/jobs`,
         expect.objectContaining({ method: "POST" }),
       ),
     );
@@ -94,10 +94,10 @@ describe("JobsSection", () => {
       config: {}, interval: "daily", enabled: true,
       next_run_at: null, last_run_at: null, created_at: new Date().toISOString(),
     };
-    const { authFetch } = renderWithApp(<JobsSection programId={PROGRAM_ID} />, {
+    const { authFetch } = renderWithApp(<JobsSection engagementId={PROGRAM_ID} />, {
       routes: {
         ...BASE_ROUTES,
-        [`POST /programs/${PROGRAM_ID}/schedules`]: { body: SCHEDULE },
+        [`POST /engagements/${PROGRAM_ID}/schedules`]: { body: SCHEDULE },
       },
     });
 
@@ -114,7 +114,7 @@ describe("JobsSection", () => {
 
     await waitFor(() =>
       expect(authFetch).toHaveBeenCalledWith(
-        `/programs/${PROGRAM_ID}/schedules`,
+        `/engagements/${PROGRAM_ID}/schedules`,
         expect.objectContaining({ method: "POST" }),
       ),
     );

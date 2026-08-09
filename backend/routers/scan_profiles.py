@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from db import get_db
-from deps import get_current_user, get_program_or_404, log_action, require_member_write
+from deps import get_current_user, get_engagement_or_404, log_action, require_member_write
 from models import ScanProfile
 from routers.jobs import _VALID_SOURCES, _VALID_TOOLS, _validate_job_config
 
@@ -31,13 +31,13 @@ def serialize_profile(p: ScanProfile) -> dict:
     }
 
 
-@router.get("/programs/{program_id}/scan-profiles")
+@router.get("/engagements/{program_id}/scan-profiles")
 def list_profiles(
     program_id: str,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    get_program_or_404(program_id, current_user, db)
+    get_engagement_or_404(program_id, current_user, db)
     profiles = (
         db.query(ScanProfile)
         .filter(ScanProfile.program_id == program_id)
@@ -47,7 +47,7 @@ def list_profiles(
     return {"profiles": [serialize_profile(p) for p in profiles]}
 
 
-@router.post("/programs/{program_id}/scan-profiles", status_code=201)
+@router.post("/engagements/{program_id}/scan-profiles", status_code=201)
 def create_profile(
     program_id: str,
     body: ProfileCreate,
@@ -56,8 +56,8 @@ def create_profile(
 ):
     """Save a reusable tool + config preset. Validated identically to a job so a
     profile can never queue a scan the job endpoint would reject."""
-    program = get_program_or_404(program_id, current_user, db)
-    require_member_write(program, current_user, db)
+    engagement = get_engagement_or_404(program_id, current_user, db)
+    require_member_write(engagement, current_user, db)
     if body.tool_type not in _VALID_TOOLS:
         raise HTTPException(status_code=400, detail=f"tool_type must be one of {sorted(_VALID_TOOLS)}")
     if body.target_source not in _VALID_SOURCES:
@@ -81,15 +81,15 @@ def create_profile(
     return serialize_profile(profile)
 
 
-@router.delete("/programs/{program_id}/scan-profiles/{profile_id}")
+@router.delete("/engagements/{program_id}/scan-profiles/{profile_id}")
 def delete_profile(
     program_id: str,
     profile_id: str,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    program = get_program_or_404(program_id, current_user, db)
-    require_member_write(program, current_user, db)
+    engagement = get_engagement_or_404(program_id, current_user, db)
+    require_member_write(engagement, current_user, db)
     profile = (
         db.query(ScanProfile)
         .filter(ScanProfile.id == profile_id, ScanProfile.program_id == program_id)

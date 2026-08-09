@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Program, Finding, FindingFormState } from "../types";
+import { Engagement, Finding, FindingFormState } from "../types";
 import { useAppContext } from "../context/AppContext";
 import { Panel, Input, Textarea, SelectField, PrimaryButton, DangerButton, SeverityBadge, StatusBadge, SectionHeader } from "./ui";
 
@@ -26,9 +26,9 @@ function FindingForm({ value, onChange }: { value: FindingFormState; onChange: (
   );
 }
 
-export default function FindingsSection({ program }: { program: Program }) {
+export default function FindingsSection({ engagement }: { engagement: Engagement }) {
   const {
-    authFetch, setMessage, refreshSelectedProgram, promoteToReport, navigate,
+    authFetch, setMessage, refreshSelectedEngagement, promoteToReport, navigate,
     state: { findingPrefill }, dispatch,
   } = useAppContext();
 
@@ -61,7 +61,7 @@ export default function FindingsSection({ program }: { program: Program }) {
   const loadFindings = useCallback(async (q: string, sev: string, signal?: AbortSignal) => {
     setLoading(true);
     try {
-      const res = await authFetch(`/programs/${program.id}/findings?${buildParams(0, q, sev)}`, { signal });
+      const res = await authFetch(`/engagements/${engagement.id}/findings?${buildParams(0, q, sev)}`, { signal });
       if (!res.ok) throw new Error();
       const data = await res.json();
       setFindings(Array.isArray(data?.findings) ? data.findings : []);
@@ -70,13 +70,13 @@ export default function FindingsSection({ program }: { program: Program }) {
     } catch (e) {
       if ((e as { name?: string }).name !== "AbortError") setMessage("Failed to load findings.");
     } finally { setLoading(false); }
-  }, [program.id, authFetch, setMessage]);
+  }, [engagement.id, authFetch, setMessage]);
 
   async function loadMore() {
     const next = offset + PAGE;
     setLoadingMore(true);
     try {
-      const res = await authFetch(`/programs/${program.id}/findings?${buildParams(next, search, severityFilter)}`);
+      const res = await authFetch(`/engagements/${engagement.id}/findings?${buildParams(next, search, severityFilter)}`);
       if (!res.ok) throw new Error();
       const data = await res.json();
       setFindings((prev) => [...prev, ...(Array.isArray(data?.findings) ? data.findings : [])]);
@@ -103,11 +103,11 @@ export default function FindingsSection({ program }: { program: Program }) {
   async function addFinding() {
     if (!form.title.trim()) return;
     try {
-      const res = await authFetch(`/programs/${program.id}/findings`, { method: "POST", body: JSON.stringify(form) });
+      const res = await authFetch(`/engagements/${engagement.id}/findings`, { method: "POST", body: JSON.stringify(form) });
       if (!res.ok) throw new Error();
       setForm(EMPTY);
       await loadFindings(search, severityFilter);
-      await refreshSelectedProgram(program.id);
+      await refreshSelectedEngagement(engagement.id);
       setMessage("Finding added.");
     } catch { setMessage("Failed to add finding."); }
   }
@@ -115,9 +115,9 @@ export default function FindingsSection({ program }: { program: Program }) {
   async function deleteFinding(findingId: string) {
     if (!confirm("Delete this finding? This cannot be undone.")) return;
     try {
-      await authFetch(`/programs/${program.id}/findings/${findingId}`, { method: "DELETE" });
+      await authFetch(`/engagements/${engagement.id}/findings/${findingId}`, { method: "DELETE" });
       await loadFindings(search, severityFilter);
-      await refreshSelectedProgram(program.id);
+      await refreshSelectedEngagement(engagement.id);
       setMessage("Finding deleted.");
     } catch { setMessage("Failed to delete finding."); }
   }
@@ -129,11 +129,11 @@ export default function FindingsSection({ program }: { program: Program }) {
 
   async function saveEdit(findingId: string) {
     try {
-      const res = await authFetch(`/programs/${program.id}/findings/${findingId}`, { method: "PATCH", body: JSON.stringify(editForm) });
+      const res = await authFetch(`/engagements/${engagement.id}/findings/${findingId}`, { method: "PATCH", body: JSON.stringify(editForm) });
       if (!res.ok) throw new Error();
       setEditingId(null);
       await loadFindings(search, severityFilter);
-      await refreshSelectedProgram(program.id);
+      await refreshSelectedEngagement(engagement.id);
       setMessage("Finding updated.");
     } catch { setMessage("Failed to update finding."); }
   }
@@ -141,7 +141,7 @@ export default function FindingsSection({ program }: { program: Program }) {
   async function aiSuggest(finding: Finding) {
     setSuggesting(finding.id);
     try {
-      const res = await authFetch(`/programs/${program.id}/findings/${finding.id}/suggest`, { method: "POST" });
+      const res = await authFetch(`/engagements/${engagement.id}/findings/${finding.id}/suggest`, { method: "POST" });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         setMessage(err.detail || "AI suggestion failed.");
@@ -163,7 +163,7 @@ export default function FindingsSection({ program }: { program: Program }) {
     } catch { setMessage("AI suggestion request failed."); } finally { setSuggesting(null); }
   }
 
-  const isViewer = program.my_role === 'viewer';
+  const isViewer = engagement.my_role === 'viewer';
 
   return (
     <div className="space-y-7">

@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from db import get_db
-from deps import get_current_user, get_program_or_404, log_action, require_member_write
+from deps import get_current_user, get_engagement_or_404, log_action, require_member_write
 from models import Submission
 from schemas import SubmissionCreate, SubmissionUpdate
 
@@ -30,7 +30,7 @@ def serialize(s: Submission) -> dict:
     }
 
 
-@router.get("/programs/{program_id}/submissions")
+@router.get("/engagements/{program_id}/submissions")
 def list_submissions(
     program_id: str,
     status: str = Query(default=""),
@@ -38,13 +38,13 @@ def list_submissions(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    # Use program.owner_github_id so members see the owner's submissions too
-    program = get_program_or_404(program_id, current_user, db)
+    # Use engagement.owner_github_id so members see the owner's submissions too
+    engagement = get_engagement_or_404(program_id, current_user, db)
     query = (
         db.query(Submission)
         .filter(
             Submission.program_id == program_id,
-            Submission.owner_github_id == program.owner_github_id,
+            Submission.owner_github_id == engagement.owner_github_id,
         )
     )
     if status:
@@ -55,19 +55,19 @@ def list_submissions(
     return {"submissions": [serialize(s) for s in rows], "total": len(rows)}
 
 
-@router.post("/programs/{program_id}/submissions")
+@router.post("/engagements/{program_id}/submissions")
 def create_submission(
     program_id: str,
     body: SubmissionCreate,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    program = get_program_or_404(program_id, current_user, db)
-    require_member_write(program, current_user, db)
+    engagement = get_engagement_or_404(program_id, current_user, db)
+    require_member_write(engagement, current_user, db)
     sub = Submission(
         program_id=program_id,
-        # Store under the program owner so the list query finds it regardless of who created it
-        owner_github_id=program.owner_github_id,
+        # Store under the engagement owner so the list query finds it regardless of who created it
+        owner_github_id=engagement.owner_github_id,
         finding_id=body.finding_id or "",
         report_id=body.report_id or "",
         platform=body.platform or "",
@@ -86,7 +86,7 @@ def create_submission(
     return serialize(sub)
 
 
-@router.patch("/programs/{program_id}/submissions/{submission_id}")
+@router.patch("/engagements/{program_id}/submissions/{submission_id}")
 def update_submission(
     program_id: str,
     submission_id: str,
@@ -94,14 +94,14 @@ def update_submission(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    program = get_program_or_404(program_id, current_user, db)
-    require_member_write(program, current_user, db)
+    engagement = get_engagement_or_404(program_id, current_user, db)
+    require_member_write(engagement, current_user, db)
     sub = (
         db.query(Submission)
         .filter(
             Submission.id == submission_id,
             Submission.program_id == program_id,
-            Submission.owner_github_id == program.owner_github_id,
+            Submission.owner_github_id == engagement.owner_github_id,
         )
         .first()
     )
@@ -131,21 +131,21 @@ def update_submission(
     return serialize(sub)
 
 
-@router.delete("/programs/{program_id}/submissions/{submission_id}")
+@router.delete("/engagements/{program_id}/submissions/{submission_id}")
 def delete_submission(
     program_id: str,
     submission_id: str,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    program = get_program_or_404(program_id, current_user, db)
-    require_member_write(program, current_user, db)
+    engagement = get_engagement_or_404(program_id, current_user, db)
+    require_member_write(engagement, current_user, db)
     sub = (
         db.query(Submission)
         .filter(
             Submission.id == submission_id,
             Submission.program_id == program_id,
-            Submission.owner_github_id == program.owner_github_id,
+            Submission.owner_github_id == engagement.owner_github_id,
         )
         .first()
     )

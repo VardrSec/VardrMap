@@ -1,12 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { Program } from "../types";
+import { Engagement } from "../types";
 import { useAppContext } from "../context/AppContext";
 import { Panel, PrimaryButton, SectionHeader } from "./ui";
 
-export default function ImportsSection({ program }: { program: Program }) {
-  const { authFetch, setMessage, refreshSelectedProgram } = useAppContext();
+export default function ImportsSection({ engagement }: { engagement: Engagement }) {
+  const { authFetch, setMessage, refreshSelectedEngagement } = useAppContext();
   const [toolType,   setToolType]   = useState("ffuf");
   const [importFile, setImportFile] = useState<File | null>(null);
   const [loading,    setLoading]    = useState(false);
@@ -18,10 +18,10 @@ export default function ImportsSection({ program }: { program: Program }) {
     formData.append("file", importFile);
     setLoading(true); setMessage("");
     try {
-      const res = await authFetch(`/programs/${program.id}/imports`, { method: "POST", body: formData });
+      const res = await authFetch(`/engagements/${engagement.id}/imports`, { method: "POST", body: formData });
       if (!res.ok) throw new Error();
       setImportFile(null);
-      await refreshSelectedProgram(program.id);
+      await refreshSelectedEngagement(engagement.id);
       setMessage("Import complete.");
     } catch { setMessage("Import failed."); } finally { setLoading(false); }
   }

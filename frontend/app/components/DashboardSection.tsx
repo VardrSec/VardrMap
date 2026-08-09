@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Program } from "../types";
+import { Engagement } from "../types";
 import { useAppContext } from "../context/AppContext";
 import { Panel, PrimaryButton } from "./ui";
 import JobsSection from "./JobsSection";
@@ -17,8 +17,8 @@ type Stats = {
   submissions_by_status: Record<string, number>;
 };
 
-export default function DashboardSection({ program }: { program: Program }) {
-  const { state, dispatch, authFetch, setMessage, refreshSelectedProgram, navigate } = useAppContext();
+export default function DashboardSection({ engagement }: { engagement: Engagement }) {
+  const { state, dispatch, authFetch, setMessage, refreshSelectedEngagement, navigate } = useAppContext();
 
   const [activeTab,   setActiveTab]   = useState<RunTab>("jobs");
   const [prefillTool, setPrefillTool] = useState<string | undefined>(undefined);
@@ -41,7 +41,7 @@ export default function DashboardSection({ program }: { program: Program }) {
 
   useEffect(() => {
     const ctrl = new AbortController();
-    void authFetch(`/programs/${program.id}/stats`, { signal: ctrl.signal })
+    void authFetch(`/engagements/${engagement.id}/stats`, { signal: ctrl.signal })
       .then(async (res) => {
         if (!res.ok) return;
         const data = await res.json() as Stats;
@@ -51,7 +51,7 @@ export default function DashboardSection({ program }: { program: Program }) {
         if (e.name !== "AbortError") setMessage("Failed to load stats.");
       });
     return () => ctrl.abort();
-  }, [program.id, authFetch, setMessage]);
+  }, [engagement.id, authFetch, setMessage]);
 
   const [toolType,    setToolType]    = useState("ffuf");
   const [importFile,  setImportFile]  = useState<File | null>(null);
@@ -65,11 +65,11 @@ export default function DashboardSection({ program }: { program: Program }) {
     setImporting(true);
     setMessage("");
     try {
-      const res = await authFetch(`/programs/${program.id}/imports`, { method: "POST", body: formData });
+      const res = await authFetch(`/engagements/${engagement.id}/imports`, { method: "POST", body: formData });
       if (!res.ok) throw new Error();
       const data = await res.json().catch(() => ({}));
       setImportFile(null);
-      await refreshSelectedProgram(program.id);
+      await refreshSelectedEngagement(engagement.id);
       const newCount = data.new_count ?? 0;
       const updatedCount = data.updated_count ?? 0;
       setMessage(
@@ -105,7 +105,7 @@ export default function DashboardSection({ program }: { program: Program }) {
         </div>
       </div>
 
-      {/* Program stats */}
+      {/* Engagement stats */}
       {stats && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {[
@@ -145,7 +145,7 @@ export default function DashboardSection({ program }: { program: Program }) {
       )}
 
       {activeTab === "jobs" && (
-        <JobsSection programId={program.id} defaultTool={prefillTool} prefillEpoch={prefillEpoch} hideHeader />
+        <JobsSection engagementId={engagement.id} defaultTool={prefillTool} prefillEpoch={prefillEpoch} hideHeader />
       )}
 
       {activeTab === "import" && (
