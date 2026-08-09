@@ -4,6 +4,7 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 | Version | Date | Summary |
 |---|---|---|
+| [v0.21.1](changelog/v0.21.1.md) | 2026-08-08 | Unblock CI — clear all frontend advisories (next-auth, postcss), replace the now-licensed gitleaks action with the pinned MIT binary, remove both TypeScript 7.0 deprecations |
 | [v0.21.0](changelog/v0.21.0.md) | 2026-07-22 | Scan pipelines (subfinder→httpx→nuclei chaining), job→results provenance, AI triage over raw scan output, dry-run target preview, saved scan profiles |
 | [v0.20.3](changelog/v0.20.3.md) | 2026-06-23 | Connect Runner panel in Settings — prefilled commands, copy buttons, .ps1 download, Verify connection |
 | [v0.20.2](changelog/v0.20.2.md) | 2026-06-20 | Review tab badges, manual→finding promotion, scope filter on recon/scans, UX hardening |
