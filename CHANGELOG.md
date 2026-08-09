@@ -4,6 +4,7 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 | Version | Date | Summary |
 |---|---|---|
+| [v0.23.1](changelog/v0.23.1.md) | 2026-08-09 | Fix `NEXTAUTH_URL` in setup docs (v4 name, never read), retarget the AI triage prompt off bug bounty, drop the now-dead `sharp` override, and rewrite `CLAUDE.md` around the pentest model |
 | [v0.23.0](changelog/v0.23.0.md) | 2026-08-09 | **Breaking** — Submissions tracker removed entirely (nav, API, model, docs) and migration `0015` drops the `submissions` table; `/stats` no longer returns submission keys |
 | [v0.22.1](changelog/v0.22.1.md) | 2026-08-09 | Remove the Recon assets / Findings / Accepted / Paid stat row from the engagement Dashboard — bounty payout framing has no place on a pentest platform |
 | [v0.22.0](changelog/v0.22.0.md) | 2026-08-04 | Programs renamed to Engagements (old paths still served); clients, authorization records with testing windows, engagement type/status/dates |

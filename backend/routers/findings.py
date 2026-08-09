@@ -88,7 +88,7 @@ def update_finding(
 
 
 _SUGGEST_PROMPT = """\
-You are a bug bounty triage assistant. Given the following finding, provide concise, \
+You are a penetration testing assistant. Given the following finding, provide concise, \
 actionable suggestions for CVSS score, impact statement, and remediation.
 
 Finding title: {title}

@@ -22,13 +22,14 @@ App runs at `http://localhost:3000`.
 See [../docs/development.md](../docs/development.md#environment-variables) for full descriptions. Required values in `.env.local`:
 
 ```
-NEXTAUTH_URL
 AUTH_SECRET
 AUTH_GITHUB_ID
 AUTH_GITHUB_SECRET
 BACKEND_JWT_SECRET
 NEXT_PUBLIC_API_URL
 ```
+
+`AUTH_URL` is optional — Auth.js v5 infers it from the request.
 
 ---
 
