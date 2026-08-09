@@ -12,6 +12,8 @@ import type { Engagement } from "../../types";
 const PROGRAM: Engagement = {
   id: "prog-1", name: "Test Engagement", platform: "", program_url: "",
   scope_summary: "", severity_guidance: "", safe_harbor_notes: "",
+  client_id: "", engagement_type: "bug_bounty", engagement_status: "active",
+  starts_at: "", ends_at: "",
   scope: { in: [], out: [] }, imports: [],
   recon_count: 0, scans_count: 0, manual_tests_count: 0,
   findings_count: 0, findings_by_severity: {}, findings_by_status: {}, reports_count: 0,
