@@ -75,7 +75,7 @@ The app is now at `http://localhost:3000`.
 
 | Variable | Required | Description |
 |---|---|---|
-| `NEXTAUTH_URL` | Yes | Full URL of this Next.js app. Local: `http://localhost:3000`. On Vercel this is set automatically. |
+| `AUTH_URL` | No | Full URL of this Next.js app. Auth.js v5 infers it from the incoming request, and uses `VERCEL_URL` on Vercel, so leave it unset unless you run behind a proxy that rewrites the host. (The v4 name was `NEXTAUTH_URL`; that variable is no longer read.) |
 | `AUTH_SECRET` | Yes | Random secret for Auth.js session encryption. Generate with: `openssl rand -base64 32` |
 | `AUTH_GITHUB_ID` | Yes | GitHub OAuth App client ID |
 | `AUTH_GITHUB_SECRET` | Yes | GitHub OAuth App client secret |
@@ -133,7 +133,10 @@ environment).
 Migrations use Alembic. The migration chain is:
 
 ```
-0001_baseline → 0002_add_created_at → 0003_add_api_keys → 0004_add_scan_jobs → 0005_add_runner_heartbeats → 0006_add_job_events → 0007_add_services → 0008_add_radar → 0009_submissions → 0010schednotify → 0011rbacreconscopes
+0001baseline → 0002addcreatedat → 0003addapikeys → 0004addscanjobs → 0005runnerheartbeats
+  → 0006addjobeevents → 0007servicesapikey → 0008radarservice → 0009submissions
+  → 0010schednotify → 0011rbacreconscopes → 0012programidindexes → 0013pipelineprofiles
+  → 0014clientsauthorizations → 0015dropsubmissions (head)
 ```
 
 ### Production (Railway)

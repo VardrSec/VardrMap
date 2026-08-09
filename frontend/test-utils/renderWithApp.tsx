@@ -58,7 +58,6 @@ export function renderWithApp(ui: ReactElement, opts: RenderOptions = {}) {
     deleteEngagement: jest.fn(async () => {}),
     promoteScanToFinding: jest.fn(),
     promoteToReport: jest.fn(),
-    promoteToSubmission: jest.fn(),
     ...(opts.overrides ?? {}),
   };
 

@@ -61,8 +61,9 @@ See `changelog/v0.21.0.md`.
 
 ## v0.22 — next
 
-- [ ] **Frontend section tests.** `FindingsSection`, `SubmissionsSection`, `JobsSection`
-      mutations are untested. Needs `AppContext` + `fetch` mocking harness.
+- [ ] **Frontend section tests.** `FindingsSection` and `JobsSection` mutations are
+      untested. Needs `AppContext` + `fetch` mocking harness.
+      (`SubmissionsSection` was removed in v0.23.0.)
 - [ ] **Docs contract test coverage.** `test_docs_contract.py` now catches route and
       enum drift; extend to cover response-key shape assertions as new endpoints are added.
 - [ ] **Wire Sentry in production.** `SENTRY_DSN` set on Railway.
