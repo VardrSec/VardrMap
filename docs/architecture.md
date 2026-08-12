@@ -42,8 +42,18 @@ Railway (PostgreSQL)
 
 The backend is deployed on Railway. On every deploy, Railway runs `bash start.sh`, which:
 
-1. Runs `alembic upgrade head` — applies any pending migrations against the production PostgreSQL database
-2. Starts `uvicorn main:app` on the Railway-provided `$PORT`
+1. Runs `python wait_for_db.py` — blocks until Postgres accepts a `SELECT 1`, polling every 2s for up to 120s
+2. Runs `alembic upgrade head` — applies any pending migrations against the production PostgreSQL database
+3. Starts `uvicorn main:app` on the Railway-provided `$PORT`
+
+Step 1 exists because Railway starts the application container and the Postgres
+service concurrently. A database still in recovery answers with `FATAL: the
+database system is starting up` rather than refusing the connection, so alembic
+exits non-zero and `set -e` kills the container. With
+`restartPolicyMaxRetries: 3` in `railway.json`, three fast retries exhaust the
+budget in seconds and the deploy fails permanently — waiting out a condition
+that clears on its own. Free-tier services cold-start on every deploy, so the
+race runs from a stop every time.
 
 `Base.metadata.create_all()` is guarded to only run when `ENV=development` or `ENV=test`. It never runs in production. Alembic is the sole schema authority for production and staging.
 
