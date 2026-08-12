@@ -76,7 +76,9 @@ fail typecheck there — grep `frontend/test-utils/` by hand.
 
 ## Running locally
 Backend: `cd backend && uvicorn main:app --reload`
-Note: `create_all` runs only in dev/test. Production: Railway runs `bash start.sh` → `alembic upgrade head` → uvicorn. Never remove this guard.
+Note: `create_all` runs only in dev/test. Production: Railway runs `bash start.sh` → `python wait_for_db.py` → `alembic upgrade head` → uvicorn. Never remove this guard.
+
+The readiness wait is load-bearing: Railway boots the container and Postgres together, and a database in recovery returns `FATAL: the database system is starting up`. Without it, alembic fails, `set -e` kills the container, and `restartPolicyMaxRetries: 3` is spent before the database is ready.
 
 Frontend: `cd frontend && npm run dev`
 

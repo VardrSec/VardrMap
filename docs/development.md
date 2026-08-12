@@ -141,7 +141,9 @@ Migrations use Alembic. The migration chain is:
 
 ### Production (Railway)
 
-Railway runs `bash start.sh` on every deploy. That script runs `alembic upgrade head` before starting uvicorn, so migrations are applied automatically on each deploy. `create_all` does not run in production — Alembic is the only schema authority.
+Railway runs `bash start.sh` on every deploy. That script waits for Postgres to accept queries (`python wait_for_db.py`), then runs `alembic upgrade head`, then starts uvicorn — so migrations are applied automatically on each deploy. `create_all` does not run in production — Alembic is the only schema authority.
+
+The readiness wait is not optional. Railway starts the app container and the database concurrently, and a database still in recovery returns `FATAL: the database system is starting up`. Without the gate, alembic fails, `set -e` kills the container, and the three retries allowed by `railway.json` are spent before the database finishes starting.
 
 ### Local development
 

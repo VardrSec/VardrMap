@@ -1,0 +1,6 @@
+# Shell scripts must keep LF endings regardless of the committer's platform.
+# Railway runs `bash start.sh` inside a Linux container; a CRLF shebang fails
+# there with `/bin/bash^M: bad interpreter`, which reads as a missing binary
+# rather than a line-ending problem and is a genuinely confusing hour to lose.
+# Without this, correctness depends on each contributor's core.autocrlf setting.
+*.sh text eol=lf
