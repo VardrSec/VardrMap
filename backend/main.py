@@ -11,7 +11,7 @@ from db import Base, engine
 from deps import get_current_user, require_full_scope
 from limiter import limiter
 from logging_config import configure_logging
-from routers import apikeys, assets, authorizations, clients, engagements, findings, imports, jobs, manual_tests, members, radar, recon, reports, runner, scan_profiles, scans, schedules, scope, services, settings
+from routers import apikeys, assets, authorizations, clients, engagements, evidence, findings, imports, jobs, manual_tests, members, radar, recon, reports, runner, scan_profiles, scans, schedules, scope, services, settings
 
 ENV = os.getenv("ENV") or os.getenv("RAILWAY_ENVIRONMENT_NAME", "development")
 
@@ -140,6 +140,7 @@ app.include_router(runner.router)
 
 app.include_router(apikeys.router,      dependencies=_full)
 app.include_router(assets.router,       dependencies=_full)
+app.include_router(evidence.router,     dependencies=_full)
 app.include_router(engagements.router,  dependencies=_full)
 app.include_router(members.router,      dependencies=_full)
 app.include_router(scope.router,        dependencies=_full)

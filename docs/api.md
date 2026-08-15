@@ -246,6 +246,38 @@ Every denial is written to `audit_logs` with `action="deny"` and the reason code
 
 ---
 
+## Evidence
+
+Proof attached to a finding. **Redaction happens on write, never on render** — the `body` column stores already-redacted text.
+
+Storing a raw `Authorization` header and stripping it in the serializer means one forgotten path (a log line, an export, a debug endpoint, an error message) leaks it. What is never stored cannot leak from a path nobody remembered.
+
+Structure is preserved deliberately: `Authorization: Bearer [REDACTED]` still proves the request was authenticated, which is frequently the point of the evidence.
+
+**What is redacted:** sensitive header values (`Authorization`, `Cookie`, `Set-Cookie`, `X-API-Key`, …), sensitive body/query keys (`password`, `token`, `client_secret`, `api_key`, …), credentials embedded in URLs, bare JWTs, and `Bearer`/`Basic` tokens in prose. Configurable extra keys are supported.
+
+### `POST /engagements/{program_id}/evidence`
+
+| Field | Type | Notes |
+|---|---|---|
+| `kind` | string | `http_request` \| `http_response` \| `terminal_output` \| `tool_result` \| `note` \| `screenshot` |
+| `title` | string | max 200 |
+| `body` | string | max 200,000 chars — bounded so a pasted response cannot exhaust the row |
+| `finding_id` | string | optional; must belong to this engagement |
+| `sensitivity` | string | `public` \| `internal` \| `confidential` \| `restricted` |
+| `retention` | string | `engagement` \| `90d` \| `permanent` |
+
+`content_hash` is SHA-256 over the **stored** (redacted) body — integrity of the artefact as retained, which is the only thing we can honestly attest to.
+
+**Errors** — `400` invalid enum or foreign `finding_id`; `422` body too large; `404` engagement not accessible.
+
+### `GET /engagements/{program_id}/evidence`
+Filter with `finding_id`; paginate with `limit` (max 200) and `offset`.
+
+### `DELETE /engagements/{program_id}/evidence/{evidence_id}`
+
+---
+
 ## Attack Surface (Assets)
 
 The asset graph. Before it existed, a host lived as five unrelated free-text columns with no join key, and "everything we know about this host" was a fuzzy `LIKE` across four tables.

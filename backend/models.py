@@ -380,6 +380,41 @@ class ImportRecord(Base):
     engagement = relationship("Engagement", back_populates="import_records")
 
 
+class Evidence(Base):
+    """Proof attached to a finding, redacted before it is stored.
+
+    Redaction happens on write, never on render. Storing a raw Authorization
+    header and stripping it in the serializer means one forgotten path — a log
+    line, an export, a debug endpoint, an error message — leaks it. What is
+    never stored cannot leak from a path nobody remembered.
+
+    `content_hash` is taken over the redacted body, which is what integrity
+    means here: the artefact as retained, not as captured.
+    """
+
+    __tablename__ = "evidence"
+
+    id = Column(String, primary_key=True, default=new_uuid)
+    program_id = Column(String, ForeignKey("programs.id", ondelete="CASCADE"), nullable=False, index=True)
+    finding_id = Column(String, ForeignKey("findings.id", ondelete="CASCADE"), nullable=True, index=True)
+    asset_id = Column(String, ForeignKey("assets.id", ondelete="SET NULL"), nullable=True, index=True)
+
+    kind = Column(String(30), nullable=False, default="note")
+    # http_request | http_response | terminal_output | tool_result | note | screenshot
+    title = Column(String(200), default="")
+    body = Column(Text, default="")            # already redacted
+    content_hash = Column(String(64), default="")   # sha256 of the stored body
+
+    # Provenance and handling.
+    collector = Column(String(100), default="")     # analyst login, tool, or runner id
+    source = Column(String(60), default="")
+    sensitivity = Column(String(20), default="internal")   # public|internal|confidential|restricted
+    retention = Column(String(20), default="engagement")   # engagement|90d|permanent
+    redacted = Column(Boolean, nullable=False, default=True)
+    collected_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+
+
 class AuditLog(Base):
     __tablename__ = "audit_logs"
 
