@@ -1,0 +1,34 @@
+# Gitleaks configuration.
+#
+# The default ruleset is kept in full; this file only adds a narrowly scoped
+# allowlist.
+title = "VardrMap"
+
+[extend]
+useDefault = true
+
+[[rules]]
+# Placeholder so the allowlist below has a rule table to attach to; the real
+# rules come from the default set via [extend].
+id = "vardrmap-placeholder-never-matches"
+description = "Inert rule. See [allowlist] below for the actual configuration."
+regex = '''\$\^vardrmap-never-matches\^\$'''
+
+[allowlist]
+description = """
+Redaction tests must contain realistic secret-shaped strings.
+
+backend/redaction.py exists to strip credentials out of captured evidence before
+it is stored. Testing it against obviously-fake values like "SECRET123" would
+prove nothing — the regexes have to be exercised against strings shaped like the
+real Authorization headers, Stripe keys, and JWTs they will meet in a captured
+HTTP exchange. Weakening the fixtures to satisfy the scanner would weaken the
+control the fixtures exist to verify.
+
+Scoped to exactly the two files that need it. Every other path in the repository,
+including all other tests, is still scanned by the full default ruleset.
+"""
+paths = [
+    '''backend/tests/test_redaction\.py''',
+    '''backend/tests/test_evidence\.py''',
+]
