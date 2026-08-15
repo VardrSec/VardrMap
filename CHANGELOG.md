@@ -4,6 +4,7 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 | Version | Date | Summary |
 |---|---|---|
+| [v0.26.0](changelog/v0.26.0.md) | 2026-08-12 | Asset graph — canonical identity replaces five free-text host columns; nodes, edges, provenance, backfill, and the "everything about this host" query |
 | [v0.25.0](changelog/v0.25.0.md) | 2026-08-12 | Organizations — tenancy moves off the GitHub user id; job/schedule access follows the engagement, so a teammate can finally operate its jobs and share a runner fleet |
 | [v0.24.0](changelog/v0.24.0.md) | 2026-08-12 | **Breaking** — central policy engine enforces authorization, testing windows, scope and stop-work at job creation *and* claim; denials audited with stable reason codes; architecture docs and ADR 0001 |
 | [v0.23.2](changelog/v0.23.2.md) | 2026-08-09 | Fix crash-looping Railway deploys — wait for Postgres to finish starting before running migrations, instead of burning all 3 restart retries inside the database's recovery window |
