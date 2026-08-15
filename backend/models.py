@@ -30,6 +30,50 @@ class User(Base):
     clients = relationship("Client", back_populates="owner", cascade="all, delete-orphan")
 
 
+class Organization(Base):
+    """The tenant. Everything an operator owns hangs off one of these.
+
+    Before this existed the tenancy anchor was a GitHub user id, denormalized
+    onto Client, ScanJob, ScheduledScan, Authorization and Service. That made a
+    teammate unable to operate an engagement's jobs, and made a consulting firm
+    unable to share a client record or a runner fleet between two people.
+
+    Every user gets a personal organization on first sight, so single-operator
+    use is unchanged — the org is invisible until someone is invited into it.
+    """
+
+    __tablename__ = "organizations"
+
+    id = Column(String, primary_key=True, default=new_uuid)
+    name = Column(String(120), nullable=False)
+    # The user whose personal org this is, empty for orgs created explicitly.
+    # Kept so the backfill is reversible and a personal org is identifiable.
+    personal_for_github_id = Column(String, default="", index=True)
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    members = relationship("OrganizationMember", back_populates="organization", cascade="all, delete-orphan")
+
+
+class OrganizationMember(Base):
+    """Membership and role. Roles are ordered: owner > admin > member > viewer."""
+
+    __tablename__ = "organization_members"
+
+    id = Column(String, primary_key=True, default=new_uuid)
+    org_id = Column(String, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True)
+    github_id = Column(String, nullable=False, index=True)
+    role = Column(String(20), nullable=False, default="member")  # owner|admin|member|viewer
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    organization = relationship("Organization", back_populates="members")
+
+    __table_args__ = (
+        # One membership row per person per org — two rows with different roles
+        # would make the effective role depend on query order.
+        UniqueConstraint("org_id", "github_id", name="uq_org_member"),
+    )
+
+
 class Client(Base):
     """An organisation that engagements are performed for.
 
@@ -43,6 +87,9 @@ class Client(Base):
 
     id = Column(String, primary_key=True, default=new_uuid)
     owner_github_id = Column(String, ForeignKey("users.github_id"), nullable=False, index=True)
+    # Tenancy. Nullable during the transition: rows predate organizations and
+    # are backfilled by migration 0017 to the owner's personal org.
+    org_id = Column(String, ForeignKey("organizations.id"), nullable=True, index=True)
     name = Column(String(200), nullable=False)
     contact_name = Column(String(200), default="")
     contact_email = Column(String(200), default="")
@@ -68,6 +115,7 @@ class Engagement(Base):
     # bug bounty behaviour this table was built for, so existing rows and
     # existing API callers are unaffected — pentest work is opt-in.
     client_id = Column(String, ForeignKey("clients.id"), nullable=True, index=True)
+    org_id = Column(String, ForeignKey("organizations.id"), nullable=True, index=True)
     engagement_type = Column(String(20), default="bug_bounty")  # bug_bounty|pentest|red_team|internal
     engagement_status = Column(String(20), default="active")    # planned|active|reporting|closed
     starts_at = Column(DateTime, nullable=True)

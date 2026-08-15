@@ -11,6 +11,7 @@ from deps import (
     get_engagement_or_404,
     log_action,
     parse_iso_datetime,
+    personal_org,
     require_engagement_owner,
     require_member_write,
     resolve_owned_client_id,
@@ -98,8 +99,14 @@ def create_engagement(
         db.add(user)
         db.flush()
 
+    # Every engagement belongs to an organization from creation. Solo users get
+    # a personal one they never have to think about; it only becomes visible
+    # when someone is invited into it.
+    org = personal_org(current_user["github_id"], db)
+
     engagement = Engagement(
         owner_github_id=current_user["github_id"],
+        org_id=org.id,
         name=payload.name,
         platform=payload.platform or "",
         program_url=payload.program_url or "",

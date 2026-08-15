@@ -167,6 +167,7 @@ def serialize_engagement(p: Engagement, db: Session, github_id: str | None = Non
         "ends_at":           _iso(p.ends_at),
         # Surfaced so a client can show the brake is on without inferring it
         # from a denied request.
+        "org_id":            p.org_id or "",
         "stop_work_at":      _iso(p.stop_work_at),
         "stop_work_reason":  p.stop_work_reason or "",
         "scope": {

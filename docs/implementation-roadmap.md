@@ -55,16 +55,18 @@ working code, not because it matters less.
 - [x] Migration `0016` — reversible
 - [x] Tests for all deny paths, both enforcement points, bounty carve-out
 
-## Phase 1b — Organizations and RBAC (next)
+## Phase 1b — Organizations and RBAC ✅
 
-- [ ] `organizations`, `teams`, `memberships` with roles
-- [ ] Migrate `owner_github_id` → `org_id` on `Client`, `ScanJob`,
-      `ScheduledScan`, `Authorization`, `Service`
-- [ ] Collapse both access paths into membership; remove direct
-      `owner_github_id == current_user` filters
-- [ ] Runner API keys scoped to org, not user
-- [ ] Tenant-isolation tests across org boundaries
-- [ ] Backfill: one org per existing user, preserving all data
+- [x] `organizations` + `organization_members` with ordered roles
+- [x] `org_id` on `Client` and `Engagement`; access resolves through
+      `deps.engagement_access()` (ownership ∪ org membership ∪ invitation)
+- [x] All 11 `owner_github_id == current_user` filters in `routers/jobs.py`
+      replaced by `accessible_engagement_ids()`
+- [x] Tenant-isolation tests both directions (16)
+- [x] Backfill: one personal org per existing owner, reversible
+- [ ] Runner API keys scoped to org rather than user
+- [ ] Drop `owner_github_id` once no code path reads it (separate change)
+- [ ] `teams` as a sub-grouping within an org
 
 ## Phase 2 — Operational workflow
 
