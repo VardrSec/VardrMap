@@ -70,9 +70,9 @@ working code, not because it matters less.
 
 ## Phase 2 — Operational workflow
 
-- [ ] **Asset graph** — `assets` + `asset_relationships` edge table, canonical
+- [x] **Asset graph** — `assets` + `asset_relationships` edge table, canonical
       identity normalization, `asset_id` FK on recon/scan/service/finding,
-      backfill with documented merge-collision handling
+      backfill with documented merge-collision handling (v0.26.0)
 - [ ] Objectives, TestPlan, TestCase mapped to WSTG / API Top 10 / ATT&CK
 - [ ] Observation as a first-class entity
 - [ ] Evidence with content hash, provenance, sensitivity, retention

@@ -5,6 +5,7 @@ from pathlib import Path
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
+import assets as asset_graph
 from db import get_db
 from deps import get_current_user, get_engagement_or_404, log_action, require_member_write
 from models import ImportRecord, Engagement, ReconItem, User
@@ -24,6 +25,20 @@ ALLOWED_CONTENT_TYPES = {
     "application/octet-stream",
     "text/plain",
 }
+
+
+def _link_assets(db, program_id: str, rows, source: str) -> None:
+    """Attach each imported row to its asset, creating the node on first sight.
+
+    Failure to classify is not an error — a malformed host in one row of a tool
+    export must not fail the whole import. Those rows keep asset_id NULL and can
+    be relinked later once the normalizer understands them.
+    """
+    for row in rows:
+        observed = getattr(row, "url", "") or getattr(row, "host", "") or getattr(row, "asset", "")
+        asset = asset_graph.upsert(db, program_id, observed, source=source, host_level=True)
+        if asset is not None:
+            row.asset_id = asset.id
 
 
 def _dedup_recon(
@@ -181,6 +196,8 @@ async def import_results(
         for r in new_items:
             r.job_id = job_id
             db.add(r)
+        db.flush()
+        _link_assets(db, program_id, new_items, "ffuf")
         imported_count = len(new_items)
 
     elif tool_type == "httpx":
@@ -195,6 +212,8 @@ async def import_results(
         for s in scan_items:
             s.job_id = job_id
             db.add(s)
+        db.flush()
+        _link_assets(db, program_id, scan_items, "nuclei")
         imported_count = len(scan_items)
 
     # Store "redacted" instead of the real filename — the original file path

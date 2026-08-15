@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+import assets as asset_graph
 from db import get_db
 from deps import get_current_user, get_engagement_or_404, log_action, require_full_scope, require_member_write
 from models import Service
@@ -93,9 +94,28 @@ def bulk_create_services(
             existing.state           = svc.state or "open"
             existing.source          = svc.source or "nmap"
             existing.last_scanned_at = now
+            if existing.asset_id is None:
+                node = asset_graph.upsert(
+                    db, program_id, svc.host, source=svc.source or "nmap", default_port=svc.port
+                )
+                if node is not None:
+                    existing.asset_id = node.id
             updated += 1
         else:
+            # A service is an exposure of a host: the port-specific node is
+            # linked back to the bare host so "everything on api.acme.com"
+            # is one traversal rather than a string scan.
+            host_node = asset_graph.upsert(db, program_id, svc.host, source=svc.source or "nmap")
+            service_node = asset_graph.upsert(
+                db, program_id, svc.host, source=svc.source or "nmap", default_port=svc.port
+            )
+            if host_node is not None and service_node is not None:
+                asset_graph.relate(
+                    db, program_id, host_node, service_node,
+                    asset_graph.EXPOSES, source=svc.source or "nmap",
+                )
             db.add(Service(
+                asset_id=service_node.id if service_node is not None else None,
                 program_id=program_id,
                 owner_github_id=current_user["github_id"],
                 host=svc.host,

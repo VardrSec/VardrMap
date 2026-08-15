@@ -246,6 +246,39 @@ Every denial is written to `audit_logs` with `action="deny"` and the reason code
 
 ---
 
+## Attack Surface (Assets)
+
+The asset graph. Before it existed, a host lived as five unrelated free-text columns with no join key, and "everything we know about this host" was a fuzzy `LIKE` across four tables.
+
+Identity is `canonical_key` — a pure function of the observed string, unique per engagement. `api.acme.com`, `https://api.acme.com/`, and `api.acme.com:443` converge; two genuinely different hosts never do. Anything unclassifiable is left unlinked rather than forced into a bucket, because a wrong merge is unrecoverable.
+
+### `GET /engagements/{program_id}/assets`
+List assets. Query params: `asset_type`, `q` (hostname **prefix** — deliberately not a leading-wildcard LIKE, which would scan the table), `limit` (max 500), `offset`.
+
+```json
+{ "assets": [ { "id": "<uuid>", "canonical_key": "domain:api.acme.com:443", "asset_type": "domain",
+                "label": "api.acme.com:443", "hostname": "api.acme.com", "ip": "", "port": 443,
+                "environment": "", "criticality": "", "exposure": "", "confidence": "confirmed",
+                "source": "httpx", "first_seen_at": "...", "last_seen_at": "..." } ],
+  "total": 1 }
+```
+
+### `GET /engagements/{program_id}/assets/{asset_id}`
+One asset with its edges and everything joined to it — the query the graph exists for.
+
+```json
+{ "asset": { ... },
+  "relationships": [ { "relationship": "exposes", "direction": "out", "other": { ... },
+                       "confidence": "confirmed", "source": "nmap" } ],
+  "counts": { "recon": 12, "scans": 3, "services": 2, "findings": 1 } }
+```
+
+**Relationship verbs:** `resolves_to`, `hosted_on`, `exposes`, `discovered_from`, `belongs_to`, `vulnerable_to`.
+
+**Errors** — `404` asset not found, or engagement not accessible.
+
+---
+
 ## Scope
 
 ### `POST /engagements/{program_id}/scope/in`

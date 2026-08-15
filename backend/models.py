@@ -74,6 +74,73 @@ class OrganizationMember(Base):
     )
 
 
+class Asset(Base):
+    """A node in the engagement's attack surface.
+
+    Replaces five unrelated free-text host columns that had no join key between
+    them. `canonical_key` is that key: a pure function of the observed string,
+    unique per engagement, so two spellings of the same host converge and two
+    different hosts never do.
+    """
+
+    __tablename__ = "assets"
+
+    id = Column(String, primary_key=True, default=new_uuid)
+    program_id = Column(String, ForeignKey("programs.id", ondelete="CASCADE"), nullable=False, index=True)
+    canonical_key = Column(String(600), nullable=False)
+    asset_type = Column(String(40), nullable=False, default="domain")
+    label = Column(String(500), default="")
+    hostname = Column(String(400), default="", index=True)
+    ip = Column(String(60), default="", index=True)
+    port = Column(Integer, nullable=True)
+    scheme = Column(String(20), default="")
+
+    # Context an operator sets; nothing infers these.
+    environment = Column(String(40), default="")      # production|staging|dev|unknown
+    criticality = Column(String(20), default="")      # low|medium|high|critical
+    exposure = Column(String(20), default="")         # internal|external|unknown
+    owner_note = Column(String(200), default="")
+    tags = Column(String(500), default="")
+
+    # Provenance.
+    source = Column(String(60), default="")           # httpx|nuclei|nmap|manual|backfill
+    confidence = Column(String(20), default="confirmed")  # confirmed|inferred|suspected
+    first_seen_at = Column(DateTime, nullable=True)
+    last_seen_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    engagement = relationship("Engagement", back_populates="assets")
+
+    __table_args__ = (
+        # The join key is only meaningful if it is unique within an engagement.
+        UniqueConstraint("program_id", "canonical_key", name="uq_asset_canonical"),
+    )
+
+
+class AssetRelationship(Base):
+    """A directed edge. Relational edge table rather than a graph database —
+    the traversals here are shallow and the data already lives in Postgres."""
+
+    __tablename__ = "asset_relationships"
+
+    id = Column(String, primary_key=True, default=new_uuid)
+    program_id = Column(String, ForeignKey("programs.id", ondelete="CASCADE"), nullable=False, index=True)
+    src_asset_id = Column(String, ForeignKey("assets.id", ondelete="CASCADE"), nullable=False, index=True)
+    dst_asset_id = Column(String, ForeignKey("assets.id", ondelete="CASCADE"), nullable=False, index=True)
+    relationship = Column(String(40), nullable=False)
+    source = Column(String(60), default="")
+    confidence = Column(String(20), default="confirmed")
+    first_seen_at = Column(DateTime, nullable=True)
+    last_seen_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    __table_args__ = (
+        UniqueConstraint(
+            "src_asset_id", "dst_asset_id", "relationship", name="uq_asset_edge"
+        ),
+    )
+
+
 class Client(Base):
     """An organisation that engagements are performed for.
 
@@ -131,6 +198,7 @@ class Engagement(Base):
     client = relationship("Client", back_populates="engagements")
     authorizations = relationship("Authorization", back_populates="engagement", cascade="all, delete-orphan")
     scope_items = relationship("ScopeItem", back_populates="engagement", cascade="all, delete-orphan")
+    assets = relationship("Asset", back_populates="engagement", cascade="all, delete-orphan")
     manual_tests = relationship("ManualTest", back_populates="engagement", cascade="all, delete-orphan")
     findings = relationship("Finding", back_populates="engagement", cascade="all, delete-orphan")
     reports = relationship("Report", back_populates="engagement", cascade="all, delete-orphan")
@@ -218,6 +286,7 @@ class Finding(Base):
     title = Column(String(200), nullable=False)
     severity = Column(String(20), default="info")
     asset = Column(String(500), default="")
+    asset_id = Column(String, ForeignKey("assets.id", ondelete="SET NULL"), nullable=True, index=True)
     status = Column(String(20), default="new")
     summary = Column(Text, default="")
     steps = Column(Text, default="")
@@ -267,6 +336,7 @@ class ReconItem(Base):
     lines = Column(Integer, nullable=True)
     notes = Column(Text, default="")
     # Set once on first discovery — never overwritten on re-import.
+    asset_id = Column(String, ForeignKey("assets.id", ondelete="SET NULL"), nullable=True, index=True)
     first_seen_at = Column(DateTime, nullable=True)
     job_id = Column(String, nullable=True)  # scan_job that produced this item, if any
     created_at = Column(DateTime, nullable=True, default=lambda: datetime.now(timezone.utc))
@@ -290,6 +360,7 @@ class ScanItem(Base):
     status = Column(String(20), default="new")
     cwe = Column(String(50), default="")
     cvss = Column(String(50), default="")
+    asset_id = Column(String, ForeignKey("assets.id", ondelete="SET NULL"), nullable=True, index=True)
     job_id = Column(String, nullable=True)  # scan_job that produced this item, if any
     created_at = Column(DateTime, nullable=True, default=lambda: datetime.now(timezone.utc))
 
@@ -408,6 +479,7 @@ class Service(Base):
     state = Column(String(20), default="open")         # open | filtered
     source = Column(String(50), default="nmap")
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    asset_id = Column(String, ForeignKey("assets.id", ondelete="SET NULL"), nullable=True, index=True)
     last_scanned_at = Column(DateTime, nullable=True)   # stamped on every upsert
 
     engagement = relationship("Engagement", back_populates="services")
