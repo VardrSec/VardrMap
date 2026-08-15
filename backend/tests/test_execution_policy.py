@@ -16,12 +16,13 @@ def engagement(client, auth_headers):
     """A bounty engagement with acme.com in scope — the default-allow baseline."""
     res = client.post("/programs", json={"name": "Policy Test"}, headers=auth_headers)
     pid = res.json()["id"]
-    res = client.post(
-        f"/programs/{pid}/scope/in",
-        json={"value": "acme.com", "kind": "domain"},
-        headers=auth_headers,
-    )
-    assert res.status_code in (200, 201), res.text
+    for value in ("acme.com", "*.acme.com"):
+        res = client.post(
+            f"/programs/{pid}/scope/in",
+            json={"value": value, "kind": "domain"},
+            headers=auth_headers,
+        )
+        assert res.status_code in (200, 201), res.text
     yield pid
     client.delete(f"/programs/{pid}", headers=auth_headers)
 
@@ -371,3 +372,74 @@ def test_non_member_cannot_engage_stop_work(client, other_headers, engagement):
     """Cross-user access stays 404 — never confirm the engagement exists."""
     res = client.post(f"/programs/{engagement}/stop-work", json={}, headers=other_headers)
     assert res.status_code == 404
+
+
+# --------------------------------------------------------------------------- #
+# Regression — PATCH as an alternate route into execution
+# --------------------------------------------------------------------------- #
+
+def test_patch_to_running_is_denied_when_stop_work_is_engaged(
+    client, auth_headers, engagement
+):
+    """Reported bypass: PATCH /jobs/{id} set status directly.
+
+    A job denied at /claim could simply be PATCHed to running instead, which
+    made the testing window, stop-work switch and scope rules advisory on that
+    path. Both routes into `running` must clear the policy engine.
+    """
+    from datetime import datetime, timezone
+
+    job_id = _create_job(client, auth_headers, engagement).json()["id"]
+    _set(engagement, stop_work_at=datetime.now(timezone.utc))
+
+    res = client.patch(f"/jobs/{job_id}", json={"status": "running"}, headers=auth_headers)
+    assert res.status_code == 403
+    assert res.json()["detail"]["reason"] == "stop_work_active"
+
+
+def test_patch_to_running_is_denied_outside_the_testing_window(
+    client, auth_headers, engagement
+):
+    from datetime import datetime, timedelta, timezone
+
+    job_id = _create_job(client, auth_headers, engagement).json()["id"]
+    _set(engagement, engagement_type="pentest")
+    _add_authorization(
+        engagement, status="active", window_end=datetime.now(timezone.utc) - timedelta(minutes=1)
+    )
+    res = client.patch(f"/jobs/{job_id}", json={"status": "running"}, headers=auth_headers)
+    assert res.status_code == 403
+    assert res.json()["detail"]["reason"] == "outside_testing_window"
+
+
+def test_patch_job_stays_pending_after_a_denied_transition(client, auth_headers, engagement):
+    from datetime import datetime, timezone
+
+    job_id = _create_job(client, auth_headers, engagement).json()["id"]
+    _set(engagement, stop_work_at=datetime.now(timezone.utc))
+    client.patch(f"/jobs/{job_id}", json={"status": "running"}, headers=auth_headers)
+
+    db = SessionLocal()
+    try:
+        assert db.query(ScanJob).filter(ScanJob.id == job_id).first().status == "pending"
+    finally:
+        db.close()
+
+
+def test_patch_to_running_still_works_when_policy_permits(client, auth_headers, engagement):
+    job_id = _create_job(client, auth_headers, engagement).json()["id"]
+    res = client.patch(f"/jobs/{job_id}", json={"status": "running"}, headers=auth_headers)
+    assert res.status_code == 200
+
+
+def test_patch_to_terminal_states_is_not_policy_gated(client, auth_headers, engagement):
+    """Completing or failing a job must never be blocked — a runner has to be
+    able to report the outcome of work already done, even after a stop-work."""
+    from datetime import datetime, timezone
+
+    job_id = _create_job(client, auth_headers, engagement).json()["id"]
+    client.patch(f"/jobs/{job_id}", json={"status": "running"}, headers=auth_headers)
+    _set(engagement, stop_work_at=datetime.now(timezone.utc))
+
+    res = client.patch(f"/jobs/{job_id}", json={"status": "failed"}, headers=auth_headers)
+    assert res.status_code == 200

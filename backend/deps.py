@@ -168,6 +168,22 @@ def get_engagement_or_404(program_id: str, current_user: dict[str, str], db: Ses
     return engagement
 
 
+def accessible_org_ids(github_id: str, db: Session) -> list[str]:
+    """Every organization the caller belongs to, plus their personal one."""
+    ids = [
+        r[0] for r in db.query(OrganizationMember.org_id)
+        .filter(OrganizationMember.github_id == github_id).all()
+    ]
+    personal = (
+        db.query(Organization.id)
+        .filter(Organization.personal_for_github_id == github_id)
+        .first()
+    )
+    if personal and personal[0] not in ids:
+        ids.append(personal[0])
+    return ids
+
+
 def accessible_engagement_ids(github_id: str, db: Session) -> list[str]:
     """Every engagement id the caller can reach, by any of the three grants.
 
@@ -267,9 +283,12 @@ def resolve_owned_client_id(client_id: str | None, current_user: dict[str, str],
         return None
     from models import Client  # local import; models imports nothing from deps
 
+    github_id = current_user["github_id"]
+    org_ids = accessible_org_ids(github_id, db)
     owned = db.query(Client).filter(
         Client.id == client_id,
-        Client.owner_github_id == current_user["github_id"],
+        (Client.owner_github_id == github_id)
+        | (Client.org_id.in_(org_ids) if org_ids else False),
     ).first()
     if not owned:
         raise HTTPException(status_code=404, detail="Client not found")

@@ -67,8 +67,28 @@ _HEADER_LINE = re.compile(
 )
 
 # key="value" / key: value / key=value in JSON, forms, and query strings.
-_KEYED_VALUE = re.compile(
-    r"(?P<key>\"?[A-Za-z0-9_\-]+\"?)\s*(?P<sep>[:=])\s*(?P<quote>[\"']?)(?P<value>[^\"'&,}\s]+)(?P=quote)"
+#
+# Two patterns rather than one. A *quoted* value runs to its closing quote and
+# may contain anything — spaces, commas, punctuation. An earlier single pattern
+# excluded those characters from the value class, so `{"password": "hunter 2"}`
+# and `{"api_key": "sk_live_abcd,efgh"}` were stored verbatim: the match ended
+# at the space or comma and the redaction never fired. Passphrases contain
+# spaces and keys contain punctuation, so those were ordinary secrets, not
+# exotic ones.
+_KEYED_QUOTED = re.compile(
+    r"(?P<key>\"?[A-Za-z0-9_\-]+\"?)\s*(?P<sep>[:=])\s*(?P<quote>[\"'])(?P<value>(?:[^\"'\\]|\\.)*)(?P=quote)"
+)
+
+# Unquoted values run to a structural delimiter or end of line. The value must
+# not *start* with a quote — that case belongs to _KEYED_QUOTED, which runs
+# first, and matching it here again would chew through the placeholder it just
+# inserted and corrupt the surrounding JSON. Spaces are
+# deliberately *inside* the value: `password: my long passphrase` is one secret,
+# and stopping at the first space would leak all but the first word. Redacting a
+# few trailing words of prose is a cost worth paying against that.
+_KEYED_BARE = re.compile(
+    r"(?P<key>\"?[A-Za-z0-9_\-]+\"?)\s*(?P<sep>[:=])\s*"
+    r"(?P<value>[^\"'\s&;,}\]\r\n][^&;,}\]\r\n]*)"
 )
 
 # Credentials embedded in a URL: scheme://user:pass@host
@@ -88,12 +108,23 @@ def _redact_header_line(match: re.Match) -> str:
     return match.group(0)
 
 
-def _redact_keyed_value(match: re.Match) -> str:
-    key = match.group("key").strip('"')
-    if key.lower() in SENSITIVE_KEYS:
-        quote = match.group("quote")
-        return f"{match.group('key')}{match.group('sep')}{quote}{PLACEHOLDER}{quote}"
-    return match.group(0)
+def _sub_quoted(keys: frozenset[str]):
+    def _apply(match: re.Match) -> str:
+        if match.group("key").strip("\"'").lower() in keys:
+            quote = match.group("quote")
+            return f"{match.group('key')}{match.group('sep')}{quote}{PLACEHOLDER}{quote}"
+        return match.group(0)
+
+    return _apply
+
+
+def _sub_bare(keys: frozenset[str]):
+    def _apply(match: re.Match) -> str:
+        if match.group("key").strip("\"'").lower() in keys:
+            return f"{match.group('key')}{match.group('sep')}{PLACEHOLDER}"
+        return match.group(0)
+
+    return _apply
 
 
 def redact_text(value: str | None, extra_keys: frozenset[str] | None = None) -> str:
@@ -108,19 +139,12 @@ def redact_text(value: str | None, extra_keys: frozenset[str] | None = None) -> 
 
     text = _HEADER_LINE.sub(_redact_header_line, value)
 
-    if extra_keys:
-        keys = SENSITIVE_KEYS | {k.lower() for k in extra_keys}
-
-        def _redact_with_extra(match: re.Match) -> str:
-            key = match.group("key").strip('"')
-            if key.lower() in keys:
-                quote = match.group("quote")
-                return f"{match.group('key')}{match.group('sep')}{quote}{PLACEHOLDER}{quote}"
-            return match.group(0)
-
-        text = _KEYED_VALUE.sub(_redact_with_extra, text)
-    else:
-        text = _KEYED_VALUE.sub(_redact_keyed_value, text)
+    keys = SENSITIVE_KEYS | ({k.lower() for k in extra_keys} if extra_keys else set())
+    # Quoted first: a quoted value owns everything up to its closing quote, so
+    # matching it before the bare pattern keeps spaces and commas inside the
+    # secret rather than letting the value end early.
+    text = _KEYED_QUOTED.sub(_sub_quoted(keys), text)
+    text = _KEYED_BARE.sub(_sub_bare(keys), text)
 
     text = _URL_CREDENTIALS.sub(rf"\g<scheme>{PLACEHOLDER}@", text)
     text = _JWT.sub(PLACEHOLDER, text)

@@ -37,6 +37,22 @@ a stable reason code.
 | `scope_ambiguous` | Target matches both include and exclude at equal specificity |
 | `capability_prohibited` | The requested tool is not permitted by the authorization |
 
+### Scope matching rules
+
+**Subdomains require an explicit wildcard.** `acme.com` authorizes only
+`acme.com`. `*.acme.com` authorizes subdomains but not the apex; `*acme.com`
+authorizes both. An earlier version treated a bare domain as covering every name
+beneath it, silently authorizing `internal-admin.acme.com` — precisely the host
+an engagement most often means to exclude.
+
+**Exclusions are asymmetric and still cover subdomains implicitly.** Excluding
+`prod.acme.com` also excludes `db.prod.acme.com`. Widening a deny is safe;
+widening an allow is not.
+
+**URL and API rules match on scheme, port, and whole path segments.** A rule for
+`https://host:443/v1/admin` does not authorize `http://host:8080/v1/admin`, nor
+`/v1/administrator`.
+
 **Exclusions always beat inclusions.** When a target matches both, the result is
 deny — never "most specific wins", because an operator who wrote an exclusion
 meant it.

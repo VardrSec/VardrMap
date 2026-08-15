@@ -160,3 +160,44 @@ def test_detector_agrees_with_the_redactor():
     raw = "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.payload.sig"
     assert redaction.contains_obvious_secret(raw)
     assert not redaction.contains_obvious_secret(redact_text(raw))
+
+
+# --------------------------------------------------------------------------- #
+# Regressions — reported database-bound leaks
+# --------------------------------------------------------------------------- #
+
+@pytest.mark.parametrize(
+    "body,secret",
+    [
+        ('{"password":"hunter 2"}', "hunter 2"),
+        ('{"api_key":"sk_live_abcd,efgh"}', "sk_live_abcd,efgh"),
+        ('{"password": "a b c, d"}', "a b c, d"),
+        ('{"client_secret":"cs,live abc"}', "cs,live abc"),
+        ("password: my long passphrase here", "passphrase"),
+        ('{"a": 1, "token": abc123, "b": 2}', "abc123"),
+    ],
+)
+def test_secrets_with_spaces_or_punctuation_are_redacted(body, secret):
+    """Reported leak: the value pattern excluded spaces and commas, so a match
+    ended early and redaction never fired.
+
+    Passphrases contain spaces and API keys contain punctuation — these were
+    ordinary secrets, not exotic ones, and they reached the database verbatim.
+    """
+    out = redact_text(body)
+    assert secret not in out
+    assert PLACEHOLDER in out
+
+
+def test_quoted_value_redaction_does_not_corrupt_surrounding_json():
+    """The bare-value pattern must not re-chew a placeholder the quoted pattern
+    already inserted — that produced malformed output."""
+    out = redact_text('{"username": "admin", "password": "hunter2"}')
+    assert out.count(PLACEHOLDER) == 1
+    assert out.endswith('"}')
+    assert "admin" in out
+
+
+def test_surrounding_structure_survives_bare_value_redaction():
+    out = redact_text('{"a": 1, "token": abc, "b": 2}')
+    assert '"a": 1' in out and '"b": 2' in out and "abc" not in out

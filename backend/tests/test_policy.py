@@ -24,7 +24,7 @@ def _input(**overrides):
         now=NOW,
         stop_work=False,
         authorization=policy.AuthorizationSnapshot(status="active"),
-        scope_rules=(policy.ScopeRule(value="acme.com"),),
+        scope_rules=(policy.ScopeRule(value="acme.com"), policy.ScopeRule(value="*.acme.com")),
     )
     base.update(overrides)
     return policy.PolicyInput(**base)
@@ -145,7 +145,7 @@ def test_denies_unresolvable_target_as_ambiguous(target):
 def test_exclusion_beats_a_matching_inclusion():
     """The invariant: an explicit carve-out is never overridden by a broader include."""
     rules = (
-        policy.ScopeRule(value="acme.com"),
+        policy.ScopeRule(value="*.acme.com"),
         policy.ScopeRule(value="prod.acme.com", excluded=True),
     )
     d = policy.evaluate(_input(target="prod.acme.com", scope_rules=rules))
@@ -155,7 +155,7 @@ def test_exclusion_beats_a_matching_inclusion():
 def test_exclusion_beats_inclusion_regardless_of_rule_order():
     rules = (
         policy.ScopeRule(value="prod.acme.com", excluded=True),
-        policy.ScopeRule(value="acme.com"),
+        policy.ScopeRule(value="*.acme.com"),
     )
     assert policy.evaluate(_input(target="prod.acme.com", scope_rules=rules)).reason == (
         policy.TARGET_EXCLUDED
@@ -164,7 +164,7 @@ def test_exclusion_beats_inclusion_regardless_of_rule_order():
 
 def test_exclusion_covers_subdomains_of_the_excluded_host():
     rules = (
-        policy.ScopeRule(value="acme.com"),
+        policy.ScopeRule(value="*.acme.com"),
         policy.ScopeRule(value="prod.acme.com", excluded=True),
     )
     d = policy.evaluate(_input(target="db.prod.acme.com", scope_rules=rules))
@@ -173,7 +173,7 @@ def test_exclusion_covers_subdomains_of_the_excluded_host():
 
 def test_sibling_of_an_excluded_host_is_still_allowed():
     rules = (
-        policy.ScopeRule(value="acme.com"),
+        policy.ScopeRule(value="*.acme.com"),
         policy.ScopeRule(value="prod.acme.com", excluded=True),
     )
     assert policy.evaluate(_input(target="staging.acme.com", scope_rules=rules)).allowed
@@ -210,13 +210,80 @@ def test_lookalike_domain_does_not_match():
 
 
 def test_apex_matches_a_bare_domain_rule():
-    assert policy.evaluate(_input(target="acme.com")).allowed
+    assert policy.evaluate(
+        _input(target="acme.com", scope_rules=(policy.ScopeRule(value="acme.com"),))
+    ).allowed
 
 
 def test_wildcard_rule_covers_subdomains_but_not_the_apex():
     rules = (policy.ScopeRule(value="*.acme.com"),)
     assert policy.evaluate(_input(target="api.acme.com", scope_rules=rules)).allowed
     assert not policy.evaluate(_input(target="acme.com", scope_rules=rules)).allowed
+
+
+# --------------------------------------------------------------------------- #
+# Regressions — reported authorization bypasses
+# --------------------------------------------------------------------------- #
+
+def test_bare_domain_does_not_implicitly_authorize_subdomains():
+    """Reported bypass: `acme.com` silently authorized every name beneath it.
+
+    That is a default-allow. Writing one in-scope domain must not authorize
+    `internal-admin.acme.com` — precisely the host an engagement most often
+    means to exclude. Subdomain coverage requires an explicit wildcard.
+    """
+    rules = (policy.ScopeRule(value="acme.com"),)
+    d = policy.evaluate(_input(target="internal-admin.acme.com", scope_rules=rules))
+    assert not d.allowed and d.reason == policy.TARGET_OUT_OF_SCOPE
+
+
+def test_path_rule_does_not_authorize_a_longer_sibling_segment():
+    """Reported bypass: a `/v1/admin` rule authorized `/v1/administrator`.
+
+    Prefix matching must stop at segment boundaries.
+    """
+    rules = (policy.ScopeRule(value="https://api.acme.com/v1/admin", kind="api"),)
+    assert not policy.evaluate(
+        _input(target="https://api.acme.com/v1/administrator", scope_rules=rules)
+    ).allowed
+    assert policy.evaluate(
+        _input(target="https://api.acme.com/v1/admin/reset", scope_rules=rules)
+    ).allowed
+    assert policy.evaluate(
+        _input(target="https://api.acme.com/v1/admin", scope_rules=rules)
+    ).allowed
+
+
+def test_url_rule_respects_scheme():
+    """A rule for https must not authorize plaintext http on the same host."""
+    rules = (policy.ScopeRule(value="https://api.acme.com/v1", kind="url"),)
+    assert not policy.evaluate(
+        _input(target="http://api.acme.com/v1", scope_rules=rules)
+    ).allowed
+
+
+def test_url_rule_respects_port():
+    """Reported bypass: https://host:443 authorized http://host:8080.
+
+    A different port is a different listener, frequently a different app.
+    """
+    rules = (policy.ScopeRule(value="https://api.acme.com:443/v1", kind="url"),)
+    assert not policy.evaluate(
+        _input(target="http://api.acme.com:8080/v1", scope_rules=rules)
+    ).allowed
+    assert policy.evaluate(
+        _input(target="https://api.acme.com/v1", scope_rules=rules)
+    ).allowed, "the scheme's default port must still match"
+
+
+def test_exclusions_still_cover_subdomains_implicitly():
+    """The asymmetry is deliberate — widening a deny is safe, widening an allow is not."""
+    rules = (
+        policy.ScopeRule(value="*.acme.com"),
+        policy.ScopeRule(value="prod.acme.com", excluded=True),
+    )
+    d = policy.evaluate(_input(target="db.prod.acme.com", scope_rules=rules))
+    assert not d.allowed and d.reason == policy.TARGET_EXCLUDED
 
 
 def test_ip_target_matches_a_cidr_rule():
@@ -245,7 +312,7 @@ def test_api_route_rule_scopes_to_a_path_prefix():
 
 def test_api_route_exclusion_carves_out_one_path():
     rules = (
-        policy.ScopeRule(value="acme.com"),
+        policy.ScopeRule(value="*.acme.com"),
         policy.ScopeRule(value="https://api.acme.com/admin", kind="api", excluded=True),
     )
     assert policy.evaluate(_input(target="https://api.acme.com/users", scope_rules=rules)).allowed

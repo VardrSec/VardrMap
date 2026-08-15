@@ -209,3 +209,93 @@ def test_personal_org_makes_its_user_an_owner():
         assert role[0] == "owner"
     finally:
         db.close()
+
+
+# --------------------------------------------------------------------------- #
+# Regressions — reported authorization and tenancy defects
+# --------------------------------------------------------------------------- #
+
+def test_viewer_cannot_patch_a_job_to_running(client, auth_headers, other_headers, engagement):
+    """Reported: global /jobs/{id} endpoints checked visibility, not writability.
+
+    An org viewer could mutate jobs they are only entitled to read.
+    """
+    _put_in_org(engagement, {USER2: "viewer"})
+    job_id = _create_job(client, auth_headers, engagement).json()["id"]
+    res = client.patch(f"/jobs/{job_id}", json={"status": "running"}, headers=other_headers)
+    assert res.status_code == 403
+
+
+def test_viewer_cannot_delete_a_job(client, auth_headers, other_headers, engagement):
+    _put_in_org(engagement, {USER2: "viewer"})
+    job_id = _create_job(client, auth_headers, engagement).json()["id"]
+    assert client.delete(f"/jobs/{job_id}", headers=other_headers).status_code == 403
+
+
+def test_viewer_cannot_claim_a_job(client, auth_headers, other_headers, engagement):
+    _put_in_org(engagement, {USER2: "viewer"})
+    job_id = _create_job(client, auth_headers, engagement).json()["id"]
+    assert client.post(f"/jobs/{job_id}/claim", headers=other_headers).status_code == 403
+
+
+def test_viewer_cannot_post_job_events(client, auth_headers, other_headers, engagement):
+    _put_in_org(engagement, {USER2: "viewer"})
+    job_id = _create_job(client, auth_headers, engagement).json()["id"]
+    res = client.post(
+        f"/jobs/{job_id}/events",
+        json={"kind": "log", "text": "x"},
+        headers=other_headers,
+    )
+    assert res.status_code == 403
+
+
+def test_org_only_engagement_appears_in_the_list(client, other_headers, engagement):
+    """Reported: engagements reachable solely through an org were invisible.
+
+    The list queried owned + invited only, so a teammate saw an empty workspace.
+    """
+    _put_in_org(engagement, {USER2: "member"})
+    listed = client.get("/engagements", headers=other_headers).json()["engagements"]
+    assert any(e["id"] == engagement for e in listed)
+
+
+def test_org_role_is_serialized_not_flattened_to_member(client, other_headers, engagement):
+    """Reported: org roles serialized as 'member' regardless of actual role.
+
+    The UI uses my_role to decide what to show, so an admin looked like a member
+    and a viewer looked writable.
+    """
+    _put_in_org(engagement, {USER2: "admin"})
+    body = client.get(f"/programs/{engagement}", headers=other_headers).json()
+    assert body["my_role"] == "admin"
+
+
+def test_org_viewer_is_serialized_as_viewer(client, other_headers, engagement):
+    _put_in_org(engagement, {USER2: "viewer"})
+    body = client.get(f"/programs/{engagement}", headers=other_headers).json()
+    assert body["my_role"] == "viewer"
+
+
+def test_clients_are_visible_across_the_organization(client, auth_headers, other_headers):
+    """Reported: clients stayed owner-scoped, so a firm could not share one."""
+    from db import SessionLocal as _S
+    from models import Client, Organization, OrganizationMember
+
+    created = client.post("/clients", json={"name": "Acme Corp"}, headers=auth_headers)
+    assert created.status_code == 201
+    client_id = created.json()["id"]
+
+    db = _S()
+    try:
+        org = Organization(name="Shared Firm", personal_for_github_id="")
+        db.add(org)
+        db.flush()
+        for gh in (USER1, USER2):
+            db.add(OrganizationMember(org_id=org.id, github_id=gh, role="member"))
+        db.query(Client).filter(Client.id == client_id).update({"org_id": org.id})
+        db.commit()
+    finally:
+        db.close()
+
+    listed = client.get("/clients", headers=other_headers).json()
+    assert any(c["id"] == client_id for c in listed)
