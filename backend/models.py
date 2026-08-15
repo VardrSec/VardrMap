@@ -72,6 +72,11 @@ class Engagement(Base):
     engagement_status = Column(String(20), default="active")    # planned|active|reporting|closed
     starts_at = Column(DateTime, nullable=True)
     ends_at = Column(DateTime, nullable=True)
+    # Emergency brake. When set, policy.evaluate denies every execution for this
+    # engagement regardless of scope, window, or authorization — the one control
+    # that must work when everything else is misconfigured.
+    stop_work_at = Column(DateTime, nullable=True)
+    stop_work_reason = Column(String(500), default="")
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     owner = relationship("User", back_populates="engagements")
@@ -262,10 +267,14 @@ class AuditLog(Base):
     id = Column(String, primary_key=True, default=new_uuid)
     # No FK constraints — audit records are kept even if the user/engagement is deleted
     github_id = Column(String, nullable=False, index=True)
-    action = Column(String(20), nullable=False)        # "create" | "update" | "delete"
+    action = Column(String(20), nullable=False)        # "create" | "update" | "delete" | "deny"
     resource_type = Column(String(50), nullable=False)  # "engagement" | "finding" | etc.
     resource_id = Column(String, nullable=False)
     program_id = Column(String, default="")             # context only, no FK
+    # Policy reason code for action="deny" (see policy.py). A refused execution
+    # is the security-relevant event, and "why" is the part worth keeping.
+    reason = Column(String(50), default="")
+    detail = Column(String(500), default="")
     timestamp = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
 

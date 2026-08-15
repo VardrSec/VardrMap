@@ -172,6 +172,47 @@ Delete a engagement. Cascades to all child records (scope, findings, reports, ma
 { "message": "Engagement deleted" }
 ```
 
+### `POST /engagements/{program_id}/stop-work`
+Engage the emergency brake. While engaged, **every** execution for this engagement is denied by the policy engine regardless of scope, testing window, or authorization status.
+
+Idempotent — re-engaging an already-stopped engagement succeeds and leaves the original `stop_work_at` unchanged. During an incident an operator needs certainty that the brake is on, not an error about pulling it twice.
+
+Any member with write access may engage a stop. Releasing it requires the engagement owner.
+
+**Body**
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `reason` | string | no | Max 500 chars, HTML stripped |
+
+**Response** — the engagement object, with `stop_work_at` set.
+
+### `DELETE /engagements/{program_id}/stop-work`
+Release the emergency brake. **Owner only** — engaging a stop is a safety action anyone on the engagement should be able to take; lifting one is an authorization decision.
+
+**Response** — the engagement object, with `stop_work_at` cleared.
+
+**Errors**
+- `403` — caller is a member but not the owner
+- `404` — engagement not found or caller is not a member
+
+### Execution denial (`403`)
+
+Job creation and job claim both run the central policy engine (`backend/policy.py`). A denial returns:
+
+```json
+{
+  "detail": {
+    "error": "execution_denied",
+    "reason": "outside_testing_window",
+    "message": "The testing window has closed."
+  }
+}
+```
+
+`reason` is a stable code safe to branch on. Current values: `engagement_not_active`, `stop_work_active`, `authorization_missing`, `authorization_not_active`, `outside_testing_window`, `capability_prohibited`, `target_excluded`, `target_out_of_scope`, `scope_ambiguous`.
+
+Every denial is written to `audit_logs` with `action="deny"` and the reason code. See `docs/security-model.md`.
+
 **Engagement object shape**
 ```json
 {

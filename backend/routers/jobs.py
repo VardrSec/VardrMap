@@ -5,6 +5,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+import enforcement
 import sse as _sse
 from db import get_db
 from deps import get_current_user, get_engagement_or_404, log_action, require_member_write
@@ -131,6 +132,17 @@ def create_job(
         _validate_job_config(body.tool_type, body.config)
     if body.depends_on:
         _validate_dependency(body.depends_on, program_id, current_user["github_id"], db)
+
+    # Deny by default: authorization, testing window, stop-work, and scope are
+    # checked before anything is queued. Re-checked at claim, because a job
+    # queued inside the window may be claimed after it closes.
+    enforcement.enforce(
+        db,
+        engagement,
+        capability=body.tool_type,
+        github_id=current_user["github_id"],
+        targets=_resolve_targets(program_id, body.target_source, body.config or {}, db),
+    )
 
     job = ScanJob(
         program_id=program_id,
@@ -441,6 +453,31 @@ def claim_job(
     tells us whether this caller made the transition.
     """
     now = datetime.now(timezone.utc)
+
+    # Re-check policy before handing work to a runner. A job queued while the
+    # testing window was open may be claimed after it closed, or after stop-work
+    # was engaged — enforcing only at creation would make the window advisory.
+    # This read does not weaken the claim race below: the conditional UPDATE is
+    # still what arbitrates between two runners.
+    pending = (
+        db.query(ScanJob)
+        .filter(ScanJob.id == job_id, ScanJob.owner_github_id == current_user["github_id"])
+        .first()
+    )
+    if pending is not None and pending.status == "pending":
+        engagement = get_engagement_or_404(pending.program_id, current_user, db)
+        enforcement.enforce(
+            db,
+            engagement,
+            capability=pending.tool_type,
+            github_id=current_user["github_id"],
+            targets=_resolve_targets(
+                pending.program_id, pending.target_source, pending.config or {}, db
+            ),
+            resource_id=job_id,
+            now=now,
+        )
+
     claimed = (
         db.query(ScanJob)
         .filter(

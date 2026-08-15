@@ -165,6 +165,10 @@ def serialize_engagement(p: Engagement, db: Session, github_id: str | None = Non
         "engagement_status": p.engagement_status or "active",
         "starts_at":         _iso(p.starts_at),
         "ends_at":           _iso(p.ends_at),
+        # Surfaced so a client can show the brake is on without inferring it
+        # from a denied request.
+        "stop_work_at":      _iso(p.stop_work_at),
+        "stop_work_reason":  p.stop_work_reason or "",
         "scope": {
             "in":  [serialize_scope_item(i) for i in p.scope_items if i.scope_type == "in"],
             "out": [serialize_scope_item(i) for i in p.scope_items if i.scope_type == "out"],

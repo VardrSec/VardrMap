@@ -412,3 +412,99 @@ VardrMap backend — results stored; job status visible in Jobs section
 ```
 
 If the required tool is not on PATH, the job is immediately marked `failed` with an error message — it does not stay stuck as `pending`.
+
+---
+
+## Target Architecture
+
+Added 2026-08-12 alongside `product-vision.md`, `domain-model.md`,
+`security-model.md`, and `implementation-roadmap.md`. The sections above
+describe what is deployed today; this section describes what it is becoming and
+which parts are already true.
+
+### Control plane / execution plane split
+
+```
+  VardrMap (control plane)          VardrRunner (execution plane)
+  ────────────────────────          ────────────────────────────
+  scope, policy, assets             runs inside customer network,
+  jobs, results, audit              CI, or analyst workstation
+                                    resolves secrets locally
+        │                                     │
+        │   versioned JSON job envelope       │
+        ├────────────────────────────────────►│
+        │                                     │
+        │   sanitized progress + results      │
+        │◄────────────────────────────────────┤
+        │
+        └──► VardrGate (Go) — API authorization engine, one executor
+             behind the contract, never a control-plane dependency
+```
+
+The control plane holds no tool-specific logic. It emits job envelopes and
+consumes results. This is why VardrGate can be swapped, extended, or run
+standalone without touching VardrMap.
+
+**Already true:** VardrRunner calls `/engagements/*`, `/jobs/pending`,
+`/jobs/{id}/claim`, `/jobs/{id}/events`, and `/runner/heartbeat`. Registration,
+heartbeat, claim, and progress contracts substantially exist. Phase 3 versions
+them and adds signing, cancellation, and capability reporting rather than
+rebuilding them.
+
+### Job envelope — derived, not invented
+
+VardrGate already defines the execution-bounds contract in `internal/job`:
+
+```go
+type Execution struct {
+    TimeoutSeconds      int   `json:"timeout_seconds,omitempty"`
+    MaxResponseBytes    int64 `json:"max_response_bytes,omitempty"`
+    AllowPrivateTargets bool  `json:"allow_private_targets,omitempty"`
+}
+```
+
+The shared protocol derives from this rather than defining a competing shape.
+
+**Known mismatch:** VardrGate's `Envelope.ProgramID` is `int`; VardrMap uses
+string UUIDs throughout. The shared contract must use the string form, and
+VardrGate's field needs widening when the adapter is built (Phase 3). Recorded
+here rather than papered over.
+
+### Secret handling across the boundary
+
+VardrGate's `internal/secretref` resolves `${VAR}` against the local process
+environment, and treats an unset variable as an error rather than an empty
+string. The control plane stores the *reference*; the runner resolves the
+*value* in the customer's environment. Secrets never traverse the control plane.
+
+### Tenancy — the known structural gap
+
+Two access models currently coexist:
+
+- Engagement-scoped resources use `get_engagement_or_404` (`deps.py:77`) —
+  owner **or** member. Correct.
+- Job, schedule, and client endpoints filter on
+  `owner_github_id == current_user["github_id"]` directly — owner only.
+
+Consequences: an invited teammate cannot operate an engagement's jobs; the
+runner authenticates as a user, so a team cannot share runner infrastructure;
+and a firm cannot share a client record. The identity anchor is a GitHub user,
+not an organization. Phase 1b converts this; see `implementation-roadmap.md`.
+
+### Policy enforcement
+
+Scope and authorization evaluation is centralized in `backend/policy.py` — a
+pure module with no database or framework dependency, so it is exhaustively
+testable. Callers pass a `PolicyInput`; it returns a `PolicyDecision` carrying
+`allowed` and a stable `reason` code.
+
+It is invoked at **two** points, job creation and job claim, because a job
+queued inside a testing window and claimed after it closes must be denied. See
+`security-model.md` for the full deny table.
+
+### Asset graph (Phase 2)
+
+The largest remaining structural gap. Today a host exists as five unrelated
+free-text columns with no foreign keys between them, and identity resolution is
+string comparison. Nothing can be correlated, aggregated by asset, or diffed
+over time. The relational edge-table design is specified in `domain-model.md`.
