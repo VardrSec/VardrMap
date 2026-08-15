@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from db import get_db
 from deps import (
+    accessible_engagement_ids,
     get_current_user,
     get_engagement_or_404,
     log_action,
@@ -57,24 +58,13 @@ def get_programs(
     db: Session = Depends(get_db),
 ):
     github_id = current_user["github_id"]
-    owned = db.query(Engagement).filter(Engagement.owner_github_id == github_id).all()
-
-    # Also include engagements where this user is an invited member
-    member_engagement_ids = [
-        row[0]
-        for row in db.query(EngagementMember.program_id).filter(
-            EngagementMember.member_github_id == github_id
-        ).all()
-    ]
-    shared = (
-        db.query(Engagement)
-        .filter(Engagement.id.in_(member_engagement_ids))
-        .all()
-        if member_engagement_ids else []
+    # One source of truth for reachability: ownership, organization membership,
+    # and per-engagement invitation. Listing only owned + invited engagements
+    # hid every engagement a user could reach solely through their org.
+    reachable = accessible_engagement_ids(github_id, db)
+    all_engagements = (
+        db.query(Engagement).filter(Engagement.id.in_(reachable)).all() if reachable else []
     )
-
-    seen = {p.id for p in owned}
-    all_engagements = owned + [p for p in shared if p.id not in seen]
     items = [serialize_engagement(p, db, github_id=github_id) for p in all_engagements]
     # Both keys carry the same list. "engagements" is the name going forward;
     # "programs" is kept because VardrRunner reads it (api.py: .get("programs"))

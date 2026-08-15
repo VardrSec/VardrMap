@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from db import get_db
-from deps import get_current_user, log_action
+from deps import accessible_org_ids, get_current_user, log_action, personal_org
 from models import Client, Engagement
 from schemas import ClientCreate, ClientUpdate
 from serializers import serialize_client
@@ -21,10 +21,23 @@ router = APIRouter()
 
 
 def _get_client_or_404(client_id: str, current_user: dict[str, str], db: Session) -> Client:
-    client = db.query(Client).filter(
-        Client.id == client_id,
-        Client.owner_github_id == current_user["github_id"],
-    ).first()
+    """A client belongs to an organization, not a person.
+
+    Two consultants at the same firm must share client records. Ownership is
+    still honoured so rows created before organizations existed stay reachable
+    by their creator.
+    """
+    github_id = current_user["github_id"]
+    org_ids = accessible_org_ids(github_id, db)
+    client = (
+        db.query(Client)
+        .filter(
+            Client.id == client_id,
+            (Client.owner_github_id == github_id)
+            | (Client.org_id.in_(org_ids) if org_ids else False),
+        )
+        .first()
+    )
     if not client:
         raise HTTPException(status_code=404, detail="Client not found")
     return client
@@ -35,9 +48,17 @@ def list_clients(
     current_user: dict[str, str] = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    clients = db.query(Client).filter(
-        Client.owner_github_id == current_user["github_id"],
-    ).order_by(Client.name).all()
+    github_id = current_user["github_id"]
+    org_ids = accessible_org_ids(github_id, db)
+    clients = (
+        db.query(Client)
+        .filter(
+            (Client.owner_github_id == github_id)
+            | (Client.org_id.in_(org_ids) if org_ids else False)
+        )
+        .order_by(Client.name)
+        .all()
+    )
     return [serialize_client(c) for c in clients]
 
 
@@ -49,6 +70,7 @@ def create_client(
 ):
     client = Client(
         owner_github_id=current_user["github_id"],
+        org_id=personal_org(current_user["github_id"], db).id,
         name=payload.name,
         contact_name=payload.contact_name or "",
         contact_email=payload.contact_email or "",

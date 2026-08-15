@@ -27,6 +27,16 @@ ALLOWED_CONTENT_TYPES = {
 }
 
 
+def _link_one(db, program_id: str, row, source: str) -> None:
+    """Attach a single row to its asset. Idempotent; skips rows already linked."""
+    if row is None or getattr(row, "asset_id", None):
+        return
+    observed = getattr(row, "url", "") or getattr(row, "host", "") or getattr(row, "asset", "")
+    asset = asset_graph.upsert(db, program_id, observed, source=source, host_level=True)
+    if asset is not None:
+        row.asset_id = asset.id
+
+
 def _link_assets(db, program_id: str, rows, source: str) -> None:
     """Attach each imported row to its asset, creating the node on first sight.
 
@@ -149,6 +159,7 @@ def _upsert_recon_httpx(
                     setattr(target, field, value)
             if item.status_code is not None:
                 target.status_code = item.status_code
+            _link_one(db, program_id, target, "httpx")
             updated_count += 1
         else:
             item.first_seen_at = now
@@ -156,6 +167,10 @@ def _upsert_recon_httpx(
             if host:
                 by_host[host] = item  # so later rows in this batch enrich, not duplicate
             new_count += 1
+
+    db.flush()
+    for item in incoming:
+        _link_one(db, program_id, item, "httpx")
 
     return new_count, updated_count
 

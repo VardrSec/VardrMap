@@ -148,21 +148,48 @@ def normalize_target(target: str) -> tuple[str, str]:
 
 
 def _host_matches(rule_value: str, host: str) -> bool:
-    """Domain rule matching, including implicit subdomain coverage.
+    """Domain rule matching. Subdomains require an explicit wildcard.
 
-    `acme.com` covers `api.acme.com`; `*.acme.com` covers subdomains but not the
-    apex. Substring comparison is never used — `notacme.com` must not match
-    `acme.com`.
+    `acme.com` matches only `acme.com`. `*.acme.com` matches subdomains but not
+    the apex; `*acme.com` (no dot) matches the apex and every subdomain.
+
+    An earlier version treated a bare `acme.com` as covering every subdomain.
+    That is a default-allow: writing one in-scope domain silently authorized
+    `internal-admin.acme.com` and every other name under it, which is precisely
+    the class of host an engagement most often means to exclude. Authorization
+    must be stated, not inferred.
+
+    Exclusions keep implicit subdomain coverage — see `_excludes_host`. Widening
+    a deny is safe; widening an allow is not.
+
+    Substring comparison is never used, so `notacme.com` cannot match `acme.com`.
     """
     rule = rule_value.strip().rstrip(".").lower()
     if not rule:
         return False
     if rule.startswith("*."):
-        suffix = rule[2:]
-        return host.endswith("." + suffix)
-    if host == rule:
-        return True
-    return host.endswith("." + rule)
+        return host.endswith("." + rule[2:])
+    if rule.startswith("*"):
+        suffix = rule[1:]
+        return host == suffix or host.endswith("." + suffix)
+    return host == rule
+
+
+def _excludes_host(rule_value: str, host: str) -> bool:
+    """Exclusion matching, which *does* cover subdomains implicitly.
+
+    Excluding `prod.acme.com` must also exclude `db.prod.acme.com`. The
+    asymmetry with `_host_matches` is deliberate: an operator who carves
+    something out means the whole subtree, and erring toward deny is safe.
+    """
+    rule = rule_value.strip().rstrip(".").lower()
+    if not rule:
+        return False
+    if rule.startswith("*."):
+        return host.endswith("." + rule[2:])
+    if rule.startswith("*"):
+        rule = rule[1:]
+    return host == rule or host.endswith("." + rule)
 
 
 def _rule_matches(rule: ScopeRule, kind: str, value: str, raw_target: str) -> bool:
@@ -179,20 +206,73 @@ def _rule_matches(rule: ScopeRule, kind: str, value: str, raw_target: str) -> bo
             return False
 
     if rule.kind in ("url", "api"):
-        # Path-bearing rules compare on the normalized full target, so
-        # /v1/admin can be excluded without excluding the whole host.
         _, rule_host = normalize_target(rule_value)
         if rule_host and rule_host != value:
             return False
+
+        # Scheme and port are part of the identity of a URL rule. A rule for
+        # https://host:443 must not authorize http://host:8080 — that is a
+        # different listener, frequently a different application.
+        rule_scheme, rule_port = _scheme_and_port(rule_value)
+        target_scheme, target_port = _scheme_and_port(raw_target)
+        if rule_scheme and rule_scheme != target_scheme:
+            return False
+        if rule_port is not None and rule_port != target_port:
+            return False
+
         rule_path = _path_of(rule_value)
         if not rule_path:
             return True
-        return _path_of(raw_target).startswith(rule_path)
+        return _path_within(_path_of(raw_target), rule_path)
 
     if kind == "ip":
         # A bare IP rule must match exactly; domain semantics do not apply.
         return rule_value == value
+    if rule.excluded:
+        return _excludes_host(rule_value, value)
     return _host_matches(rule_value, value)
+
+
+def _scheme_and_port(target: str) -> tuple[str, Optional[int]]:
+    """Extract (scheme, port), applying the scheme's default port when absent."""
+    raw = (target or "").strip()
+    scheme = ""
+    remainder = raw
+    if "://" in remainder:
+        scheme, remainder = remainder.split("://", 1)
+        scheme = scheme.lower()
+
+    authority = remainder.split("/", 1)[0]
+    if "@" in authority:
+        authority = authority.split("@", 1)[1]
+
+    port: Optional[int] = None
+    if authority.startswith("["):
+        close = authority.find("]")
+        rest = authority[close + 1:] if close != -1 else ""
+        if rest.startswith(":") and rest[1:].isdigit():
+            port = int(rest[1:])
+    elif authority.count(":") == 1:
+        _, tail = authority.split(":", 1)
+        if tail.isdigit():
+            port = int(tail)
+
+    if port is None:
+        port = {"https": 443, "http": 80}.get(scheme)
+    return scheme, port
+
+
+def _path_within(target_path: str, rule_path: str) -> bool:
+    """True when target_path is rule_path or a path *segment* beneath it.
+
+    A plain `startswith` authorized `/v1/administrator` from a `/v1/admin`
+    rule — the reported bypass. Matching stops at segment boundaries so a
+    longer sibling name can never inherit a shorter rule's authorization.
+    """
+    if target_path == rule_path:
+        return True
+    prefix = rule_path if rule_path.endswith("/") else rule_path + "/"
+    return target_path.startswith(prefix)
 
 
 def _path_of(target: str) -> str:

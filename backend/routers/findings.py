@@ -4,6 +4,7 @@ import os
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
+import assets as asset_graph
 from db import get_db
 from deps import get_current_user, get_engagement_or_404, log_action, require_member_write
 from models import Finding
@@ -11,6 +12,20 @@ from schemas import FindingCreate, FindingUpdate
 from serializers import serialize_finding
 
 router = APIRouter()
+
+
+def _link_asset(db: Session, program_id: str, finding: Finding) -> None:
+    """Attach a finding to the host it was found on.
+
+    A finding that is not on the graph cannot be aggregated per asset, cannot be
+    correlated with the service that exposed it, and drops out of every
+    attack-surface view — which is most of the reason the graph exists.
+    """
+    if not finding.asset or finding.asset_id:
+        return
+    node = asset_graph.upsert(db, program_id, finding.asset, source="finding", host_level=True)
+    if node is not None:
+        finding.asset_id = node.id
 
 
 @router.get("/engagements/{program_id}/findings")
@@ -57,6 +72,7 @@ def add_finding(
     )
     db.add(finding)
     db.flush()
+    _link_asset(db, program_id, finding)
     log_action(db, current_user["github_id"], "create", "finding", finding.id, program_id)
     db.commit()
     db.refresh(finding)
@@ -79,8 +95,14 @@ def update_finding(
     ).first()
     if not finding:
         raise HTTPException(status_code=404, detail="Finding not found")
-    for key, value in payload.model_dump(exclude_unset=True).items():
+    fields = payload.model_dump(exclude_unset=True)
+    for key, value in fields.items():
         setattr(finding, key, value)
+    if "asset" in fields:
+        # The finding moved to a different host — relink rather than leave it
+        # pointing at the previous one.
+        finding.asset_id = None
+        _link_asset(db, program_id, finding)
     log_action(db, current_user["github_id"], "update", "finding", finding_id, program_id)
     db.commit()
     db.refresh(finding)

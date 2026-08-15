@@ -167,6 +167,39 @@ def create_job(
     return serialize_job(job)
 
 
+def _writable_engagement(job: ScanJob, current_user: dict, db: Session):
+    """Resolve the job's engagement and refuse viewers.
+
+    The global /jobs/{id} endpoints resolve access through
+    accessible_engagement_ids, which answers "can this caller see the
+    engagement" — not "may they change it". Without this, an organization
+    viewer could mutate jobs they are only entitled to read.
+    """
+    engagement = get_engagement_or_404(job.program_id, current_user, db)
+    require_member_write(engagement, current_user, db)
+    return engagement
+
+
+def _enforce_run_transition(job: ScanJob, current_user: dict, db: Session, now) -> None:
+    """Re-run the policy engine before a job may enter `running`.
+
+    PATCH /jobs/{id} can set status directly — VardrRunner uses it — which was
+    an alternate route into execution that never consulted the policy engine.
+    A job denied at /claim could simply be PATCHed to running instead, making
+    the testing window, stop-work switch and scope rules advisory on that path.
+    """
+    engagement = get_engagement_or_404(job.program_id, current_user, db)
+    enforcement.enforce(
+        db,
+        engagement,
+        capability=job.tool_type,
+        github_id=current_user["github_id"],
+        targets=_resolve_targets(job.program_id, job.target_source, job.config or {}, db),
+        resource_id=job.id,
+        now=now,
+    )
+
+
 def _validate_dependency(parent_id: str, program_id: str, github_id: str, db: Session) -> None:
     """A dependency must be an existing job the caller owns in the same engagement.
     Prevents dangling waits and cross-engagement/cross-user references."""
@@ -417,9 +450,15 @@ def update_job(
     if body.status not in valid:
         raise HTTPException(status_code=400, detail=f"status must be one of {valid}")
 
+    _writable_engagement(job, current_user, db)
+
+    now = datetime.now(timezone.utc)
+    if body.status == "running" and job.status != "running":
+        _enforce_run_transition(job, current_user, db, now)
+
     job.status = body.status
     if body.status == "running" and not job.started_at:
-        job.started_at = datetime.now(timezone.utc)
+        job.started_at = now
     if body.status in ("done", "failed"):
         job.completed_at = datetime.now(timezone.utc)
     if body.error_message is not None:
@@ -473,6 +512,8 @@ def claim_job(
         )
         .first()
     )
+    if pending is not None:
+        _writable_engagement(pending, current_user, db)
     if pending is not None and pending.status == "pending":
         engagement = get_engagement_or_404(pending.program_id, current_user, db)
         enforcement.enforce(
@@ -558,6 +599,7 @@ def create_job_event(
     )
     if not job:
         raise HTTPException(status_code=404)
+    _writable_engagement(job, current_user, db)
 
     event = JobEvent(
         job_id=job_id,
@@ -590,6 +632,7 @@ def delete_job(
     )
     if not job:
         raise HTTPException(status_code=404)
+    _writable_engagement(job, current_user, db)
     log_action(db, current_user["github_id"], "delete", "scan_job", job_id, job.program_id)
     db.delete(job)
     db.commit()

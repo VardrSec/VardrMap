@@ -143,13 +143,15 @@ def serialize_engagement(p: Engagement, db: Session, github_id: str | None = Non
         if status in findings_by_status:
             findings_by_status[status] = cnt
 
+    # Resolve through deps.engagement_access so ownership, organization
+    # membership and per-engagement invitation are all honoured. Reading only
+    # EngagementMember reported an org admin as "member", which is the role the
+    # UI then uses to decide what to show.
     my_role = "owner"
     if github_id and github_id != p.owner_github_id:
-        member = db.query(EngagementMember).filter(
-            EngagementMember.program_id == p.id,
-            EngagementMember.member_github_id == github_id,
-        ).first()
-        my_role = member.role if member else "member"
+        from deps import engagement_access
+
+        my_role = engagement_access(p, github_id, db) or "viewer"
 
     return {
         "id": p.id,
