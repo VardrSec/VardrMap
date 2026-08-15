@@ -1,4 +1,7 @@
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -9,10 +12,12 @@ from deps import (
     log_action,
     parse_iso_datetime,
     require_engagement_owner,
+    require_member_write,
     resolve_owned_client_id,
 )
 from models import Finding, ManualTest, Engagement, EngagementMember, ReconItem, Report, ScanItem, User
 from schemas import EngagementCreate, EngagementUpdate
+from security import strip_html
 from serializers import serialize_engagement
 
 router = APIRouter()
@@ -193,3 +198,58 @@ def delete_engagement(
     db.delete(engagement)
     db.commit()
     return {"message": "Engagement deleted"}
+
+
+class StopWorkRequest(BaseModel):
+    reason: str = Field(default="", max_length=500)
+
+    @field_validator("reason", mode="before")
+    @classmethod
+    def sanitize(cls, v):
+        return strip_html(v) if v else ""
+
+
+@router.post("/engagements/{program_id}/stop-work")
+def engage_stop_work(
+    program_id: str,
+    body: StopWorkRequest,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Engage the emergency brake. Every execution for this engagement is denied
+    until it is released — regardless of scope, window, or authorization.
+
+    Deliberately idempotent: re-engaging an already-stopped engagement succeeds
+    rather than erroring. During an incident the operator needs certainty that
+    the brake is on, not an argument about whether they pulled it twice.
+    """
+    engagement = get_engagement_or_404(program_id, current_user, db)
+    require_member_write(engagement, current_user, db)
+
+    if engagement.stop_work_at is None:
+        engagement.stop_work_at = datetime.now(timezone.utc)
+    engagement.stop_work_reason = body.reason
+    log_action(db, current_user["github_id"], "stop_work", "engagement", program_id, program_id)
+    db.commit()
+    db.refresh(engagement)
+    return serialize_engagement(engagement, db)
+
+
+@router.delete("/engagements/{program_id}/stop-work")
+def release_stop_work(
+    program_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Release the emergency brake. Only the engagement owner may do this —
+    engaging a stop is a safety action anyone on the engagement should be able
+    to take; lifting one is an authorization decision."""
+    engagement = get_engagement_or_404(program_id, current_user, db)
+    require_engagement_owner(engagement, current_user)
+
+    engagement.stop_work_at = None
+    engagement.stop_work_reason = ""
+    log_action(db, current_user["github_id"], "resume_work", "engagement", program_id, program_id)
+    db.commit()
+    db.refresh(engagement)
+    return serialize_engagement(engagement, db)
