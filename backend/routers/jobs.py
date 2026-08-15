@@ -8,7 +8,13 @@ from sqlalchemy.orm import Session
 import enforcement
 import sse as _sse
 from db import get_db
-from deps import get_current_user, get_engagement_or_404, log_action, require_member_write
+from deps import (
+    accessible_engagement_ids,
+    get_current_user,
+    get_engagement_or_404,
+    log_action,
+    require_member_write,
+)
 from limiter import limiter
 from models import JobEvent, ReconItem, ScanJob, ScheduledScan, ScopeItem, User
 from notifications import send_webhook
@@ -168,7 +174,7 @@ def _validate_dependency(parent_id: str, program_id: str, github_id: str, db: Se
         db.query(ScanJob)
         .filter(
             ScanJob.id == parent_id,
-            ScanJob.owner_github_id == github_id,
+            ScanJob.program_id.in_(accessible_engagement_ids(github_id, db)),
             ScanJob.program_id == program_id,
         )
         .first()
@@ -312,7 +318,7 @@ def _materialize_due_schedules(db: Session, github_id: str) -> None:
     due = (
         db.query(ScheduledScan)
         .filter(
-            ScheduledScan.owner_github_id == github_id,
+            ScheduledScan.program_id.in_(accessible_engagement_ids(github_id, db)),
             ScheduledScan.enabled == True,  # noqa: E712 — SQLAlchemy needs the comparison
             ScheduledScan.next_run_at <= now,
         )
@@ -347,7 +353,7 @@ def get_pending_jobs(
     pending = (
         db.query(ScanJob)
         .filter(
-            ScanJob.owner_github_id == current_user["github_id"],
+            ScanJob.program_id.in_(accessible_engagement_ids(current_user["github_id"], db)),
             ScanJob.status == "pending",
         )
         .order_by(ScanJob.created_at.asc())
@@ -400,7 +406,7 @@ def update_job(
         db.query(ScanJob)
         .filter(
             ScanJob.id == job_id,
-            ScanJob.owner_github_id == current_user["github_id"],
+            ScanJob.program_id.in_(accessible_engagement_ids(current_user["github_id"], db)),
         )
         .first()
     )
@@ -461,7 +467,10 @@ def claim_job(
     # still what arbitrates between two runners.
     pending = (
         db.query(ScanJob)
-        .filter(ScanJob.id == job_id, ScanJob.owner_github_id == current_user["github_id"])
+        .filter(
+            ScanJob.id == job_id,
+            ScanJob.program_id.in_(accessible_engagement_ids(current_user["github_id"], db)),
+        )
         .first()
     )
     if pending is not None and pending.status == "pending":
@@ -482,7 +491,7 @@ def claim_job(
         db.query(ScanJob)
         .filter(
             ScanJob.id == job_id,
-            ScanJob.owner_github_id == current_user["github_id"],
+            ScanJob.program_id.in_(accessible_engagement_ids(current_user["github_id"], db)),
             ScanJob.status == "pending",
         )
         .update(
@@ -498,7 +507,10 @@ def claim_job(
         # scoped to the owner so a non-owner's job is reported as 404, not 403.
         job = (
             db.query(ScanJob)
-            .filter(ScanJob.id == job_id, ScanJob.owner_github_id == current_user["github_id"])
+            .filter(
+            ScanJob.id == job_id,
+            ScanJob.program_id.in_(accessible_engagement_ids(current_user["github_id"], db)),
+        )
             .first()
         )
         if not job:
@@ -507,7 +519,10 @@ def claim_job(
 
     job = (
         db.query(ScanJob)
-        .filter(ScanJob.id == job_id, ScanJob.owner_github_id == current_user["github_id"])
+        .filter(
+            ScanJob.id == job_id,
+            ScanJob.program_id.in_(accessible_engagement_ids(current_user["github_id"], db)),
+        )
         .first()
     )
     return serialize_job(job)
@@ -535,7 +550,10 @@ def create_job_event(
     """VardrRunner posts lifecycle events here while executing a job."""
     job = (
         db.query(ScanJob)
-        .filter(ScanJob.id == job_id, ScanJob.owner_github_id == current_user["github_id"])
+        .filter(
+            ScanJob.id == job_id,
+            ScanJob.program_id.in_(accessible_engagement_ids(current_user["github_id"], db)),
+        )
         .first()
     )
     if not job:
@@ -564,7 +582,10 @@ def delete_job(
     """Permanently delete a job and its events. Useful for removing stuck jobs."""
     job = (
         db.query(ScanJob)
-        .filter(ScanJob.id == job_id, ScanJob.owner_github_id == current_user["github_id"])
+        .filter(
+            ScanJob.id == job_id,
+            ScanJob.program_id.in_(accessible_engagement_ids(current_user["github_id"], db)),
+        )
         .first()
     )
     if not job:
@@ -584,7 +605,10 @@ def get_job_events(
     """Frontend polls this to stream job lifecycle events into the Terminal."""
     job = (
         db.query(ScanJob)
-        .filter(ScanJob.id == job_id, ScanJob.owner_github_id == current_user["github_id"])
+        .filter(
+            ScanJob.id == job_id,
+            ScanJob.program_id.in_(accessible_engagement_ids(current_user["github_id"], db)),
+        )
         .first()
     )
     if not job:
