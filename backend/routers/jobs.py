@@ -139,14 +139,14 @@ def create_job(
     if body.depends_on:
         _validate_dependency(body.depends_on, program_id, current_user["github_id"], db)
 
-    # Deny by default: authorization, testing window, stop-work, and scope are
-    # checked before anything is queued. Re-checked at claim, because a job
-    # queued inside the window may be claimed after it closes.
-    enforcement.enforce(
+    # Advisory: authorization, testing window and scope are evaluated and
+    # reported, not enforced — staying in scope is the operator's call. Only
+    # stop-work refuses, and that raises from inside check(). Re-checked at
+    # claim, because a job queued inside the window may be claimed after it closes.
+    decision = enforcement.check(
         db,
         engagement,
         capability=body.tool_type,
-        github_id=current_user["github_id"],
         targets=_resolve_targets(program_id, body.target_source, body.config or {}, db),
     )
 
@@ -164,7 +164,7 @@ def create_job(
     db.commit()
     db.refresh(job)
     _sse.notify(program_id, {"type": "job_update", "job_id": job.id, "status": job.status})
-    return serialize_job(job)
+    return {**serialize_job(job), "warnings": enforcement.as_warnings(decision)}
 
 
 def _writable_engagement(job: ScanJob, current_user: dict, db: Session):
@@ -180,24 +180,22 @@ def _writable_engagement(job: ScanJob, current_user: dict, db: Session):
     return engagement
 
 
-def _enforce_run_transition(job: ScanJob, current_user: dict, db: Session, now) -> None:
-    """Re-run the policy engine before a job may enter `running`.
+def _check_run_transition(job: ScanJob, current_user: dict, db: Session, now) -> list[dict]:
+    """Re-evaluate policy before a job enters `running`; returns any warnings.
 
-    PATCH /jobs/{id} can set status directly — VardrRunner uses it — which was
-    an alternate route into execution that never consulted the policy engine.
-    A job denied at /claim could simply be PATCHed to running instead, making
-    the testing window, stop-work switch and scope rules advisory on that path.
+    PATCH /jobs/{id} can set status directly — VardrRunner uses it — so this
+    path is evaluated like the others. Scope and window findings are advisory
+    here too; stop-work still refuses, from inside check().
     """
     engagement = get_engagement_or_404(job.program_id, current_user, db)
-    enforcement.enforce(
+    decision = enforcement.check(
         db,
         engagement,
         capability=job.tool_type,
-        github_id=current_user["github_id"],
         targets=_resolve_targets(job.program_id, job.target_source, job.config or {}, db),
-        resource_id=job.id,
         now=now,
     )
+    return enforcement.as_warnings(decision)
 
 
 def _validate_dependency(parent_id: str, program_id: str, github_id: str, db: Session) -> None:
@@ -453,8 +451,9 @@ def update_job(
     _writable_engagement(job, current_user, db)
 
     now = datetime.now(timezone.utc)
+    warnings: list[dict] = []
     if body.status == "running" and job.status != "running":
-        _enforce_run_transition(job, current_user, db, now)
+        warnings = _check_run_transition(job, current_user, db, now)
 
     job.status = body.status
     if body.status == "running" and not job.started_at:
@@ -480,7 +479,7 @@ def update_job(
             )
             background_tasks.add_task(send_webhook, user.webhook_url, message)
 
-    return serialize_job(job)
+    return {**serialize_job(job), "warnings": warnings}
 
 
 @router.post("/jobs/{job_id}/claim")
@@ -499,11 +498,12 @@ def claim_job(
     """
     now = datetime.now(timezone.utc)
 
-    # Re-check policy before handing work to a runner. A job queued while the
-    # testing window was open may be claimed after it closed, or after stop-work
-    # was engaged — enforcing only at creation would make the window advisory.
+    # Re-evaluate before handing work to a runner. A job queued while the testing
+    # window was open may be claimed after it closed, or after stop-work was
+    # engaged. Scope and window findings ride back as warnings; stop-work refuses.
     # This read does not weaken the claim race below: the conditional UPDATE is
     # still what arbitrates between two runners.
+    warnings: list[dict] = []
     pending = (
         db.query(ScanJob)
         .filter(
@@ -516,16 +516,16 @@ def claim_job(
         _writable_engagement(pending, current_user, db)
     if pending is not None and pending.status == "pending":
         engagement = get_engagement_or_404(pending.program_id, current_user, db)
-        enforcement.enforce(
-            db,
-            engagement,
-            capability=pending.tool_type,
-            github_id=current_user["github_id"],
-            targets=_resolve_targets(
-                pending.program_id, pending.target_source, pending.config or {}, db
-            ),
-            resource_id=job_id,
-            now=now,
+        warnings = enforcement.as_warnings(
+            enforcement.check(
+                db,
+                engagement,
+                capability=pending.tool_type,
+                targets=_resolve_targets(
+                    pending.program_id, pending.target_source, pending.config or {}, db
+                ),
+                now=now,
+            )
         )
 
     claimed = (
@@ -566,7 +566,7 @@ def claim_job(
         )
         .first()
     )
-    return serialize_job(job)
+    return {**serialize_job(job), "warnings": warnings}
 
 
 def serialize_event(e: JobEvent) -> dict:

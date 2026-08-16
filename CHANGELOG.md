@@ -4,6 +4,7 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 | Version | Date | Summary |
 |---|---|---|
+| [v0.29.0](changelog/v0.29.0.md) | 2026-08-16 | **Breaking** — scope, window and authorization findings are advisory: jobs return `200` with a `warnings` array instead of `403`, and run. Stop-work still refuses; warnings are no longer audited |
 | [v0.28.0](changelog/v0.28.0.md) | 2026-08-15 | **Breaking** — fixes 7 reviewed defects: three scope-matching bypasses, PATCH job-state bypass of the policy engine, viewer job mutation, redaction leaks on spaces/punctuation, unwired asset ingestion, incomplete org tenancy, missing asset FKs |
 | [v0.27.0](changelog/v0.27.0.md) | 2026-08-15 | Evidence entity with centralized secret redaction applied on write — headers, body keys, URL credentials, bare JWTs; content hash, sensitivity and retention |
 | [v0.26.0](changelog/v0.26.0.md) | 2026-08-12 | Asset graph — canonical identity replaces five free-text host columns; nodes, edges, provenance, backfill, and the "everything about this host" query |

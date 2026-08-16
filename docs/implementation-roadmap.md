@@ -43,17 +43,18 @@ working code, not because it matters less.
 - [x] Critical defect identified and fixed: authorization never enforced (T1)
 - [x] Migration and compatibility strategy documented
 
-## Phase 1a — Engagement policy engine ✅ this PR
+## Phase 1a — Engagement policy engine ✅ (advisory since v0.29.0)
 
 - [x] `backend/policy.py` — pure, DB-free, typed `PolicyDecision` + reason codes
 - [x] Scope matching: domain, subdomain wildcard, IP, CIDR, URL, API route
-- [x] Exclusions beat inclusions; ambiguity denies
-- [x] Stop-work switch on the engagement
-- [x] Authorization status + window enforcement
-- [x] Enforcement at **job creation and job claim**
-- [x] Denials written to `audit_logs` with reason code
+- [x] Exclusions beat inclusions; ambiguity warns
+- [x] Stop-work switch on the engagement — the one finding that still refuses
+- [x] Authorization status + window evaluation
+- [x] Evaluated at **job creation, job claim, and PATCH → `running`**
 - [x] Migration `0016` — reversible
-- [x] Tests for all deny paths, both enforcement points, bounty carve-out
+- [x] Tests for every reason code, all three evaluation points, bounty carve-out
+- [x] **v0.29.0:** findings returned as `warnings` rather than enforced; scope is
+      the operator's responsibility (ADR 0001 § Amendment). Warnings are not audited.
 
 ## Phase 1b — Organizations and RBAC ✅
 
@@ -118,9 +119,9 @@ naming the same `down_revision` is a failed deploy, not a merge conflict.
 `/engagements/*`. VardrRunner already calls `/engagements/*`, so the alias can
 retire once the `programs` response key is dropped — tracked in `roadmap.md`.
 
-**Default-deny rollout risk.** Phase 1a changes job dispatch from allow to deny.
-Existing engagements have no authorization records. The bounty carve-out and the
-`active` default for `engagement_status` mean existing bounty engagements
-continue to work unchanged; `pentest`/`red_team`/`internal` engagements will
-require an authorization record before jobs dispatch. This is the intended
-behavior change and is called out in the changelog as breaking.
+**Default-deny rollout risk — resolved in v0.29.0.** Phase 1a changed job
+dispatch from allow to deny, which meant `pentest`/`red_team`/`internal`
+engagements needed an authorization record before anything would run. v0.29.0
+makes those findings advisory, so no engagement is blocked by a missing record;
+the warning tells the operator what is absent and the job proceeds. Stop-work is
+the only remaining refusal.

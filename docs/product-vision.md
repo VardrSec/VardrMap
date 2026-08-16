@@ -61,9 +61,13 @@ behind that contract, not a dependency.
 Most security tooling stores tool output. The differentiator here is that
 VardrMap models the **target** and the **authority to test it**:
 
-1. **Authorization is enforced, not recorded.** A platform that stores a testing
-   window and then dispatches outside it has documented a violation, not
-   prevented one. Execution defaults to deny.
+1. **Authorization is modelled and surfaced.** Scope, the testing window, and the
+   permission to test are first-class records, and every job is evaluated
+   against them — so the operator is told, at the moment it matters, when a
+   target falls outside what was agreed. VardrMap does not refuse the work:
+   staying in scope is the operator's responsibility, as it is with every other
+   tool in the kit. The exception is stop-work, the operator's own halt switch,
+   which is honoured absolutely.
 2. **Assets are a graph, not rows.** A finding correlates to the service that
    exposed it, which correlates to the host, which correlates to the domain.
    That chain is what makes risk aggregation, retest, and attack-path analysis

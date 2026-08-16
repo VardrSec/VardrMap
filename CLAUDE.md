@@ -47,6 +47,7 @@ Deliberately still named "program":
   `max_payout`) is correct, because it describes someone else's programme.
 
 ## Security
+- **Scope is advisory, not enforced.** `policy.py` evaluates every job against authorization, testing window and scope; findings ride back as a `warnings` array and the job still runs. Staying in scope is the operator's responsibility — Burp and nmap don't police their users either. Do not add blocking behaviour to this path. The one exception is stop-work (`403`), the operator's own halt switch. See ADR 0001 § Amendment.
 - BOLA/IDOR: every engagement-owned resource scoped by authenticated `github_id` at the DB query level
 - Cross-user access → `404`, not `403` (never reveal existence of another user's object)
 - Store only hashes of API keys/secrets, never raw values
