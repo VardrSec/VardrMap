@@ -116,6 +116,79 @@ describe("JobsSection", () => {
     }
   });
 
+  it("excluding a stage posts only the included ones, still chained", async () => {
+    const confirmSpy = jest.spyOn(window, "confirm").mockReturnValue(true);
+    try {
+      const { authFetch } = renderWithApp(<JobsSection engagementId={PROGRAM_ID} />, {
+        routes: {
+          ...BASE_ROUTES,
+          [`POST /engagements/${PROGRAM_ID}/pipelines`]: { body: { jobs: [] } },
+        },
+      });
+
+      await screen.findByText("Queue a Job");
+      await userEvent.click(await screen.findByRole("button", { name: "Select recon pipeline" }));
+      // Drop the middle stage — the survivors must still be posted in order.
+      await userEvent.click(screen.getByRole("button", { name: "Exclude httpx" }));
+      await userEvent.click(screen.getByRole("button", { name: "Queue Pipeline" }));
+
+      await waitFor(() =>
+        expect(authFetch).toHaveBeenCalledWith(
+          `/engagements/${PROGRAM_ID}/pipelines`,
+          expect.objectContaining({ method: "POST" }),
+        ),
+      );
+      const call = authFetch.mock.calls.find((c: unknown[]) => c[0] === `/engagements/${PROGRAM_ID}/pipelines`);
+      const stages = JSON.parse((call![1] as { body: string }).body).stages;
+      expect(stages.map((s: { tool_type: string }) => s.tool_type)).toEqual(["subfinder", "nuclei"]);
+    } finally {
+      confirmSpy.mockRestore();
+    }
+  });
+
+  it("excluding every stage disables Queue Pipeline", async () => {
+    renderWithApp(<JobsSection engagementId={PROGRAM_ID} />, { routes: BASE_ROUTES });
+
+    await screen.findByText("Queue a Job");
+    await userEvent.click(await screen.findByRole("button", { name: "Select recon pipeline" }));
+    for (const tool of ["subfinder", "httpx", "nuclei"]) {
+      await userEvent.click(screen.getByRole("button", { name: `Exclude ${tool}` }));
+    }
+
+    expect(screen.getByRole("button", { name: "Queue Pipeline" })).toBeDisabled();
+    expect(screen.getByText("include at least one stage to queue")).toBeInTheDocument();
+  });
+
+  it("re-including a stage restores it to its original position", async () => {
+    const confirmSpy = jest.spyOn(window, "confirm").mockReturnValue(true);
+    try {
+      const { authFetch } = renderWithApp(<JobsSection engagementId={PROGRAM_ID} />, {
+        routes: {
+          ...BASE_ROUTES,
+          [`POST /engagements/${PROGRAM_ID}/pipelines`]: { body: { jobs: [] } },
+        },
+      });
+
+      await screen.findByText("Queue a Job");
+      await userEvent.click(await screen.findByRole("button", { name: "Select recon pipeline" }));
+      await userEvent.click(screen.getByRole("button", { name: "Exclude subfinder" }));
+      await userEvent.click(screen.getByRole("button", { name: "Include subfinder" }));
+      await userEvent.click(screen.getByRole("button", { name: "Queue Pipeline" }));
+
+      await waitFor(() =>
+        expect(authFetch).toHaveBeenCalledWith(
+          `/engagements/${PROGRAM_ID}/pipelines`,
+          expect.objectContaining({ method: "POST" }),
+        ),
+      );
+      const call = authFetch.mock.calls.find((c: unknown[]) => c[0] === `/engagements/${PROGRAM_ID}/pipelines`);
+      const stages = JSON.parse((call![1] as { body: string }).body).stages;
+      expect(stages.map((s: { tool_type: string }) => s.tool_type)).toEqual(["subfinder", "httpx", "nuclei"]);
+    } finally {
+      confirmSpy.mockRestore();
+    }
+  });
+
   it("selecting a tool clears the pipeline selection", async () => {
     renderWithApp(<JobsSection engagementId={PROGRAM_ID} />, { routes: BASE_ROUTES });
 

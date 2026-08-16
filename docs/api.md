@@ -776,6 +776,8 @@ Queue an ordered chain of jobs where each stage waits on the previous one. The c
 ```
 `stages` — 1 to 8 stages. Each stage has the same fields as a single job (minus `depends_on`, which is wired automatically).
 
+`depends_on` is linked sequentially over whatever stages arrive, so any ordered subset is valid — posting just `subfinder` and `nuclei` chains those two directly, with no dangling wait on the omitted stage. The Composer's stage editor relies on this: it posts only the stages the operator included.
+
 **Response** — `201`
 ```json
 { "jobs": [ <job_object>, ... ] }
