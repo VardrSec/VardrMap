@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { TOOLS } from "./mockData";
+import { RECON_PIPELINE, TOOLS } from "./mockData";
 import type { JobPreview, ScanProfile, ToolDef } from "../../types";
 
 type QueueSpec = {
@@ -34,6 +34,8 @@ function ToolPick({ tool, selected, accent, onClick }: {
 }) {
   return (
     <button onClick={onClick}
+      aria-pressed={selected}
+      aria-label={`Select ${tool.label}`}
       className="flex items-start gap-2.5 rounded-lg border px-3 py-2.5 text-left transition"
       style={{
         borderColor: selected ? `${accent}80` : "#2e2e2e",
@@ -63,6 +65,10 @@ const inputCls =
 type ComposerPropsWithTool = ComposerProps & { initialTool?: string };
 
 export default function Composer({ accent, onQueue, onPipeline, onPreview, profiles, onSaveProfile, onDeleteProfile, runnerOnline, scopeCount, reconCount, programName, initialTool }: ComposerPropsWithTool) {
+  // The pipeline is a selection, mutually exclusive with the tools — picking it
+  // clears the tool highlight and vice versa. `toolId` is kept across the toggle
+  // so returning to a tool restores the config that was already typed into it.
+  const [isPipeline, setIsPipeline] = useState(false);
   const [toolId, setToolId] = useState(initialTool && initialTool in TOOLS ? initialTool : "nuclei");
   const [source, setSource] = useState(() => {
     const t = TOOLS[initialTool && initialTool in TOOLS ? initialTool : "nuclei"];
@@ -78,6 +84,7 @@ export default function Composer({ accent, onQueue, onPipeline, onPreview, profi
   const tool = TOOLS[toolId];
 
   function pick(id: string) {
+    setIsPipeline(false);
     setToolId(id);
     const t = TOOLS[id];
     setSource(t.sources[0]);
@@ -87,9 +94,24 @@ export default function Composer({ accent, onQueue, onPipeline, onPreview, profi
     setPreview(null);
   }
 
+  function pickPipeline() {
+    setIsPipeline(true);
+    // Stages carry their own source and config, and /schedules is single-tool
+    // only, so a pipeline can only run once. Reset it rather than showing a
+    // recurrence that would be silently dropped.
+    setRecurrence("once");
+    setPreview(null);
+  }
+
   const sourceCount = source === "scope" ? scopeCount : reconCount;
 
   function submit() {
+    if (isPipeline) {
+      const stages = RECON_PIPELINE.map((s) => `  ${s.tool_type} (${s.target_source})`).join("\n");
+      if (!confirm(`Queue the recon pipeline?\n\n${stages}\n\n${RECON_PIPELINE.length} jobs will be queued, each waiting on the one before it.`)) return;
+      onPipeline();
+      return;
+    }
     onQueue({
       tool: toolId, source, config: { ...cfg }, targets: sourceCount, yieldKind: tool.yields,
       interval: recurrence === "once" ? undefined : recurrence,
@@ -108,6 +130,7 @@ export default function Composer({ accent, onQueue, onPipeline, onPreview, profi
 
   function loadProfile(p: ScanProfile) {
     if (p.tool_type in TOOLS) {
+      setIsPipeline(false);
       setToolId(p.tool_type);
       setSource(p.target_source);
       setCfg({ ...p.config });
@@ -132,26 +155,52 @@ export default function Composer({ accent, onQueue, onPipeline, onPreview, profi
         <span className="font-mono text-[10px] text-[#52525b]">{programName}</span>
       </div>
 
-      {/* One-click recon pipeline: subfinder → httpx → nuclei, chained via depends_on */}
+      {/* Recon pipeline — a selection like any tool, not an action. Selecting it
+          clears the tool highlight so only one thing is ever chosen. */}
       <button
-        onClick={onPipeline}
-        aria-label="Queue recon pipeline"
-        className="mb-3 flex w-full items-center gap-2 rounded-lg border px-3 py-2.5 text-left transition"
-        style={{ borderColor: `${accent}66`, backgroundColor: `${accent}12` }}>
-        <span className="font-mono text-base leading-none" style={{ color: accent }}>⚡</span>
+        onClick={pickPipeline}
+        aria-pressed={isPipeline}
+        aria-label="Select recon pipeline"
+        className="mb-3 flex w-full items-start gap-2.5 rounded-lg border px-3 py-2.5 text-left transition"
+        style={{
+          borderColor: isPipeline ? `${accent}80` : "#2e2e2e",
+          backgroundColor: isPipeline ? `${accent}12` : "#161616",
+        }}>
+        <span className="mt-0.5 font-mono text-base leading-none" style={{ color: isPipeline ? accent : "#52525b" }}>⚡</span>
         <span className="min-w-0">
-          <span className="block font-mono text-[13px] font-semibold text-[#f1f5f9]">Recon Pipeline</span>
-          <span className="mt-0.5 block text-[10px] leading-tight text-[#52525b]">subfinder → httpx → nuclei, chained automatically</span>
+          <span className="block font-mono text-[13px] font-semibold" style={{ color: isPipeline ? "#f1f5f9" : "#cbd5e1" }}>Recon Pipeline</span>
+          <span className="mt-0.5 block text-[10px] leading-tight text-[#52525b]">
+            {RECON_PIPELINE.map((s) => s.tool_type).join(" → ")}, chained automatically
+          </span>
         </span>
       </button>
 
       <div className="grid gap-2">
         {Object.values(TOOLS).map((t) => (
-          <ToolPick key={t.id} tool={t} selected={toolId === t.id} accent={accent} onClick={() => pick(t.id)} />
+          <ToolPick key={t.id} tool={t} selected={!isPipeline && toolId === t.id} accent={accent} onClick={() => pick(t.id)} />
         ))}
       </div>
 
       <div className="mt-4 space-y-3">
+        {isPipeline ? (
+          /* Stages carry their own source and config — there is nothing to pick here. */
+          <Field label="Stages">
+            <ol className="space-y-1.5">
+              {RECON_PIPELINE.map((s, i) => (
+                <li key={s.tool_type}
+                  className="flex items-center gap-2 rounded-md border border-[#2e2e2e] bg-[#161616] px-2.5 py-1.5">
+                  <span className="font-mono text-[10px] text-[#52525b]">{i + 1}</span>
+                  <span className="font-mono text-base leading-none" style={{ color: accent }}>{TOOLS[s.tool_type]?.glyph}</span>
+                  <span className="font-mono text-[11px] text-[#cbd5e1]">{s.tool_type}</span>
+                  <span className="font-mono text-[10px] text-[#52525b]">
+                    {s.target_source} · {s.target_source === "scope" ? scopeCount : reconCount}
+                  </span>
+                  {i > 0 && <span className="ml-auto font-mono text-[10px] text-[#52525b]">waits on {RECON_PIPELINE[i - 1].tool_type}</span>}
+                </li>
+              ))}
+            </ol>
+          </Field>
+        ) : (
         <Field label="Target Source">
           <div className="flex gap-1.5">
             {tool.sources.map((s) => (
@@ -167,7 +216,9 @@ export default function Composer({ accent, onQueue, onPipeline, onPreview, profi
             ))}
           </div>
         </Field>
+        )}
 
+        {!isPipeline && (
         <div className="grid grid-cols-2 gap-3">
           {tool.config.map((c) =>
             c.type === "toggle" ? (
@@ -197,7 +248,11 @@ export default function Composer({ accent, onQueue, onPipeline, onPreview, profi
             )
           )}
         </div>
+        )}
 
+        {/* Recurrence is single-tool only — /schedules stores one tool_type, so a
+            recurring pipeline would silently drop its later stages. */}
+        {!isPipeline && (
         <Field label="Recurrence">
           <div className="flex gap-1.5">
             {RECURRENCE.map((r) => (
@@ -213,8 +268,11 @@ export default function Composer({ accent, onQueue, onPipeline, onPreview, profi
             ))}
           </div>
         </Field>
+        )}
 
-        {/* Saved profiles: load config in one click, or save the current config */}
+        {/* Saved profiles: load config in one click, or save the current config.
+            Profiles are per-tool, so they don't apply to a pipeline. */}
+        {!isPipeline && (
         <Field label="Saved Profiles">
           <div className="space-y-1.5">
             {toolProfiles.length > 0 ? (
@@ -248,15 +306,24 @@ export default function Composer({ accent, onQueue, onPipeline, onPreview, profi
             )}
           </div>
         </Field>
+        )}
 
         <div className="flex items-center gap-2 rounded-lg border border-[#2e2e2e] bg-[#0d0d0d] px-3 py-2">
-          <span className="font-mono text-base leading-none" style={{ color: accent }}>{tool.glyph}</span>
-          <p className="font-mono text-[11px] leading-tight text-[#52525b]">
-            <span className="text-[#94a3b8]">{tool.label}</span>{" on "}
-            <span className="text-[#94a3b8]">{sourceCount}</span>{" "}{source} targets → yields{" "}
-            <span style={{ color: accent }}>{tool.yields}</span>
-            {recurrence !== "once" && <>{" · repeats "}<span style={{ color: accent }}>{recurrence}</span></>}
-          </p>
+          <span className="font-mono text-base leading-none" style={{ color: accent }}>{isPipeline ? "⚡" : tool.glyph}</span>
+          {isPipeline ? (
+            <p className="font-mono text-[11px] leading-tight text-[#52525b]">
+              <span className="text-[#94a3b8]">{RECON_PIPELINE.length} chained jobs</span>
+              {" starting from "}<span className="text-[#94a3b8]">{scopeCount}</span>{" scope targets → yields "}
+              <span style={{ color: accent }}>findings</span>
+            </p>
+          ) : (
+            <p className="font-mono text-[11px] leading-tight text-[#52525b]">
+              <span className="text-[#94a3b8]">{tool.label}</span>{" on "}
+              <span className="text-[#94a3b8]">{sourceCount}</span>{" "}{source} targets → yields{" "}
+              <span style={{ color: accent }}>{tool.yields}</span>
+              {recurrence !== "once" && <>{" · repeats "}<span style={{ color: accent }}>{recurrence}</span></>}
+            </p>
+          )}
         </div>
 
         {/* Dry-run preview of resolved targets */}
@@ -274,7 +341,10 @@ export default function Composer({ accent, onQueue, onPipeline, onPreview, profi
         )}
 
         <div className="flex gap-2">
-          <button onClick={runPreview} disabled={previewing}
+          {/* Preview resolves one tool against one source; a pipeline's later
+              stages consume targets that don't exist until earlier ones run. */}
+          <button onClick={runPreview} disabled={previewing || isPipeline}
+            title={isPipeline ? "Preview applies to a single tool, not a chain" : undefined}
             className="rounded-md border px-4 py-2.5 text-sm font-semibold transition active:scale-[0.98] disabled:opacity-50"
             style={{ borderColor: "#2e2e2e", color: "#94a3b8" }}>
             {previewing ? "…" : "Preview"}
@@ -282,7 +352,7 @@ export default function Composer({ accent, onQueue, onPipeline, onPreview, profi
           <button onClick={submit}
             className="flex-1 rounded-md px-4 py-2.5 text-sm font-semibold text-[#161616] transition active:scale-[0.98]"
             style={{ backgroundColor: accent }}>
-            {recurrence === "once" ? "Queue Job" : `Schedule ${recurrence}`}
+            {isPipeline ? "Queue Pipeline" : recurrence === "once" ? "Queue Job" : `Schedule ${recurrence}`}
           </button>
         </div>
 

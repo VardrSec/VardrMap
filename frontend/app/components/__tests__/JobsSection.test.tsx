@@ -47,7 +47,7 @@ describe("JobsSection", () => {
     expect(await screen.findByText("Queue a Job")).toBeInTheDocument();
   });
 
-  it("queues a subfinder→httpx→nuclei chain via POST /pipelines from the Recon Pipeline button", async () => {
+  it("selecting the Recon Pipeline does not queue anything on its own", async () => {
     const { authFetch } = renderWithApp(<JobsSection engagementId={PROGRAM_ID} />, {
       routes: {
         ...BASE_ROUTES,
@@ -56,17 +56,80 @@ describe("JobsSection", () => {
     });
 
     await screen.findByText("Queue a Job");
-    await userEvent.click(await screen.findByRole("button", { name: "Queue recon pipeline" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Select recon pipeline" }));
 
-    await waitFor(() =>
-      expect(authFetch).toHaveBeenCalledWith(
+    expect(authFetch).not.toHaveBeenCalledWith(
+      `/engagements/${PROGRAM_ID}/pipelines`,
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("queues a subfinder→httpx→nuclei chain via POST /pipelines once confirmed", async () => {
+    const confirmSpy = jest.spyOn(window, "confirm").mockReturnValue(true);
+    try {
+      const { authFetch } = renderWithApp(<JobsSection engagementId={PROGRAM_ID} />, {
+        routes: {
+          ...BASE_ROUTES,
+          [`POST /engagements/${PROGRAM_ID}/pipelines`]: { body: { jobs: [] } },
+        },
+      });
+
+      await screen.findByText("Queue a Job");
+      await userEvent.click(await screen.findByRole("button", { name: "Select recon pipeline" }));
+      await userEvent.click(await screen.findByRole("button", { name: "Queue Pipeline" }));
+
+      await waitFor(() =>
+        expect(authFetch).toHaveBeenCalledWith(
+          `/engagements/${PROGRAM_ID}/pipelines`,
+          expect.objectContaining({ method: "POST" }),
+        ),
+      );
+      const call = authFetch.mock.calls.find((c: unknown[]) => c[0] === `/engagements/${PROGRAM_ID}/pipelines`);
+      const stages = JSON.parse((call![1] as { body: string }).body).stages;
+      expect(stages.map((s: { tool_type: string }) => s.tool_type)).toEqual(["subfinder", "httpx", "nuclei"]);
+    } finally {
+      confirmSpy.mockRestore();
+    }
+  });
+
+  it("cancelling the confirm queues nothing", async () => {
+    const confirmSpy = jest.spyOn(window, "confirm").mockReturnValue(false);
+    try {
+      const { authFetch } = renderWithApp(<JobsSection engagementId={PROGRAM_ID} />, {
+        routes: {
+          ...BASE_ROUTES,
+          [`POST /engagements/${PROGRAM_ID}/pipelines`]: { body: { jobs: [] } },
+        },
+      });
+
+      await screen.findByText("Queue a Job");
+      await userEvent.click(await screen.findByRole("button", { name: "Select recon pipeline" }));
+      await userEvent.click(await screen.findByRole("button", { name: "Queue Pipeline" }));
+
+      expect(confirmSpy).toHaveBeenCalled();
+      expect(authFetch).not.toHaveBeenCalledWith(
         `/engagements/${PROGRAM_ID}/pipelines`,
         expect.objectContaining({ method: "POST" }),
-      ),
-    );
-    const call = authFetch.mock.calls.find((c: unknown[]) => c[0] === `/engagements/${PROGRAM_ID}/pipelines`);
-    const stages = JSON.parse((call![1] as { body: string }).body).stages;
-    expect(stages.map((s: { tool_type: string }) => s.tool_type)).toEqual(["subfinder", "httpx", "nuclei"]);
+      );
+    } finally {
+      confirmSpy.mockRestore();
+    }
+  });
+
+  it("selecting a tool clears the pipeline selection", async () => {
+    renderWithApp(<JobsSection engagementId={PROGRAM_ID} />, { routes: BASE_ROUTES });
+
+    await screen.findByText("Queue a Job");
+    const pipeline = await screen.findByRole("button", { name: "Select recon pipeline" });
+    await userEvent.click(pipeline);
+    expect(pipeline).toHaveAttribute("aria-pressed", "true");
+
+    const subfinder = screen.getByRole("button", { name: "Select subfinder" });
+    await userEvent.click(subfinder);
+    expect(pipeline).toHaveAttribute("aria-pressed", "false");
+    expect(subfinder).toHaveAttribute("aria-pressed", "true");
+    // Back to a single-tool queue, not a pipeline queue.
+    expect(screen.getByRole("button", { name: "Queue Job" })).toBeInTheDocument();
   });
 
   it("queues a one-time job via POST /jobs when Queue Job is clicked", async () => {
