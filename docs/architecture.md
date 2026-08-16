@@ -7,12 +7,12 @@ VardrMap is part of the VardrSec product family. Each product is a separate depl
 | Product | Purpose | Status |
 |---|---|---|
 | VardrMap | Web app — stores programs, scope, findings, reports, recon, scans | Active |
-| VardrRunner | Local CLI runner — runs tools on the user's machine, uploads results | Separate repo: [jorge-aquino/VardrRunner](https://github.com/jorge-aquino/VardrRunner) |
+| VardrRunner | Local CLI runner — runs tools on the user's machine, uploads results | Separate repo: [VardrSec/VardrRunner](https://github.com/VardrSec/VardrRunner) |
 | VardrVault | Secrets management for VardrSec products | Planned |
 | VardrScanner | Purpose-built scanning engine | Planned |
 
 VardrRunner was extracted from this monorepo into its own repository,
-[jorge-aquino/VardrRunner](https://github.com/jorge-aquino/VardrRunner). It integrates with
+[VardrSec/VardrRunner](https://github.com/VardrSec/VardrRunner). It integrates with
 VardrMap purely over the HTTP API using a `vmap_` key — there is no runner code in this
 repo. The section below documents the **integration contract** (how the runner consumes
 VardrMap's API); install, CLI, and runner internals are documented in the VardrRunner repo.
@@ -300,13 +300,13 @@ Each section component fetches its own full data set with a separate request whe
 
 ### Navigation Model
 
-The sidebar exposes **8 top-level sections** mapped to the bug bounty workflow:
+The sidebar exposes **7 top-level sections** mapped to the engagement workflow:
 
 | Section | `Section` value | What it shows |
 |---|---|---|
 | Dashboard | `"dashboard"` | Orchestration console (Jobs tab) + file import (Import tab) |
 | Scope | `"scope"` | In-scope / out-of-scope asset management |
-| Overview | `"overview"` | Program stats, 6 quick-action buttons, inline program edit form |
+| Overview | `"overview"` | Engagement stats, 6 quick-action buttons, inline engagement edit form |
 | Review | `"review"` | Recon / Scans / Manual / Services tab switcher |
 | Findings | `"findings"` | Finding log with severity, status, promote-to-report flow |
 | Reports | `"reports"` | Report drafting and PDF export |
@@ -380,7 +380,7 @@ VardrMap frontend (Vercel)
 - Raw tool output is saved locally before upload, so a failed upload never loses data.
 
 For the full tool allowlist, target-resolution flags, and CLI reference, see the
-[VardrRunner docs](https://github.com/jorge-aquino/VardrRunner/tree/main/docs).
+[VardrRunner docs](https://github.com/VardrSec/VardrRunner/tree/main/docs).
 
 ### Job Queue Flow
 
