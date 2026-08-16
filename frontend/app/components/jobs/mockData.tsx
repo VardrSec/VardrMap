@@ -1,4 +1,4 @@
-import type { ToolDef } from "../../types";
+import type { PipelineStage, ToolDef } from "../../types";
 
 export const TOOLS: Record<string, ToolDef> = {
   subfinder: {
@@ -53,18 +53,21 @@ export const TOOLS: Record<string, ToolDef> = {
 };
 
 /**
- * The canonical recon chain, defined once.
+ * The recon chain offered by the Composer, defined once.
  *
- * Composer renders these stages and JobsSection posts them, so what the operator
- * is shown is exactly what gets queued. Each stage waits on the previous one via
- * `depends_on`; the backend accepts any valid ordered chain, this is just the
- * one the UI offers.
+ * Stages are individually includable, so this is the menu rather than a fixed
+ * chain — the Composer posts only the enabled subset and the backend relinks
+ * `depends_on` sequentially over whatever it receives. The full endpoint accepts
+ * any valid ordered chain; this is just what the UI offers.
+ *
+ * Composer renders from this and JobsSection posts the selection it hands back,
+ * so what the operator sees is exactly what gets queued.
  */
-export const RECON_PIPELINE = [
-  { tool_type: "subfinder", target_source: "scope", config: {} as Record<string, unknown> },
-  { tool_type: "httpx", target_source: "recon", config: {} as Record<string, unknown> },
+export const RECON_PIPELINE: PipelineStage[] = [
+  { tool_type: "subfinder", target_source: "scope", config: {} },
+  { tool_type: "httpx", target_source: "recon", config: {} },
   { tool_type: "nuclei", target_source: "recon", config: { severity: "high,critical" } },
-] as const;
+];
 
 export function fmtClock(iso: string | null): string {
   if (!iso) return "—";

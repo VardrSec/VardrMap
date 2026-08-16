@@ -81,6 +81,13 @@ export type ManualTestFormState = {
 /** An advisory policy finding. The job runs regardless — see docs/security-model.md. */
 export type PolicyWarning = { reason: string; message: string };
 
+/** One stage of a chained pipeline. Posted as-is to `POST /engagements/{id}/pipelines`. */
+export type PipelineStage = {
+  tool_type: string;
+  target_source: string;
+  config: Record<string, unknown>;
+};
+
 export type ScanJob = {
   id: string; program_id: string; tool_type: string; target_source: string;
   config: Record<string, unknown>; status: string;

@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { JobPreview, PolicyWarning, RunnerStatus, ScanJob, ScanJobUI, ScanProfile, ScheduledScan } from "../types";
+import type { JobPreview, PipelineStage, PolicyWarning, RunnerStatus, ScanJob, ScanJobUI, ScanProfile, ScheduledScan } from "../types";
 import { useAppContext } from "../context/AppContext";
-import { RECON_PIPELINE, TOOLS } from "./jobs/mockData";
+import { TOOLS } from "./jobs/mockData";
 import Bridge from "./jobs/Bridge";
 import Telemetry from "./jobs/Telemetry";
 import Composer from "./jobs/Composer";
@@ -280,23 +280,33 @@ export default function JobsSection({
     } catch { flash("Failed to queue job."); }
   }
 
-  // Recon pipeline, chained via depends_on. Stages come from RECON_PIPELINE so
-  // what the Composer shows is exactly what gets queued.
-  async function queuePipeline() {
+  // Recon pipeline, chained via depends_on. The Composer hands back the stages
+  // the operator actually included, so what is shown is exactly what is queued.
+  // The backend links depends_on sequentially, so a filtered list still chains.
+  async function queuePipeline(stages: PipelineStage[]) {
+    if (stages.length === 0) return;
     try {
       const res = await authFetch(`/engagements/${engagementId}/pipelines`, {
         method: "POST",
         body: JSON.stringify({
-          stages: RECON_PIPELINE,
+          stages,
         }),
       });
       if (!res.ok) {
-        const err = await res.json().catch(() => null) as { detail?: string } | null;
-        flash(`Failed to queue pipeline${err?.detail ? `: ${err.detail}` : "."}`);
+        // Stop-work refuses with an object detail; everything else is a string.
+        const err = await res.json().catch(() => null) as
+          { detail?: string | { message?: string } } | null;
+        const reason = typeof err?.detail === "string" ? err.detail : err?.detail?.message;
+        flash(`Failed to queue pipeline${reason ? `: ${reason}` : "."}`);
         return;
       }
       await loadJobs();
-      flash("Recon pipeline queued — httpx and nuclei run after their upstream stage completes.");
+      const chain = stages.map((s) => s.tool_type).join(" → ");
+      flash(
+        stages.length === 1
+          ? `Queued ${chain}.`
+          : `Pipeline queued: ${chain} — each stage runs after its upstream stage completes.`,
+      );
     } catch { flash("Failed to queue pipeline."); }
   }
 
