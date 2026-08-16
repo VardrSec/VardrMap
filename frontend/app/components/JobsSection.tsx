@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { JobPreview, PolicyWarning, RunnerStatus, ScanJob, ScanJobUI, ScanProfile, ScheduledScan } from "../types";
 import { useAppContext } from "../context/AppContext";
-import { TOOLS } from "./jobs/mockData";
+import { RECON_PIPELINE, TOOLS } from "./jobs/mockData";
 import Bridge from "./jobs/Bridge";
 import Telemetry from "./jobs/Telemetry";
 import Composer from "./jobs/Composer";
@@ -280,17 +280,14 @@ export default function JobsSection({
     } catch { flash("Failed to queue job."); }
   }
 
-  // One-click recon pipeline: subfinder → httpx → nuclei, chained via depends_on.
+  // Recon pipeline, chained via depends_on. Stages come from RECON_PIPELINE so
+  // what the Composer shows is exactly what gets queued.
   async function queuePipeline() {
     try {
       const res = await authFetch(`/engagements/${engagementId}/pipelines`, {
         method: "POST",
         body: JSON.stringify({
-          stages: [
-            { tool_type: "subfinder", target_source: "scope" },
-            { tool_type: "httpx", target_source: "recon" },
-            { tool_type: "nuclei", target_source: "recon", config: { severity: "high,critical" } },
-          ],
+          stages: RECON_PIPELINE,
         }),
       });
       if (!res.ok) {

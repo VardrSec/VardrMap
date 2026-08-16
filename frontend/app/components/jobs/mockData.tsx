@@ -52,6 +52,20 @@ export const TOOLS: Record<string, ToolDef> = {
   },
 };
 
+/**
+ * The canonical recon chain, defined once.
+ *
+ * Composer renders these stages and JobsSection posts them, so what the operator
+ * is shown is exactly what gets queued. Each stage waits on the previous one via
+ * `depends_on`; the backend accepts any valid ordered chain, this is just the
+ * one the UI offers.
+ */
+export const RECON_PIPELINE = [
+  { tool_type: "subfinder", target_source: "scope", config: {} as Record<string, unknown> },
+  { tool_type: "httpx", target_source: "recon", config: {} as Record<string, unknown> },
+  { tool_type: "nuclei", target_source: "recon", config: { severity: "high,critical" } },
+] as const;
+
 export function fmtClock(iso: string | null): string {
   if (!iso) return "—";
   return new Date(iso).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
