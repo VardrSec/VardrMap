@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { JobPreview, RunnerStatus, ScanJob, ScanJobUI, ScanProfile, ScheduledScan } from "../types";
+import type { JobPreview, PolicyWarning, RunnerStatus, ScanJob, ScanJobUI, ScanProfile, ScheduledScan } from "../types";
 import { useAppContext } from "../context/AppContext";
 import { TOOLS } from "./jobs/mockData";
 import Bridge from "./jobs/Bridge";
@@ -259,15 +259,24 @@ export default function JobsSection({
         }),
       });
       if (!res.ok) {
-        const err = await res.json().catch(() => null) as { detail?: string } | null;
-        flash(`Failed to queue job${err?.detail ? `: ${err.detail}` : "."}`);
+        // Stop-work is the only refusal left; its detail is an object, not a string.
+        const err = await res.json().catch(() => null) as
+          { detail?: string | { message?: string } } | null;
+        const reason = typeof err?.detail === "string" ? err.detail : err?.detail?.message;
+        flash(`Failed to queue job${reason ? `: ${reason}` : "."}`);
         return;
       }
-      const created: ScanJob = await res.json();
+      const created: ScanJob & { warnings?: PolicyWarning[] } = await res.json();
       const ui = mapToUI(created);
       setJobs((p) => [ui, ...p]);
       setActiveId(ui.id);
-      flash("Job queued. Run `vardrrunner jobs run` to execute.");
+      // Scope findings are advisory — the job is queued either way, but the
+      // operator should see what fell outside the recorded scope.
+      flash(
+        created.warnings?.length
+          ? `Job queued with warnings: ${created.warnings.map((w) => w.message).join(" ")}`
+          : "Job queued. Run `vardrrunner jobs run` to execute.",
+      );
     } catch { flash("Failed to queue job."); }
   }
 

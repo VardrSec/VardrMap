@@ -78,11 +78,16 @@ export type RadarProgram = {
 export type ManualTestFormState = {
   title: string; hypothesis: string; payload: string; evidence: string; status: string;
 };
+/** An advisory policy finding. The job runs regardless — see docs/security-model.md. */
+export type PolicyWarning = { reason: string; message: string };
+
 export type ScanJob = {
   id: string; program_id: string; tool_type: string; target_source: string;
   config: Record<string, unknown>; status: string;
   created_at: string | null; started_at: string | null; completed_at: string | null;
   error_message: string;
+  /** Present on create/claim/PATCH-to-running responses; empty when nothing is flagged. */
+  warnings?: PolicyWarning[];
 };
 
 export type LogLine = {

@@ -195,23 +195,42 @@ Release the emergency brake. **Owner only** — engaging a stop is a safety acti
 - `403` — caller is a member but not the owner
 - `404` — engagement not found or caller is not a member
 
-### Execution denial (`403`)
+### Scope warnings
 
-Job creation and job claim both run the central policy engine (`backend/policy.py`). A denial returns:
+Job creation, job claim, and the `PATCH /jobs/{id}` transition into `running` all run the policy evaluator (`backend/policy.py`). Findings are **advisory** — staying in scope is the operator's responsibility, so a job outside scope or outside its testing window is still queued and still runs. Each of those three responses carries a `warnings` array:
+
+```json
+{
+  "id": "<uuid>",
+  "status": "pending",
+  "warnings": [
+    {
+      "reason": "outside_testing_window",
+      "message": "The testing window has closed."
+    }
+  ]
+}
+```
+
+The array is empty when nothing is flagged. `reason` is a stable code safe to branch on — a client that wants to treat a warning as fatal can. Current values: `engagement_not_active`, `authorization_missing`, `authorization_not_active`, `outside_testing_window`, `capability_prohibited`, `target_excluded`, `target_out_of_scope`, `scope_ambiguous`.
+
+Warnings are returned to the caller and **not** recorded in `audit_logs`.
+
+### Stop-work refusal (`403`)
+
+`stop_work_active` is the one finding that still blocks. It is the operator's own emergency brake rather than a judgement about scope, so job creation, claim, and the transition into `running` all refuse while it is engaged:
 
 ```json
 {
   "detail": {
-    "error": "execution_denied",
-    "reason": "outside_testing_window",
-    "message": "The testing window has closed."
+    "error": "stop_work_active",
+    "reason": "stop_work_active",
+    "message": "Stop-work is engaged for this engagement."
   }
 }
 ```
 
-`reason` is a stable code safe to branch on. Current values: `engagement_not_active`, `stop_work_active`, `authorization_missing`, `authorization_not_active`, `outside_testing_window`, `capability_prohibited`, `target_excluded`, `target_out_of_scope`, `scope_ambiguous`.
-
-Every denial is written to `audit_logs` with `action="deny"` and the reason code. See `docs/security-model.md`.
+Transitions to `done` / `failed` are never blocked — a runner must always be able to report the outcome of work already performed. See `docs/security-model.md`.
 
 **Engagement object shape**
 ```json
