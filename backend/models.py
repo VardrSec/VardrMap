@@ -210,6 +210,7 @@ class Engagement(Base):
     scheduled_scans = relationship("ScheduledScan", back_populates="engagement", cascade="all, delete-orphan")
     members = relationship("EngagementMember", back_populates="engagement", cascade="all, delete-orphan")
     scan_profiles = relationship("ScanProfile", back_populates="engagement", cascade="all, delete-orphan")
+    test_cases = relationship("AuthorizationTestCase", back_populates="engagement", cascade="all, delete-orphan")
 
 
 class Authorization(Base):
@@ -438,7 +439,7 @@ class ScanJob(Base):
     id = Column(String, primary_key=True, default=new_uuid)
     program_id = Column(String, ForeignKey("programs.id", ondelete="CASCADE"), nullable=False, index=True)
     owner_github_id = Column(String, nullable=False, index=True)
-    tool_type = Column(String(20), nullable=False)          # "httpx", "nuclei", or "subfinder"
+    tool_type = Column(String(20), nullable=False)          # see routers/jobs.py _VALID_TOOLS
     target_source = Column(String(20), nullable=False)      # "scope" or "recon"
     config = Column(JSON, nullable=True)                    # tool-specific options
     status = Column(String(20), default="pending")          # pending | running | done | failed
@@ -541,7 +542,7 @@ class ScheduledScan(Base):
     id = Column(String, primary_key=True, default=new_uuid)
     program_id = Column(String, ForeignKey("programs.id", ondelete="CASCADE"), nullable=False, index=True)
     owner_github_id = Column(String, nullable=False, index=True)
-    tool_type = Column(String(20), nullable=False)       # "httpx" | "nuclei" | "subfinder" | "nmap"
+    tool_type = Column(String(20), nullable=False)       # see routers/jobs.py _VALID_TOOLS
     target_source = Column(String(20), nullable=False)   # "scope" | "recon"
     config = Column(JSON, nullable=True)                 # tool-specific options, same shape as ScanJob.config
     interval = Column(String(20), nullable=False)        # "hourly" | "daily" | "weekly"
@@ -581,9 +582,46 @@ class ScanProfile(Base):
     program_id = Column(String, ForeignKey("programs.id", ondelete="CASCADE"), nullable=False, index=True)
     owner_github_id = Column(String, nullable=False, index=True)
     name = Column(String(100), nullable=False)
-    tool_type = Column(String(20), nullable=False)       # "httpx" | "nuclei" | "subfinder" | "nmap"
+    tool_type = Column(String(20), nullable=False)       # see routers/jobs.py _VALID_TOOLS
     target_source = Column(String(20), nullable=False)   # "scope" | "recon"
     config = Column(JSON, nullable=True)                 # same shape/validation as ScanJob.config
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
     engagement = relationship("Engagement", back_populates="scan_profiles")
+
+
+class AuthorizationTestCase(Base):
+    """A stored VardrGate authorization test case, scoped to an engagement.
+
+    The `spec` column holds VardrGate's own `AuthorizationTestCase` JSON verbatim
+    — identities, request template, expected access per identity, and optional
+    ownership/deny context. Storing it whole rather than shredding it into columns
+    keeps VardrGate free to add fields without a migration here; VardrGate is the
+    schema authority, this table is storage.
+
+    Jobs reference a row by id (`config = {"test_case_id": ...}`), and the spec is
+    inlined when the job is handed to a runner. That keeps `ScanJob.config` flat
+    for validation, lets one test case back many runs, and means editing a case
+    does not require re-queueing.
+
+    **Credential values are never stored.** Every identity must reference its
+    secret with `value_env` or `value_keychain`, which VardrRunner resolves on the
+    operator's machine. A literal, non-empty `value` is rejected on write — see
+    `routers/test_cases.py`.
+    """
+
+    __tablename__ = "authorization_test_cases"
+
+    id = Column(String, primary_key=True, default=new_uuid)
+    program_id = Column(String, ForeignKey("programs.id", ondelete="CASCADE"), nullable=False, index=True)
+    owner_github_id = Column(String, nullable=False, index=True)
+    name = Column(String(200), nullable=False)
+    # VardrGate's test case id (spec["id"]) — surfaced so results can be traced
+    # back without opening the blob. Not unique: a case may be revised.
+    test_case_id = Column(String(200), nullable=False, default="")
+    description = Column(Text, default="")
+    spec = Column(JSON, nullable=False)
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, nullable=True)
+
+    engagement = relationship("Engagement", back_populates="test_cases")

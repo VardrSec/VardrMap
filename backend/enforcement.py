@@ -1,13 +1,19 @@
 """Database-aware adapter over the pure policy evaluator.
 
-`policy.py` decides; this module gathers the facts it needs from the ORM,
-records the outcome, and turns a denial into an HTTP response. Keeping the two
-apart is what lets the decision logic be tested exhaustively without a database.
+`policy.py` decides; this module gathers the facts it needs from the ORM and
+turns the decision into something a router can return. Keeping the two apart is
+what lets the decision logic be tested exhaustively without a database.
 
-Every denial is written to `audit_logs` with its reason code before the
-exception is raised. A refused execution attempt is a security event in its own
-right — more interesting than a successful one — and losing it because the
-request 403'd would defeat the point of having the control.
+**Scope findings are advisory.** VardrMap warns that a target falls outside the
+recorded scope; it does not refuse to run. Staying inside scope is the
+operator's responsibility, the same as it is with every other tool in the kit —
+Burp and nmap do not police their users either, and a platform that guesses
+wrong blocks legitimate work mid-engagement. The reason codes are unchanged, so
+a caller that wants to treat a warning as fatal can.
+
+The one exception is **stop-work**, which still refuses. That is not the
+platform second-guessing the operator: it is the operator's own emergency brake,
+pulled deliberately, and honouring it is the entire point of having it.
 """
 from __future__ import annotations
 
@@ -18,7 +24,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 import policy
-from models import Authorization, AuditLog, Engagement, ScopeItem
+from models import Authorization, Engagement, ScopeItem
 
 
 def _scope_rules(program_id: str, db: Session) -> tuple[policy.ScopeRule, ...]:
@@ -74,56 +80,40 @@ def build_input(
     )
 
 
-def record_denial(
-    db: Session,
-    github_id: str,
-    program_id: str,
-    resource_id: str,
-    decision: policy.PolicyDecision,
-) -> None:
-    """Append the denial to the audit log. Committed by the caller path below."""
-    db.add(
-        AuditLog(
-            github_id=github_id,
-            action="deny",
-            resource_type="execution",
-            resource_id=resource_id,
-            program_id=program_id,
-            reason=decision.reason,
-            detail=decision.detail[:500],
-        )
-    )
+def as_warnings(decision: Optional[policy.PolicyDecision]) -> list[dict]:
+    """Render a decision as the `warnings` array routers return. Empty when allowed."""
+    if decision is None or decision.allowed:
+        return []
+    return [{"reason": decision.reason, "message": decision.detail}]
 
 
-def enforce(
+def check(
     db: Session,
     engagement: Engagement,
     capability: str,
-    github_id: str,
     targets: Iterable[str],
-    resource_id: str = "",
     now: Optional[datetime] = None,
-) -> None:
-    """Raise 403 unless every target is authorized. Audits the denial first.
+) -> Optional[policy.PolicyDecision]:
+    """Evaluate the engagement and its targets. Returns None when nothing is flagged.
 
-    The denial is committed even though the request fails, so an operator can
-    see what was attempted and refused. Raised as 403 rather than 404: the
-    caller is a legitimate member of this engagement, so there is nothing to
-    conceal — they are being told the action is not permitted, which is
-    actionable information.
+    Raises 403 only for stop-work — the operator's own halt switch. Every other
+    reason (out-of-scope target, closed testing window, missing authorization,
+    inactive engagement) comes back as a decision for the caller to surface as a
+    warning; the work is not blocked.
     """
     candidate = build_input(engagement, capability, db, now=now)
     decision = policy.evaluate_all(candidate, targets)
     if decision.allowed:
-        return
+        return None
 
-    record_denial(db, github_id, engagement.id, resource_id or capability, decision)
-    db.commit()
-    raise HTTPException(
-        status_code=403,
-        detail={
-            "error": "execution_denied",
-            "reason": decision.reason,
-            "message": decision.detail,
-        },
-    )
+    if decision.reason == policy.STOP_WORK_ACTIVE:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "stop_work_active",
+                "reason": decision.reason,
+                "message": decision.detail,
+            },
+        )
+
+    return decision

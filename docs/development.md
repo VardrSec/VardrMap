@@ -180,10 +180,10 @@ Tests use SQLite and rebuild the schema from scratch on every run via `drop_all(
 
 VardrRunner is the local CLI that runs tools on your machine and uploads results to
 VardrMap. **It now lives in its own repository:
-[jorge-aquino/VardrRunner](https://github.com/jorge-aquino/VardrRunner).** Install, CLI,
+[VardrSec/VardrRunner](https://github.com/VardrSec/VardrRunner).** Install, CLI,
 daemon, and tool-prerequisite instructions are documented there — see its
-[README](https://github.com/jorge-aquino/VardrRunner#readme) and
-[docs/](https://github.com/jorge-aquino/VardrRunner/tree/main/docs).
+[README](https://github.com/VardrSec/VardrRunner#readme) and
+[docs/](https://github.com/VardrSec/VardrRunner/tree/main/docs).
 
 > **Naming:** the CLI command is `vardrrunner`. API keys use the `vmap_` prefix — these are different things.
 

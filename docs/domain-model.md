@@ -114,8 +114,9 @@ No entity relationship is stored only inside an unvalidated JSON blob —
 2. **Engagement membership stays per-engagement** until Organization lands.
    Phase 1b converts it, rather than building both.
 3. **Bug bounty engagements have no client and no authorization document.** The
-   programme's public policy is the authority. The policy engine therefore
-   treats a missing authorization as allowed *only* for `bug_bounty`, and
-   denies for every other type.
+   programme's public policy is the authority. The policy evaluator therefore
+   treats a missing authorization as unremarkable for `bug_bounty`, and warns
+   (`authorization_missing`) for every other type. Since v0.29.0 that finding is
+   advisory — it does not stop the job. See ADR 0001 § Amendment.
 4. **ScopeItem serves ScopeRule, ScopeTarget, and Exclusion.** Three tables
    where one discriminated table suffices would be a speculative abstraction.
