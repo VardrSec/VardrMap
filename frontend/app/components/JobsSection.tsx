@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { JobPreview, RunnerStatus, ScanJob, ScanJobUI, ScanProfile, ScheduledScan } from "../types";
+import type { AuthorizationTestCase, JobPreview, PipelineStage, PolicyWarning, RunnerStatus, ScanJob, ScanJobUI, ScanProfile, ScheduledScan } from "../types";
 import { useAppContext } from "../context/AppContext";
 import { TOOLS } from "./jobs/mockData";
 import Bridge from "./jobs/Bridge";
@@ -89,6 +89,7 @@ export default function JobsSection({
   const [jobs,          setJobs]          = useState<ScanJobUI[]>([]);
   const [schedules,     setSchedules]     = useState<ScheduledScan[]>([]);
   const [profiles,      setProfiles]      = useState<ScanProfile[]>([]);
+  const [testCases,     setTestCases]     = useState<AuthorizationTestCase[]>([]);
   const [loading,       setLoading]       = useState(true);
   const [runnerStatus,  setRunnerStatus]  = useState<RunnerStatus | null>(null);
   const [autoRun,       setAutoRun]       = useState(false);
@@ -161,12 +162,24 @@ export default function JobsSection({
     } catch { /* profiles just stay empty */ }
   }, [authFetch, engagementId]);
 
+  // Stored VardrGate cases — a vardrgate job references one by id, so the
+  // Composer needs the list to offer a choice rather than a raw uuid field.
+  const loadTestCases = useCallback(async () => {
+    try {
+      const res = await authFetch(`/engagements/${engagementId}/test-cases`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setTestCases(Array.isArray(data?.test_cases) ? data.test_cases : []);
+    } catch { /* the picker just shows "none stored" */ }
+  }, [authFetch, engagementId]);
+
   // Initial load
   useEffect(() => {
     void loadJobs();
     void loadSchedules();
     void loadProfiles();
-  }, [loadJobs, loadSchedules, loadProfiles]);
+    void loadTestCases();
+  }, [loadJobs, loadSchedules, loadProfiles, loadTestCases]);
 
   // SSE connection for real-time job updates
   useEffect(() => {
@@ -259,38 +272,54 @@ export default function JobsSection({
         }),
       });
       if (!res.ok) {
-        const err = await res.json().catch(() => null) as { detail?: string } | null;
-        flash(`Failed to queue job${err?.detail ? `: ${err.detail}` : "."}`);
+        // Stop-work is the only refusal left; its detail is an object, not a string.
+        const err = await res.json().catch(() => null) as
+          { detail?: string | { message?: string } } | null;
+        const reason = typeof err?.detail === "string" ? err.detail : err?.detail?.message;
+        flash(`Failed to queue job${reason ? `: ${reason}` : "."}`);
         return;
       }
-      const created: ScanJob = await res.json();
+      const created: ScanJob & { warnings?: PolicyWarning[] } = await res.json();
       const ui = mapToUI(created);
       setJobs((p) => [ui, ...p]);
       setActiveId(ui.id);
-      flash("Job queued. Run `vardrrunner jobs run` to execute.");
+      // Scope findings are advisory — the job is queued either way, but the
+      // operator should see what fell outside the recorded scope.
+      flash(
+        created.warnings?.length
+          ? `Job queued with warnings: ${created.warnings.map((w) => w.message).join(" ")}`
+          : "Job queued. Run `vardrrunner jobs run` to execute.",
+      );
     } catch { flash("Failed to queue job."); }
   }
 
-  // One-click recon pipeline: subfinder → httpx → nuclei, chained via depends_on.
-  async function queuePipeline() {
+  // Recon pipeline, chained via depends_on. The Composer hands back the stages
+  // the operator actually included, so what is shown is exactly what is queued.
+  // The backend links depends_on sequentially, so a filtered list still chains.
+  async function queuePipeline(stages: PipelineStage[]) {
+    if (stages.length === 0) return;
     try {
       const res = await authFetch(`/engagements/${engagementId}/pipelines`, {
         method: "POST",
         body: JSON.stringify({
-          stages: [
-            { tool_type: "subfinder", target_source: "scope" },
-            { tool_type: "httpx", target_source: "recon" },
-            { tool_type: "nuclei", target_source: "recon", config: { severity: "high,critical" } },
-          ],
+          stages,
         }),
       });
       if (!res.ok) {
-        const err = await res.json().catch(() => null) as { detail?: string } | null;
-        flash(`Failed to queue pipeline${err?.detail ? `: ${err.detail}` : "."}`);
+        // Stop-work refuses with an object detail; everything else is a string.
+        const err = await res.json().catch(() => null) as
+          { detail?: string | { message?: string } } | null;
+        const reason = typeof err?.detail === "string" ? err.detail : err?.detail?.message;
+        flash(`Failed to queue pipeline${reason ? `: ${reason}` : "."}`);
         return;
       }
       await loadJobs();
-      flash("Recon pipeline queued — httpx and nuclei run after their upstream stage completes.");
+      const chain = stages.map((s) => s.tool_type).join(" → ");
+      flash(
+        stages.length === 1
+          ? `Queued ${chain}.`
+          : `Pipeline queued: ${chain} — each stage runs after its upstream stage completes.`,
+      );
     } catch { flash("Failed to queue pipeline."); }
   }
 
@@ -467,6 +496,7 @@ export default function JobsSection({
             onPipeline={queuePipeline}
             onPreview={previewJob}
             profiles={profiles}
+            testCases={testCases}
             onSaveProfile={saveProfile}
             onDeleteProfile={deleteProfile}
             runnerOnline={runnerOnline}

@@ -62,6 +62,47 @@ class TestCreateJob:
         assert res.status_code == 200
         assert res.json()["tool_type"] == "nmap"
 
+    def test_dnsx_tool_accepted(self, client, program_id, auth_headers):
+        res = _create_job(client, program_id, auth_headers,
+                          tool_type="dnsx", target_source="recon",
+                          config={"limit": 500})
+        assert res.status_code == 200
+        assert res.json()["tool_type"] == "dnsx"
+
+    def test_naabu_tool_accepted(self, client, program_id, auth_headers):
+        res = _create_job(client, program_id, auth_headers,
+                          tool_type="naabu", target_source="scope",
+                          config={"top_ports": 100, "limit": 500})
+        assert res.status_code == 200
+        assert res.json()["tool_type"] == "naabu"
+
+    def test_naabu_rejects_out_of_range_top_ports(self, client, program_id, auth_headers):
+        """Bounds mirror VardrRunner's own, so a bad value fails at queue time
+        rather than on the operator's machine after the job is claimed."""
+        res = _create_job(client, program_id, auth_headers,
+                          tool_type="naabu", target_source="scope",
+                          config={"top_ports": 70000})
+        assert res.status_code == 400
+        assert "top_ports" in res.text
+
+    def test_dnsx_rejects_a_non_integer_limit(self, client, program_id, auth_headers):
+        res = _create_job(client, program_id, auth_headers,
+                          tool_type="dnsx", target_source="recon",
+                          config={"limit": "lots"})
+        assert res.status_code == 400
+
+    def test_dnsx_rejects_unknown_config_keys(self, client, program_id, auth_headers):
+        res = _create_job(client, program_id, auth_headers,
+                          tool_type="dnsx", target_source="recon",
+                          config={"severity": "high"})
+        assert res.status_code == 400
+
+    def test_vardrgate_requires_a_test_case_id(self, client, program_id, auth_headers):
+        """The tool is queueable now, but only against a stored case."""
+        res = _create_job(client, program_id, auth_headers, tool_type="vardrgate_api_test")
+        assert res.status_code == 400
+        assert "test_case_id" in res.text
+
     def test_invalid_tool_type(self, client, program_id, auth_headers):
         res = _create_job(client, program_id, auth_headers, tool_type="masscan")
         assert res.status_code == 400

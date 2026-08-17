@@ -1,14 +1,23 @@
-"""Integration tests for policy enforcement through the real API.
+"""Integration tests for policy evaluation through the real API.
 
-`test_policy.py` proves the decision logic. These prove it is actually wired in
-— that a denied job does not reach the database, that the denial is audited, and
-crucially that the check runs again at claim time. A policy engine that is
-correct but only consulted at creation would leave the testing window advisory.
+`test_policy.py` proves the decision logic. These prove it is wired in — that a
+job outside scope or outside its window comes back with a warning rather than
+being refused, that the evaluation runs again at claim and on the PATCH route
+into `running`, and that stop-work is the one finding that still blocks.
 """
 import pytest
 
 from db import SessionLocal
 from models import AuditLog, Authorization, Engagement, ReconItem, ScanJob
+
+
+def _warnings(res) -> list[dict]:
+    """The advisory findings on a job response, if any."""
+    return res.json().get("warnings", [])
+
+
+def _reasons(res) -> list[str]:
+    return [w["reason"] for w in _warnings(res)]
 
 
 @pytest.fixture
@@ -48,18 +57,6 @@ def _add_authorization(pid: str, **fields):
         db.close()
 
 
-def _denials(pid: str):
-    db = SessionLocal()
-    try:
-        return (
-            db.query(AuditLog)
-            .filter(AuditLog.program_id == pid, AuditLog.action == "deny")
-            .all()
-        )
-    finally:
-        db.close()
-
-
 def _job_count(pid: str) -> int:
     db = SessionLocal()
     try:
@@ -81,7 +78,9 @@ def _create_job(client, headers, pid, tool="httpx"):
 # --------------------------------------------------------------------------- #
 
 def test_in_scope_job_is_allowed(client, auth_headers, engagement):
-    assert _create_job(client, auth_headers, engagement).status_code == 200
+    res = _create_job(client, auth_headers, engagement)
+    assert res.status_code == 200
+    assert _warnings(res) == []
 
 
 def test_stop_work_blocks_job_creation(client, auth_headers, engagement):
@@ -103,41 +102,50 @@ def test_denied_job_is_not_persisted(client, auth_headers, engagement):
     assert _job_count(engagement) == before
 
 
-def test_denial_is_written_to_the_audit_log(client, auth_headers, engagement):
-    from datetime import datetime, timezone
+def test_warnings_are_not_written_to_the_audit_log(client, auth_headers, engagement):
+    """Advisory findings are returned to the caller, not recorded.
 
-    _set(engagement, stop_work_at=datetime.now(timezone.utc))
-    _create_job(client, auth_headers, engagement)
-
-    denials = _denials(engagement)
-    assert len(denials) == 1
-    assert denials[0].reason == "stop_work_active"
-    assert denials[0].resource_type == "execution"
-    assert denials[0].detail  # the human-readable explanation is kept too
-
-
-def test_closed_engagement_blocks_creation(client, auth_headers, engagement):
+    Scope is the operator's responsibility, so a warning is information for the
+    person queueing the job — not a security event the platform files against them.
+    """
     _set(engagement, engagement_status="closed")
     res = _create_job(client, auth_headers, engagement)
-    assert res.status_code == 403
-    assert res.json()["detail"]["reason"] == "engagement_not_active"
+    assert res.status_code == 200
+
+    db = SessionLocal()
+    try:
+        actions = [
+            a.action for a in db.query(AuditLog).filter(AuditLog.program_id == engagement).all()
+        ]
+    finally:
+        db.close()
+    assert "deny" not in actions
 
 
-def test_pentest_without_authorization_is_denied(client, auth_headers, engagement):
-    """The gap this slice closes: authority was recorded but never enforced."""
+def test_closed_engagement_warns_but_does_not_block(client, auth_headers, engagement):
+    _set(engagement, engagement_status="closed")
+    res = _create_job(client, auth_headers, engagement)
+    assert res.status_code == 200
+    assert "engagement_not_active" in _reasons(res)
+
+
+def test_pentest_without_authorization_warns(client, auth_headers, engagement):
+    """Authority is recorded and reported. Acting without it is the operator's call."""
     _set(engagement, engagement_type="pentest")
     res = _create_job(client, auth_headers, engagement)
-    assert res.status_code == 403
-    assert res.json()["detail"]["reason"] == "authorization_missing"
+    assert res.status_code == 200
+    assert "authorization_missing" in _reasons(res)
 
 
-def test_pentest_with_active_authorization_is_allowed(client, auth_headers, engagement):
+def test_pentest_with_active_authorization_is_clean(client, auth_headers, engagement):
     _set(engagement, engagement_type="pentest")
     _add_authorization(engagement, status="active")
-    assert _create_job(client, auth_headers, engagement).status_code == 200
+    res = _create_job(client, auth_headers, engagement)
+    assert res.status_code == 200
+    assert _warnings(res) == []
 
 
-def test_expired_testing_window_blocks_creation(client, auth_headers, engagement):
+def test_expired_testing_window_warns(client, auth_headers, engagement):
     from datetime import datetime, timedelta, timezone
 
     _set(engagement, engagement_type="pentest")
@@ -148,8 +156,8 @@ def test_expired_testing_window_blocks_creation(client, auth_headers, engagement
         window_end=datetime.now(timezone.utc) - timedelta(days=1),
     )
     res = _create_job(client, auth_headers, engagement)
-    assert res.status_code == 403
-    assert res.json()["detail"]["reason"] == "outside_testing_window"
+    assert res.status_code == 200
+    assert "outside_testing_window" in _reasons(res)
 
 
 def _add_recon(pid: str, host: str):
@@ -161,13 +169,14 @@ def _add_recon(pid: str, host: str):
         db.close()
 
 
-def test_recon_sourced_job_is_denied_when_a_recon_host_is_out_of_scope(
+def test_recon_sourced_job_warns_when_a_recon_host_is_out_of_scope(
     client, auth_headers, engagement
 ):
-    """The case the control actually exists for.
+    """The case the warning exists for.
 
     Recon discovers hosts; scope is narrowed afterwards. A job sourced from
-    recon would otherwise happily scan a host that is no longer authorized.
+    recon would otherwise quietly include a host that is no longer in scope —
+    the operator is told, and decides.
     """
     _add_recon(engagement, "api.acme.com")
     _add_recon(engagement, "leaked.example.net")
@@ -177,11 +186,11 @@ def test_recon_sourced_job_is_denied_when_a_recon_host_is_out_of_scope(
         json={"tool_type": "httpx", "target_source": "recon"},
         headers=auth_headers,
     )
-    assert res.status_code == 403
-    assert res.json()["detail"]["reason"] == "target_out_of_scope"
+    assert res.status_code == 200
+    assert "target_out_of_scope" in _reasons(res)
 
 
-def test_recon_sourced_job_is_allowed_when_every_host_is_in_scope(
+def test_recon_sourced_job_is_clean_when_every_host_is_in_scope(
     client, auth_headers, engagement
 ):
     _add_recon(engagement, "api.acme.com")
@@ -193,19 +202,22 @@ def test_recon_sourced_job_is_allowed_when_every_host_is_in_scope(
         headers=auth_headers,
     )
     assert res.status_code == 200
+    assert _warnings(res) == []
 
 
-def test_job_on_an_engagement_without_scope_is_allowed(client, auth_headers):
-    """Zero targets executes nothing — refusing it would prevent nothing."""
+def test_job_on_an_engagement_without_scope_is_clean(client, auth_headers):
+    """Zero targets executes nothing — there is nothing to warn about."""
     res = client.post("/programs", json={"name": "No Scope"}, headers=auth_headers)
     pid = res.json()["id"]
     try:
-        assert _create_job(client, auth_headers, pid).status_code == 200
+        created = _create_job(client, auth_headers, pid)
+        assert created.status_code == 200
+        assert _warnings(created) == []
     finally:
         client.delete(f"/programs/{pid}", headers=auth_headers)
 
 
-def test_engagement_gates_still_apply_without_scope(client, auth_headers):
+def test_stop_work_still_applies_without_scope(client, auth_headers):
     """...but stop-work must still refuse it."""
     from datetime import datetime, timezone
 
@@ -220,15 +232,24 @@ def test_engagement_gates_still_apply_without_scope(client, auth_headers):
         client.delete(f"/programs/{pid}", headers=auth_headers)
 
 
-def test_excluded_target_denies_even_with_matching_include(client, auth_headers, engagement):
+def test_excluded_target_warns_even_with_matching_include(client, auth_headers, engagement):
     client.post(
         f"/programs/{engagement}/scope/out",
         json={"value": "acme.com", "kind": "domain"},
         headers=auth_headers,
     )
     res = _create_job(client, auth_headers, engagement)
-    assert res.status_code == 403
-    assert res.json()["detail"]["reason"] == "target_excluded"
+    assert res.status_code == 200
+    assert "target_excluded" in _reasons(res)
+
+
+def test_a_warned_job_is_still_queued(client, auth_headers, engagement):
+    """The point of advisory: the operator is told, and the work proceeds."""
+    before = _job_count(engagement)
+    _set(engagement, engagement_status="closed")
+    res = _create_job(client, auth_headers, engagement)
+    assert _reasons(res)
+    assert _job_count(engagement) == before + 1
 
 
 # --------------------------------------------------------------------------- #
@@ -268,8 +289,8 @@ def test_job_stays_pending_after_a_denied_claim(client, auth_headers, engagement
         db.close()
 
 
-def test_claim_is_denied_when_window_closes_after_creation(client, auth_headers, engagement):
-    """Queued inside the window, claimed after it closed."""
+def test_claim_warns_when_window_closes_after_creation(client, auth_headers, engagement):
+    """Queued inside the window, claimed after it closed — the runner is told."""
     from datetime import datetime, timedelta, timezone
 
     job_id = _create_job(client, auth_headers, engagement).json()["id"]
@@ -281,11 +302,11 @@ def test_claim_is_denied_when_window_closes_after_creation(client, auth_headers,
     )
 
     res = client.post(f"/jobs/{job_id}/claim", headers=auth_headers)
-    assert res.status_code == 403
-    assert res.json()["detail"]["reason"] == "outside_testing_window"
+    assert res.status_code == 200
+    assert "outside_testing_window" in _reasons(res)
 
 
-def test_claim_is_denied_when_scope_is_revoked_after_creation(
+def test_claim_warns_when_scope_is_revoked_after_creation(
     client, auth_headers, engagement
 ):
     job_id = _create_job(client, auth_headers, engagement).json()["id"]
@@ -295,17 +316,19 @@ def test_claim_is_denied_when_scope_is_revoked_after_creation(
         headers=auth_headers,
     )
     res = client.post(f"/jobs/{job_id}/claim", headers=auth_headers)
-    assert res.status_code == 403
-    assert res.json()["detail"]["reason"] == "target_excluded"
+    assert res.status_code == 200
+    assert "target_excluded" in _reasons(res)
 
 
-def test_claim_succeeds_when_policy_still_permits(client, auth_headers, engagement):
+def test_claim_succeeds_cleanly_when_nothing_is_flagged(client, auth_headers, engagement):
     job_id = _create_job(client, auth_headers, engagement).json()["id"]
-    assert client.post(f"/jobs/{job_id}/claim", headers=auth_headers).status_code == 200
+    res = client.post(f"/jobs/{job_id}/claim", headers=auth_headers)
+    assert res.status_code == 200
+    assert _warnings(res) == []
 
 
 def test_second_claim_still_returns_409_not_403(client, auth_headers, engagement):
-    """Policy enforcement must not disturb the existing claim race semantics."""
+    """Policy evaluation must not disturb the existing claim race semantics."""
     job_id = _create_job(client, auth_headers, engagement).json()["id"]
     assert client.post(f"/jobs/{job_id}/claim", headers=auth_headers).status_code == 200
     assert client.post(f"/jobs/{job_id}/claim", headers=auth_headers).status_code == 409
@@ -383,9 +406,8 @@ def test_patch_to_running_is_denied_when_stop_work_is_engaged(
 ):
     """Reported bypass: PATCH /jobs/{id} set status directly.
 
-    A job denied at /claim could simply be PATCHed to running instead, which
-    made the testing window, stop-work switch and scope rules advisory on that
-    path. Both routes into `running` must clear the policy engine.
+    A job stopped at /claim could simply be PATCHed to running instead. Both
+    routes into `running` are evaluated, so stop-work holds on either.
     """
     from datetime import datetime, timezone
 
@@ -397,7 +419,7 @@ def test_patch_to_running_is_denied_when_stop_work_is_engaged(
     assert res.json()["detail"]["reason"] == "stop_work_active"
 
 
-def test_patch_to_running_is_denied_outside_the_testing_window(
+def test_patch_to_running_warns_outside_the_testing_window(
     client, auth_headers, engagement
 ):
     from datetime import datetime, timedelta, timezone
@@ -408,8 +430,8 @@ def test_patch_to_running_is_denied_outside_the_testing_window(
         engagement, status="active", window_end=datetime.now(timezone.utc) - timedelta(minutes=1)
     )
     res = client.patch(f"/jobs/{job_id}", json={"status": "running"}, headers=auth_headers)
-    assert res.status_code == 403
-    assert res.json()["detail"]["reason"] == "outside_testing_window"
+    assert res.status_code == 200
+    assert "outside_testing_window" in _reasons(res)
 
 
 def test_patch_job_stays_pending_after_a_denied_transition(client, auth_headers, engagement):
@@ -430,6 +452,7 @@ def test_patch_to_running_still_works_when_policy_permits(client, auth_headers, 
     job_id = _create_job(client, auth_headers, engagement).json()["id"]
     res = client.patch(f"/jobs/{job_id}", json={"status": "running"}, headers=auth_headers)
     assert res.status_code == 200
+    assert _warnings(res) == []
 
 
 def test_patch_to_terminal_states_is_not_policy_gated(client, auth_headers, engagement):

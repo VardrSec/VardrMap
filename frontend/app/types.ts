@@ -78,11 +78,44 @@ export type RadarProgram = {
 export type ManualTestFormState = {
   title: string; hypothesis: string; payload: string; evidence: string; status: string;
 };
+/** An advisory policy finding. The job runs regardless — see docs/security-model.md. */
+export type PolicyWarning = { reason: string; message: string };
+
+/** One stage of a chained pipeline. Posted as-is to `POST /engagements/{id}/pipelines`. */
+export type PipelineStage = {
+  tool_type: string;
+  target_source: string;
+  config: Record<string, unknown>;
+};
+
+/** A stored VardrGate authorization test case. Jobs reference one by `id`. */
+export type AuthorizationTestCase = {
+  id: string;
+  program_id: string;
+  name: string;
+  /** VardrGate's own spec.id, surfaced for traceability. */
+  test_case_id: string;
+  description: string;
+  spec: Record<string, unknown>;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+/** A named chain the Composer offers. Stages are individually includable. */
+export type PipelineDef = {
+  id: string;
+  label: string;
+  blurb: string;
+  stages: PipelineStage[];
+};
+
 export type ScanJob = {
   id: string; program_id: string; tool_type: string; target_source: string;
   config: Record<string, unknown>; status: string;
   created_at: string | null; started_at: string | null; completed_at: string | null;
   error_message: string;
+  /** Present on create/claim/PATCH-to-running responses; empty when nothing is flagged. */
+  warnings?: PolicyWarning[];
 };
 
 export type LogLine = {
