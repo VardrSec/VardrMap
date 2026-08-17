@@ -1250,6 +1250,88 @@ Permanently delete a profile.
 
 ---
 
+## Authorization Test Cases
+
+Stored [VardrGate](https://github.com/VardrSec/VardrGate) authorization test cases, scoped to an engagement. A case describes one request replayed as several identities, with the access decision expected of each — the input to a BOLA / BFLA / cross-tenant / privilege-escalation check.
+
+A case is stored once and referenced from a job by id, so `ScanJob.config` stays flat (`{"test_case_id": "<uuid>"}`), one case can back many runs, and editing a case does not require re-queueing.
+
+`spec` holds VardrGate's own `AuthorizationTestCase` JSON verbatim — VardrGate owns that schema. VardrMap validates only the shape it must (`id`, at least one uniquely-identified identity, `request.method`, `request.url`, and that every `expected_access.identity_id` matches a declared identity) plus the credential rule below.
+
+### Credentials are references, never values
+
+**A credential carrying a non-empty literal `value` is rejected with `400`.** Each identity must reference its secret with `value_env` (an environment variable read on the runner) or `value_keychain` (an OS keychain account), which VardrRunner resolves on the operator's machine. The secret never reaches VardrMap and is never stored.
+
+An empty `value` is allowed — `{"type": "static_header", "header": "", "value": ""}` is the legitimate anonymous caller in a BOLA case.
+
+`credential.type` is `bearer`, `api_key_header`, or `static_header`. `bearer` and `api_key_header` require exactly one secret reference; `static_header` may have none.
+
+### `GET /engagements/{program_id}/test-cases`
+List the engagement's test cases, newest first.
+
+**Response:** `{ "test_cases": [ <test_case_object>, ... ] }`
+
+### `POST /engagements/{program_id}/test-cases`
+Store a test case.
+
+**Request body**
+```json
+{
+  "name": "BOLA — user profile",
+  "description": "",
+  "spec": {
+    "id": "bola-resource-ownership-check",
+    "identities": [
+      { "id": "admin",     "credential": { "type": "bearer", "value_env": "ADMIN_TOKEN" } },
+      { "id": "attacker",  "credential": { "type": "bearer", "value_keychain": "attacker-token" } },
+      { "id": "anonymous", "credential": { "type": "static_header", "header": "", "value": "" } }
+    ],
+    "request": { "method": "GET", "url": "https://api.example.com/users/42/profile" },
+    "expected_access": [
+      { "identity_id": "admin",     "decision": "allow" },
+      { "identity_id": "attacker",  "decision": "deny" },
+      { "identity_id": "anonymous", "decision": "deny" }
+    ]
+  }
+}
+```
+
+**Response:** `201` test case object.
+
+**Errors**
+- `400` — malformed spec, or a credential carrying a literal `value`
+- `403` — viewer-role member (read-only)
+- `404` — engagement not found or not accessible
+
+### `GET /engagements/{program_id}/test-cases/{test_case_id}`
+Fetch one. `404` if it belongs to another engagement.
+
+### `PATCH /engagements/{program_id}/test-cases/{test_case_id}`
+Update `name`, `description`, or `spec`. A replaced spec is validated identically to create — including the credential rule — and refreshes the surfaced `test_case_id`.
+
+### `DELETE /engagements/{program_id}/test-cases/{test_case_id}`
+Permanently delete a case.
+
+**Test case object**
+```json
+{
+  "id": "<uuid>",
+  "program_id": "<uuid>",
+  "name": "BOLA — user profile",
+  "test_case_id": "bola-resource-ownership-check",
+  "description": "",
+  "spec": { "...": "VardrGate AuthorizationTestCase JSON" },
+  "created_at": "2026-08-16T12:00:00",
+  "updated_at": null
+}
+```
+
+`test_case_id` is VardrGate's own id from `spec.id`, surfaced so a result can be traced back without opening the blob. It is not unique — a case may be revised.
+
+> **Not yet queueable.** `vardrgate_api_test` is still absent from `_VALID_TOOLS`: running a case also needs `POST /jobs/{id}/upload` for the runner to return results to. See `docs/implementation-roadmap.md`.
+
+---
+
 ## Settings
 
 Per-user notification settings.

@@ -238,10 +238,21 @@ scan_profiles
   program_id (FK → programs.id, CASCADE DELETE, indexed)
   owner_github_id (indexed)
   name (VARCHAR 100)
-  tool_type ("httpx"|"nuclei"|"subfinder"|"nmap")
+  tool_type (see routers/jobs.py _VALID_TOOLS)
   target_source ("scope"|"recon")
   config (JSON — same shape and validation as scan_jobs.config)
   created_at
+
+authorization_test_cases
+  id (PK)
+  program_id (FK → programs.id, CASCADE DELETE, indexed)
+  owner_github_id (indexed)
+  name (VARCHAR 200)
+  test_case_id (VARCHAR 200 — VardrGate's own spec.id, surfaced for traceability;
+    not unique, a case may be revised)
+  description
+  spec (JSON — VardrGate AuthorizationTestCase, stored verbatim)
+  created_at, updated_at (nullable)
 
 audit_logs
   id (PK)
@@ -271,6 +282,7 @@ audit_logs
 - **Provenance:** `recon_items.job_id` and `scan_items.job_id` record which `scan_job` produced each row (stamped from the optional `job_id` form field on `POST /imports`; null for manual uploads). `GET /programs/{id}/recon?job_id=` and `GET /programs/{id}/scans?job_id=` filter by it, so the Terminal can deep-link from a finished job to exactly the rows it yielded.
 - **AI triage** (`POST /programs/{id}/scans/triage`) sends a batch of un-promoted `scan_items` to Claude (Haiku) and returns a per-item `priority`/`false_positive`/`rationale`. Unlike `findings/{id}/suggest` (which enriches an already-created finding), triage is the first pass over raw tool output. Only ids present in the request are echoed back, so the model cannot smuggle in other rows. Requires `ANTHROPIC_API_KEY`.
 - `scan_profiles` are reusable tool + config presets per program, validated identically to `scan_jobs.config`. They let the Composer queue a frequently-used scan in one click. No FK from jobs to profiles — a profile is a template, copied into a job at queue time.
+- `authorization_test_cases` store VardrGate specs per engagement. Unlike a scan profile, a test case is **referenced** rather than copied: a job carries `config = {"test_case_id": ...}` and the spec is inlined when the job is handed to a runner. That keeps `scan_jobs.config` flat for validation, lets one case back many runs, and means revising a case does not require re-queueing. `spec` is stored verbatim because VardrGate owns that schema and is free to extend it without a migration here. **Credential values are never stored** — identities reference secrets via `value_env` / `value_keychain`, resolved by VardrRunner on the operator's machine; a literal non-empty `value` is rejected on write.
 
 ---
 

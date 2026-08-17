@@ -4,6 +4,7 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 | Version | Date | Summary |
 |---|---|---|
+| [v0.31.0](changelog/v0.31.0.md) | 2026-08-16 | Authorization test cases — engagement-scoped storage for VardrGate specs, referenced by jobs rather than copied; credential values rejected on write (step 1 of 5 toward queueable `vardrgate_api_test`) |
 | [v0.30.0](changelog/v0.30.0.md) | 2026-08-16 | dnsx and naabu queueable (VardrRunner already had handlers); two named pipelines — Attack Surface and Host Enumeration — replace the single recon chain, with per-pipeline stage selection |
 | [v0.29.0](changelog/v0.29.0.md) | 2026-08-16 | **Breaking** — scope, window and authorization findings are advisory: jobs return `200` with a `warnings` array instead of `403`, and run. Stop-work still refuses; warnings are no longer audited |
 | [v0.28.0](changelog/v0.28.0.md) | 2026-08-15 | **Breaking** — fixes 7 reviewed defects: three scope-matching bypasses, PATCH job-state bypass of the policy engine, viewer job mutation, redaction leaks on spaces/punctuation, unwired asset ingestion, incomplete org tenancy, missing asset FKs |
