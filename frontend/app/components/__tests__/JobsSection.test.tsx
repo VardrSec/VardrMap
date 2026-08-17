@@ -47,7 +47,7 @@ describe("JobsSection", () => {
     expect(await screen.findByText("Queue a Job")).toBeInTheDocument();
   });
 
-  it("selecting the Recon Pipeline does not queue anything on its own", async () => {
+  it("selecting a pipeline does not queue anything on its own", async () => {
     const { authFetch } = renderWithApp(<JobsSection engagementId={PROGRAM_ID} />, {
       routes: {
         ...BASE_ROUTES,
@@ -56,7 +56,7 @@ describe("JobsSection", () => {
     });
 
     await screen.findByText("Queue a Job");
-    await userEvent.click(await screen.findByRole("button", { name: "Select recon pipeline" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Select Attack Surface" }));
 
     expect(authFetch).not.toHaveBeenCalledWith(
       `/engagements/${PROGRAM_ID}/pipelines`,
@@ -64,7 +64,7 @@ describe("JobsSection", () => {
     );
   });
 
-  it("queues a subfinder→httpx→nuclei chain via POST /pipelines once confirmed", async () => {
+  it("queues the Attack Surface chain via POST /pipelines once confirmed", async () => {
     const confirmSpy = jest.spyOn(window, "confirm").mockReturnValue(true);
     try {
       const { authFetch } = renderWithApp(<JobsSection engagementId={PROGRAM_ID} />, {
@@ -75,7 +75,7 @@ describe("JobsSection", () => {
       });
 
       await screen.findByText("Queue a Job");
-      await userEvent.click(await screen.findByRole("button", { name: "Select recon pipeline" }));
+      await userEvent.click(await screen.findByRole("button", { name: "Select Attack Surface" }));
       await userEvent.click(await screen.findByRole("button", { name: "Queue Pipeline" }));
 
       await waitFor(() =>
@@ -86,7 +86,7 @@ describe("JobsSection", () => {
       );
       const call = authFetch.mock.calls.find((c: unknown[]) => c[0] === `/engagements/${PROGRAM_ID}/pipelines`);
       const stages = JSON.parse((call![1] as { body: string }).body).stages;
-      expect(stages.map((s: { tool_type: string }) => s.tool_type)).toEqual(["subfinder", "httpx", "nuclei"]);
+      expect(stages.map((s: { tool_type: string }) => s.tool_type)).toEqual(["subfinder", "dnsx", "httpx", "nuclei"]);
     } finally {
       confirmSpy.mockRestore();
     }
@@ -103,7 +103,7 @@ describe("JobsSection", () => {
       });
 
       await screen.findByText("Queue a Job");
-      await userEvent.click(await screen.findByRole("button", { name: "Select recon pipeline" }));
+      await userEvent.click(await screen.findByRole("button", { name: "Select Attack Surface" }));
       await userEvent.click(await screen.findByRole("button", { name: "Queue Pipeline" }));
 
       expect(confirmSpy).toHaveBeenCalled();
@@ -127,7 +127,7 @@ describe("JobsSection", () => {
       });
 
       await screen.findByText("Queue a Job");
-      await userEvent.click(await screen.findByRole("button", { name: "Select recon pipeline" }));
+      await userEvent.click(await screen.findByRole("button", { name: "Select Attack Surface" }));
       // Drop the middle stage — the survivors must still be posted in order.
       await userEvent.click(screen.getByRole("button", { name: "Exclude httpx" }));
       await userEvent.click(screen.getByRole("button", { name: "Queue Pipeline" }));
@@ -140,7 +140,7 @@ describe("JobsSection", () => {
       );
       const call = authFetch.mock.calls.find((c: unknown[]) => c[0] === `/engagements/${PROGRAM_ID}/pipelines`);
       const stages = JSON.parse((call![1] as { body: string }).body).stages;
-      expect(stages.map((s: { tool_type: string }) => s.tool_type)).toEqual(["subfinder", "nuclei"]);
+      expect(stages.map((s: { tool_type: string }) => s.tool_type)).toEqual(["subfinder", "dnsx", "nuclei"]);
     } finally {
       confirmSpy.mockRestore();
     }
@@ -150,8 +150,8 @@ describe("JobsSection", () => {
     renderWithApp(<JobsSection engagementId={PROGRAM_ID} />, { routes: BASE_ROUTES });
 
     await screen.findByText("Queue a Job");
-    await userEvent.click(await screen.findByRole("button", { name: "Select recon pipeline" }));
-    for (const tool of ["subfinder", "httpx", "nuclei"]) {
+    await userEvent.click(await screen.findByRole("button", { name: "Select Attack Surface" }));
+    for (const tool of ["subfinder", "dnsx", "httpx", "nuclei"]) {
       await userEvent.click(screen.getByRole("button", { name: `Exclude ${tool}` }));
     }
 
@@ -170,7 +170,7 @@ describe("JobsSection", () => {
       });
 
       await screen.findByText("Queue a Job");
-      await userEvent.click(await screen.findByRole("button", { name: "Select recon pipeline" }));
+      await userEvent.click(await screen.findByRole("button", { name: "Select Attack Surface" }));
       await userEvent.click(screen.getByRole("button", { name: "Exclude subfinder" }));
       await userEvent.click(screen.getByRole("button", { name: "Include subfinder" }));
       await userEvent.click(screen.getByRole("button", { name: "Queue Pipeline" }));
@@ -183,7 +183,39 @@ describe("JobsSection", () => {
       );
       const call = authFetch.mock.calls.find((c: unknown[]) => c[0] === `/engagements/${PROGRAM_ID}/pipelines`);
       const stages = JSON.parse((call![1] as { body: string }).body).stages;
-      expect(stages.map((s: { tool_type: string }) => s.tool_type)).toEqual(["subfinder", "httpx", "nuclei"]);
+      expect(stages.map((s: { tool_type: string }) => s.tool_type)).toEqual(["subfinder", "dnsx", "httpx", "nuclei"]);
+    } finally {
+      confirmSpy.mockRestore();
+    }
+  });
+
+  it("stage exclusions are scoped per pipeline", async () => {
+    const confirmSpy = jest.spyOn(window, "confirm").mockReturnValue(true);
+    try {
+      const { authFetch } = renderWithApp(<JobsSection engagementId={PROGRAM_ID} />, {
+        routes: {
+          ...BASE_ROUTES,
+          [`POST /engagements/${PROGRAM_ID}/pipelines`]: { body: { jobs: [] } },
+        },
+      });
+
+      await screen.findByText("Queue a Job");
+      // httpx appears in both chains — excluding it from one must not touch the other.
+      await userEvent.click(await screen.findByRole("button", { name: "Select Attack Surface" }));
+      await userEvent.click(screen.getByRole("button", { name: "Exclude httpx" }));
+
+      await userEvent.click(screen.getByRole("button", { name: "Select Host Enumeration" }));
+      await userEvent.click(screen.getByRole("button", { name: "Queue Pipeline" }));
+
+      await waitFor(() =>
+        expect(authFetch).toHaveBeenCalledWith(
+          `/engagements/${PROGRAM_ID}/pipelines`,
+          expect.objectContaining({ method: "POST" }),
+        ),
+      );
+      const call = authFetch.mock.calls.find((c: unknown[]) => c[0] === `/engagements/${PROGRAM_ID}/pipelines`);
+      const stages = JSON.parse((call![1] as { body: string }).body).stages;
+      expect(stages.map((s: { tool_type: string }) => s.tool_type)).toEqual(["naabu", "nmap", "httpx"]);
     } finally {
       confirmSpy.mockRestore();
     }
@@ -193,7 +225,7 @@ describe("JobsSection", () => {
     renderWithApp(<JobsSection engagementId={PROGRAM_ID} />, { routes: BASE_ROUTES });
 
     await screen.findByText("Queue a Job");
-    const pipeline = await screen.findByRole("button", { name: "Select recon pipeline" });
+    const pipeline = await screen.findByRole("button", { name: "Select Attack Surface" });
     await userEvent.click(pipeline);
     expect(pipeline).toHaveAttribute("aria-pressed", "true");
 

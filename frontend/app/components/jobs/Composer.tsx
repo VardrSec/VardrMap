@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { RECON_PIPELINE, TOOLS } from "./mockData";
+import { PIPELINES, TOOLS } from "./mockData";
 import type { JobPreview, PipelineStage, ScanProfile, ToolDef } from "../../types";
 
 type QueueSpec = {
@@ -65,13 +65,17 @@ const inputCls =
 type ComposerPropsWithTool = ComposerProps & { initialTool?: string };
 
 export default function Composer({ accent, onQueue, onPipeline, onPreview, profiles, onSaveProfile, onDeleteProfile, runnerOnline, scopeCount, reconCount, programName, initialTool }: ComposerPropsWithTool) {
-  // The pipeline is a selection, mutually exclusive with the tools — picking it
-  // clears the tool highlight and vice versa. `toolId` is kept across the toggle
-  // so returning to a tool restores the config that was already typed into it.
-  const [isPipeline, setIsPipeline] = useState(false);
-  // Which stages to include. Keyed by tool_type since a chain never repeats a tool.
-  const [stageOn, setStageOn] = useState<Record<string, boolean>>(
-    () => Object.fromEntries(RECON_PIPELINE.map((s) => [s.tool_type, true])),
+  // Pipelines and tools share one mutually-exclusive selection — picking either
+  // clears the other. `toolId` is kept across the toggle so returning to a tool
+  // restores the config that was already typed into it.
+  // null = a tool is selected. Otherwise the id of the chosen pipeline.
+  const [pipelineId, setPipelineId] = useState<string | null>(null);
+  // Stage inclusion, keyed pipeline → tool_type. Scoped per pipeline because
+  // httpx appears in more than one — excluding it from one must not touch the other.
+  const [stageOn, setStageOn] = useState<Record<string, Record<string, boolean>>>(
+    () => Object.fromEntries(
+      PIPELINES.map((p) => [p.id, Object.fromEntries(p.stages.map((s) => [s.tool_type, true]))]),
+    ),
   );
   const [toolId, setToolId] = useState(initialTool && initialTool in TOOLS ? initialTool : "nuclei");
   const [source, setSource] = useState(() => {
@@ -88,7 +92,7 @@ export default function Composer({ accent, onQueue, onPipeline, onPreview, profi
   const tool = TOOLS[toolId];
 
   function pick(id: string) {
-    setIsPipeline(false);
+    setPipelineId(null);
     setToolId(id);
     const t = TOOLS[id];
     setSource(t.sources[0]);
@@ -98,8 +102,8 @@ export default function Composer({ accent, onQueue, onPipeline, onPreview, profi
     setPreview(null);
   }
 
-  function pickPipeline() {
-    setIsPipeline(true);
+  function pickPipeline(id: string) {
+    setPipelineId(id);
     // Stages carry their own source and config, and /schedules is single-tool
     // only, so a pipeline can only run once. Reset it rather than showing a
     // recurrence that would be silently dropped.
@@ -109,21 +113,29 @@ export default function Composer({ accent, onQueue, onPipeline, onPreview, profi
 
   const sourceCount = source === "scope" ? scopeCount : reconCount;
 
-  // Order is preserved from RECON_PIPELINE; the backend relinks depends_on
-  // sequentially over whatever it receives, so dropping a middle stage chains
-  // the survivors rather than leaving a dangling wait.
-  const activeStages = RECON_PIPELINE.filter((s) => stageOn[s.tool_type]);
+  const pipeline = pipelineId ? PIPELINES.find((p) => p.id === pipelineId) ?? null : null;
+
+  // Order is preserved from the pipeline definition; the backend relinks
+  // depends_on sequentially over whatever it receives, so dropping a middle
+  // stage chains the survivors rather than leaving a dangling wait.
+  const activeStages = pipeline
+    ? pipeline.stages.filter((s) => stageOn[pipeline.id]?.[s.tool_type])
+    : [];
 
   function toggleStage(toolType: string) {
-    setStageOn((prev) => ({ ...prev, [toolType]: !prev[toolType] }));
+    if (!pipeline) return;
+    setStageOn((prev) => ({
+      ...prev,
+      [pipeline.id]: { ...prev[pipeline.id], [toolType]: !prev[pipeline.id]?.[toolType] },
+    }));
   }
 
   function submit() {
-    if (isPipeline) {
+    if (pipeline) {
       if (activeStages.length === 0) return;
       const list = activeStages.map((s) => `  ${s.tool_type} (${s.target_source})`).join("\n");
       const tail = activeStages.length > 1 ? ", each waiting on the one before it" : "";
-      if (!confirm(`Queue the recon pipeline?\n\n${list}\n\n${activeStages.length} job${activeStages.length === 1 ? "" : "s"} will be queued${tail}.`)) return;
+      if (!confirm(`Queue ${pipeline.label}?\n\n${list}\n\n${activeStages.length} job${activeStages.length === 1 ? "" : "s"} will be queued${tail}.`)) return;
       onPipeline(activeStages);
       return;
     }
@@ -145,7 +157,7 @@ export default function Composer({ accent, onQueue, onPipeline, onPreview, profi
 
   function loadProfile(p: ScanProfile) {
     if (p.tool_type in TOOLS) {
-      setIsPipeline(false);
+      setPipelineId(null);
       setToolId(p.tool_type);
       setSource(p.target_source);
       setCfg({ ...p.config });
@@ -170,47 +182,59 @@ export default function Composer({ accent, onQueue, onPipeline, onPreview, profi
         <span className="font-mono text-[10px] text-[#52525b]">{programName}</span>
       </div>
 
-      {/* Recon pipeline — a selection like any tool, not an action. Selecting it
+      {/* Pipelines are selections like any tool, not actions. Selecting one
           clears the tool highlight so only one thing is ever chosen. */}
-      <button
-        onClick={pickPipeline}
-        aria-pressed={isPipeline}
-        aria-label="Select recon pipeline"
-        className="mb-3 flex w-full items-start gap-2.5 rounded-lg border px-3 py-2.5 text-left transition"
-        style={{
-          borderColor: isPipeline ? `${accent}80` : "#2e2e2e",
-          backgroundColor: isPipeline ? `${accent}12` : "#161616",
-        }}>
-        <span className="mt-0.5 font-mono text-base leading-none" style={{ color: isPipeline ? accent : "#52525b" }}>⚡</span>
-        <span className="min-w-0 flex-1">
-          <span className="block font-mono text-[13px] font-semibold" style={{ color: isPipeline ? "#f1f5f9" : "#cbd5e1" }}>Recon Pipeline</span>
-          {/* Reflects the current stage selection, not the full menu, so the card
-              never advertises a chain the operator has edited away. */}
-          <span className="mt-0.5 block text-[10px] leading-tight text-[#52525b]">
-            {activeStages.length === 0
-              ? "no stages selected"
-              : `${activeStages.map((s) => s.tool_type).join(" → ")}${activeStages.length > 1 ? ", chained automatically" : ""}`}
-          </span>
-        </span>
-        <span className="mt-0.5 font-mono text-[10px] leading-none" style={{ color: isPipeline ? accent : "#52525b" }}>
-          {isPipeline ? "▾" : "▸"}
-        </span>
-      </button>
+      <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-widest text-[#52525b]">Pipelines</label>
+      <div className="mb-3 grid gap-2">
+        {PIPELINES.map((p) => {
+          const on = pipelineId === p.id;
+          // The selected card's subtitle reflects the current stage selection so
+          // it never advertises a chain the operator has edited away.
+          const chain = on
+            ? (activeStages.length === 0
+                ? "no stages selected"
+                : activeStages.map((s) => s.tool_type).join(" → "))
+            : p.stages.map((s) => s.tool_type).join(" → ");
+          return (
+            <button
+              key={p.id}
+              onClick={() => pickPipeline(p.id)}
+              aria-pressed={on}
+              aria-label={`Select ${p.label}`}
+              className="flex w-full items-start gap-2.5 rounded-lg border px-3 py-2.5 text-left transition"
+              style={{
+                borderColor: on ? `${accent}80` : "#2e2e2e",
+                backgroundColor: on ? `${accent}12` : "#161616",
+              }}>
+              <span className="mt-0.5 font-mono text-base leading-none" style={{ color: on ? accent : "#52525b" }}>⚡</span>
+              <span className="min-w-0 flex-1">
+                <span className="block font-mono text-[13px] font-semibold" style={{ color: on ? "#f1f5f9" : "#cbd5e1" }}>{p.label}</span>
+                <span className="mt-0.5 block text-[10px] leading-tight text-[#52525b]">{chain}</span>
+                {!on && <span className="mt-0.5 block text-[10px] leading-tight text-[#3a3a3a]">{p.blurb}</span>}
+              </span>
+              <span className="mt-0.5 font-mono text-[10px] leading-none" style={{ color: on ? accent : "#52525b" }}>
+                {on ? "▾" : "▸"}
+              </span>
+            </button>
+          );
+        })}
+      </div>
 
+      <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-widest text-[#52525b]">Tools</label>
       <div className="grid gap-2">
         {Object.values(TOOLS).map((t) => (
-          <ToolPick key={t.id} tool={t} selected={!isPipeline && toolId === t.id} accent={accent} onClick={() => pick(t.id)} />
+          <ToolPick key={t.id} tool={t} selected={!pipeline && toolId === t.id} accent={accent} onClick={() => pick(t.id)} />
         ))}
       </div>
 
       <div className="mt-4 space-y-3">
-        {isPipeline ? (
+        {pipeline ? (
           /* Include/exclude stages. Each carries its own source and config, so
              there is nothing else to configure here. */
           <Field label="Stages">
             <ol className="space-y-1.5">
-              {RECON_PIPELINE.map((s) => {
-                const on = !!stageOn[s.tool_type];
+              {pipeline.stages.map((s) => {
+                const on = !!stageOn[pipeline.id]?.[s.tool_type];
                 // "waits on" names the previous *included* stage — dropping a
                 // middle stage relinks the chain rather than dangling.
                 const idx = activeStages.findIndex((a) => a.tool_type === s.tool_type);
@@ -263,7 +287,7 @@ export default function Composer({ accent, onQueue, onPipeline, onPreview, profi
         </Field>
         )}
 
-        {!isPipeline && (
+        {!pipeline && (
         <div className="grid grid-cols-2 gap-3">
           {tool.config.map((c) =>
             c.type === "toggle" ? (
@@ -297,7 +321,7 @@ export default function Composer({ accent, onQueue, onPipeline, onPreview, profi
 
         {/* Recurrence is single-tool only — /schedules stores one tool_type, so a
             recurring pipeline would silently drop its later stages. */}
-        {!isPipeline && (
+        {!pipeline && (
         <Field label="Recurrence">
           <div className="flex gap-1.5">
             {RECURRENCE.map((r) => (
@@ -317,7 +341,7 @@ export default function Composer({ accent, onQueue, onPipeline, onPreview, profi
 
         {/* Saved profiles: load config in one click, or save the current config.
             Profiles are per-tool, so they don't apply to a pipeline. */}
-        {!isPipeline && (
+        {!pipeline && (
         <Field label="Saved Profiles">
           <div className="space-y-1.5">
             {toolProfiles.length > 0 ? (
@@ -354,8 +378,8 @@ export default function Composer({ accent, onQueue, onPipeline, onPreview, profi
         )}
 
         <div className="flex items-center gap-2 rounded-lg border border-[#2e2e2e] bg-[#0d0d0d] px-3 py-2">
-          <span className="font-mono text-base leading-none" style={{ color: accent }}>{isPipeline ? "⚡" : tool.glyph}</span>
-          {isPipeline ? (
+          <span className="font-mono text-base leading-none" style={{ color: accent }}>{pipeline ? "⚡" : tool.glyph}</span>
+          {pipeline ? (
             activeStages.length === 0 ? (
               <p className="font-mono text-[11px] leading-tight text-[#52525b]">no stages selected</p>
             ) : (
@@ -398,17 +422,17 @@ export default function Composer({ accent, onQueue, onPipeline, onPreview, profi
         <div className="flex gap-2">
           {/* Preview resolves one tool against one source; a pipeline's later
               stages consume targets that don't exist until earlier ones run. */}
-          <button onClick={runPreview} disabled={previewing || isPipeline}
-            title={isPipeline ? "Preview applies to a single tool, not a chain" : undefined}
+          <button onClick={runPreview} disabled={previewing || !!pipeline}
+            title={pipeline ? "Preview applies to a single tool, not a chain" : undefined}
             className="rounded-md border px-4 py-2.5 text-sm font-semibold transition active:scale-[0.98] disabled:opacity-50"
             style={{ borderColor: "#2e2e2e", color: "#94a3b8" }}>
             {previewing ? "…" : "Preview"}
           </button>
           <button onClick={submit}
-            disabled={isPipeline && activeStages.length === 0}
+            disabled={!!pipeline && activeStages.length === 0}
             className="flex-1 rounded-md px-4 py-2.5 text-sm font-semibold text-[#161616] transition active:scale-[0.98] disabled:opacity-50"
             style={{ backgroundColor: accent }}>
-            {isPipeline ? "Queue Pipeline" : recurrence === "once" ? "Queue Job" : `Schedule ${recurrence}`}
+            {pipeline ? "Queue Pipeline" : recurrence === "once" ? "Queue Job" : `Schedule ${recurrence}`}
           </button>
         </div>
 

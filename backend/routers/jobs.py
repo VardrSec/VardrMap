@@ -38,7 +38,7 @@ class EventCreate(BaseModel):
     text: str = Field(default="", max_length=2000)
 
 
-_VALID_TOOLS = {"httpx", "nuclei", "subfinder", "nmap"}
+_VALID_TOOLS = {"httpx", "nuclei", "subfinder", "nmap", "dnsx", "naabu"}
 _VALID_SOURCES = {"scope", "recon"}
 
 # Per-tool allowed config keys. Keys not in this set are rejected.
@@ -47,8 +47,21 @@ _TOOL_CONFIG_KEYS: dict[str, set[str]] = {
     "nuclei":    {"severity", "templates"},
     "subfinder": {"recursive", "sources"},
     "nmap":      {"top_ports", "timing"},
+    "dnsx":      {"limit", "timeout"},
+    "naabu":     {"top_ports", "limit", "timeout"},
 }
 _NUCLEI_SEVERITIES = {"info", "low", "medium", "high", "critical"}
+
+# Config keys parsed as plain integers, with the bounds VardrRunner enforces.
+# Keeping the bounds here means a bad value is refused at queue time rather than
+# failing on the operator's machine after the job has been claimed.
+_INT_CONFIG_BOUNDS: dict[tuple[str, str], tuple[int, int]] = {
+    ("dnsx", "limit"):       (1, 1_000_000),
+    ("dnsx", "timeout"):     (1, 86_400),
+    ("naabu", "top_ports"):  (1, 65_535),
+    ("naabu", "limit"):      (1, 1_000_000),
+    ("naabu", "timeout"):    (1, 86_400),
+}
 
 
 def _validate_job_config(tool_type: str, config: dict) -> None:
@@ -79,10 +92,23 @@ def _validate_job_config(tool_type: str, config: dict) -> None:
                 raise ValueError
         except (TypeError, ValueError):
             raise HTTPException(status_code=400, detail="nmap config.timing must be 0-4")
+    for key, (low, high) in (
+        (k, bounds) for (t, k), bounds in _INT_CONFIG_BOUNDS.items() if t == tool_type
+    ):
+        if key not in config or config[key] in (None, ""):
+            continue
+        try:
+            value = int(config[key])
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail=f"{tool_type} config.{key} must be an integer")
+        if not (low <= value <= high):
+            raise HTTPException(
+                status_code=400, detail=f"{tool_type} config.{key} must be between {low} and {high}"
+            )
 
 
 class JobCreate(BaseModel):
-    tool_type: str              # "httpx", "nuclei", "subfinder", or "nmap"
+    tool_type: str              # one of _VALID_TOOLS
     target_source: str          # "scope" or "recon"
     config: Optional[dict] = None
     depends_on: Optional[str] = None  # scan_job id this job waits on before running
@@ -96,7 +122,8 @@ class PipelineStage(BaseModel):
 
 class PipelineCreate(BaseModel):
     # Ordered stages: each becomes a scan_job that waits on the one before it.
-    # A one-click "Recon Pipeline" (subfinder -> httpx -> nuclei) is just three stages.
+    # The UI's named chains (Attack Surface, Host Enumeration) are just stage lists;
+    # any ordered subset is valid, since depends_on is linked over what arrives.
     stages: list[PipelineStage] = Field(min_length=1, max_length=8)
 
 

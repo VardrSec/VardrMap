@@ -438,7 +438,7 @@ class ScanJob(Base):
     id = Column(String, primary_key=True, default=new_uuid)
     program_id = Column(String, ForeignKey("programs.id", ondelete="CASCADE"), nullable=False, index=True)
     owner_github_id = Column(String, nullable=False, index=True)
-    tool_type = Column(String(20), nullable=False)          # "httpx", "nuclei", or "subfinder"
+    tool_type = Column(String(20), nullable=False)          # see routers/jobs.py _VALID_TOOLS
     target_source = Column(String(20), nullable=False)      # "scope" or "recon"
     config = Column(JSON, nullable=True)                    # tool-specific options
     status = Column(String(20), default="pending")          # pending | running | done | failed
@@ -541,7 +541,7 @@ class ScheduledScan(Base):
     id = Column(String, primary_key=True, default=new_uuid)
     program_id = Column(String, ForeignKey("programs.id", ondelete="CASCADE"), nullable=False, index=True)
     owner_github_id = Column(String, nullable=False, index=True)
-    tool_type = Column(String(20), nullable=False)       # "httpx" | "nuclei" | "subfinder" | "nmap"
+    tool_type = Column(String(20), nullable=False)       # see routers/jobs.py _VALID_TOOLS
     target_source = Column(String(20), nullable=False)   # "scope" | "recon"
     config = Column(JSON, nullable=True)                 # tool-specific options, same shape as ScanJob.config
     interval = Column(String(20), nullable=False)        # "hourly" | "daily" | "weekly"
@@ -581,7 +581,7 @@ class ScanProfile(Base):
     program_id = Column(String, ForeignKey("programs.id", ondelete="CASCADE"), nullable=False, index=True)
     owner_github_id = Column(String, nullable=False, index=True)
     name = Column(String(100), nullable=False)
-    tool_type = Column(String(20), nullable=False)       # "httpx" | "nuclei" | "subfinder" | "nmap"
+    tool_type = Column(String(20), nullable=False)       # see routers/jobs.py _VALID_TOOLS
     target_source = Column(String(20), nullable=False)   # "scope" | "recon"
     config = Column(JSON, nullable=True)                 # same shape/validation as ScanJob.config
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))

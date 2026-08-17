@@ -750,9 +750,20 @@ Queue a new scan job.
   "depends_on": null
 }
 ```
-- `tool_type`: `"httpx"`, `"nuclei"`, `"subfinder"`, or `"nmap"`
+- `tool_type`: `"httpx"`, `"nuclei"`, `"subfinder"`, `"nmap"`, `"dnsx"`, or `"naabu"`
 - `target_source`: `"scope"` or `"recon"`
-- `config` (optional): tool-specific options — `status_code`, `limit` for httpx; `severity`, `templates` for nuclei; `top_ports`, `timing` for nmap. Unknown keys are rejected.
+- `config` (optional): tool-specific options. Unknown keys are rejected.
+
+  | Tool | Config keys |
+  |---|---|
+  | `httpx` | `status_code`, `limit` |
+  | `nuclei` | `severity`, `templates` |
+  | `subfinder` | `recursive`, `sources` |
+  | `nmap` | `top_ports` (1–65535), `timing` (0–4) |
+  | `dnsx` | `limit` (1–1000000), `timeout` (1–86400 s) |
+  | `naabu` | `top_ports` (1–65535), `limit` (1–1000000), `timeout` (1–86400 s) |
+
+  Integer bounds mirror the ones VardrRunner enforces, so an out-of-range value is refused at queue time rather than failing on the operator's machine after the job is claimed.
 - `depends_on` (optional): id of another job (same engagement, same owner) that must reach `done` before this job becomes eligible in `GET /jobs/pending`.
 
 **Response:** job object with `status: "pending"`.
@@ -762,7 +773,7 @@ Queue a new scan job.
 - `404` — engagement not found or belongs to another user
 
 ### `POST /engagements/{program_id}/pipelines`
-Queue an ordered chain of jobs where each stage waits on the previous one. The canonical recon pipeline `subfinder → httpx → nuclei` is one request. Validation is per-stage and identical to single-job creation, so a bad stage rejects the whole pipeline atomically (no partial writes).
+Queue an ordered chain of jobs where each stage waits on the previous one. The UI's named chains — Attack Surface (`subfinder → dnsx → httpx → nuclei`) and Host Enumeration (`naabu → nmap → httpx`) — are each one request. Validation is per-stage and identical to single-job creation, so a bad stage rejects the whole pipeline atomically (no partial writes).
 
 **Request body**
 ```json
@@ -1176,7 +1187,7 @@ Create a recurring scan.
 **Request body**
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `tool_type` | string | yes | `httpx`, `nuclei`, `subfinder`, or `nmap` |
+| `tool_type` | string | yes | `httpx`, `nuclei`, `subfinder`, `nmap`, `dnsx`, or `naabu` |
 | `target_source` | string | yes | `scope` or `recon` |
 | `config` | object | no | Tool config, same validation as job creation |
 | `interval` | string | yes | `hourly`, `daily`, or `weekly` |
@@ -1225,7 +1236,7 @@ Create a saved profile. `201` on success.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `name` | string | yes | 1–100 chars |
-| `tool_type` | string | yes | `httpx`, `nuclei`, `subfinder`, or `nmap` |
+| `tool_type` | string | yes | `httpx`, `nuclei`, `subfinder`, `nmap`, `dnsx`, or `naabu` |
 | `target_source` | string | yes | `scope` or `recon` |
 | `config` | object | no | Tool config, same validation as job creation |
 
