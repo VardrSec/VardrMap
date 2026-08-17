@@ -75,6 +75,21 @@ export const TOOLS: Record<string, ToolDef> = {
       { key: "limit", label: "Limit", type: "number", placeholder: "500" },
     ],
   },
+  vardrgate_api_test: {
+    id: "vardrgate_api_test",
+    label: "vardrgate",
+    glyph: "⊗",
+    blurb: "API authorization testing (BOLA, BFLA, cross-tenant)",
+    yields: "authorization findings",
+    yieldsTo: "scan",
+    // Self-contained: the request under test travels inside the stored case, so
+    // no scope or recon targets are resolved. A source is still required by the
+    // API, and "scope" is the honest one — the case belongs to the engagement.
+    sources: ["scope"],
+    config: [
+      { key: "test_case_id", label: "Test case id", type: "text", placeholder: "<stored case>" },
+    ],
+  },
 };
 
 /**
@@ -114,6 +129,18 @@ export const PIPELINES: PipelineDef[] = [
       { tool_type: "naabu", target_source: "scope", config: { top_ports: "100" } },
       { tool_type: "nmap", target_source: "scope", config: { top_ports: "100", timing: "3" } },
       { tool_type: "httpx", target_source: "scope", config: {} },
+    ],
+  },
+  {
+    id: "api-assessment",
+    label: "API Assessment",
+    // httpx confirms the API is reachable and fingerprints it; vardrgate then
+    // replays the stored test case as each identity. The vardrgate stage needs a
+    // test_case_id, so it is excluded until one is chosen — see Composer.
+    blurb: "Probe the API, then test its authorization as several identities",
+    stages: [
+      { tool_type: "httpx", target_source: "scope", config: {} },
+      { tool_type: "vardrgate_api_test", target_source: "scope", config: {} },
     ],
   },
 ];

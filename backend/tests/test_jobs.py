@@ -97,11 +97,11 @@ class TestCreateJob:
                           config={"severity": "high"})
         assert res.status_code == 400
 
-    def test_vardrgate_is_not_queueable_yet(self, client, program_id, auth_headers):
-        """VardrRunner has a handler, but VardrMap has no /jobs/{id}/upload endpoint
-        and no test_case model — so it stays out of _VALID_TOOLS until both exist."""
+    def test_vardrgate_requires_a_test_case_id(self, client, program_id, auth_headers):
+        """The tool is queueable now, but only against a stored case."""
         res = _create_job(client, program_id, auth_headers, tool_type="vardrgate_api_test")
         assert res.status_code == 400
+        assert "test_case_id" in res.text
 
     def test_invalid_tool_type(self, client, program_id, auth_headers):
         res = _create_job(client, program_id, auth_headers, tool_type="masscan")

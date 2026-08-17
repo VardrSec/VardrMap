@@ -750,7 +750,7 @@ Queue a new scan job.
   "depends_on": null
 }
 ```
-- `tool_type`: `"httpx"`, `"nuclei"`, `"subfinder"`, `"nmap"`, `"dnsx"`, or `"naabu"`
+- `tool_type`: `"httpx"`, `"nuclei"`, `"subfinder"`, `"nmap"`, `"dnsx"`, `"naabu"`, or `"vardrgate_api_test"`
 - `target_source`: `"scope"` or `"recon"`
 - `config` (optional): tool-specific options. Unknown keys are rejected.
 
@@ -762,6 +762,7 @@ Queue a new scan job.
   | `nmap` | `top_ports` (1–65535), `timing` (0–4) |
   | `dnsx` | `limit` (1–1000000), `timeout` (1–86400 s) |
   | `naabu` | `top_ports` (1–65535), `limit` (1–1000000), `timeout` (1–86400 s) |
+  | `vardrgate_api_test` | `test_case_id` (required), `timeout` |
 
   Integer bounds mirror the ones VardrRunner enforces, so an out-of-range value is refused at queue time rather than failing on the operator's machine after the job is claimed.
 - `depends_on` (optional): id of another job (same engagement, same owner) that must reach `done` before this job becomes eligible in `GET /jobs/pending`.
@@ -855,6 +856,20 @@ Pipeline stages with an unmet dependency are held back: a job with `depends_on` 
 ```json
 { "jobs": [ <job_object>, ... ] }
 ```
+
+**VardrGate jobs get their spec inlined.** A `vardrgate_api_test` job stores only `config.test_case_id`. In this response — and only in this response — the stored spec is expanded into `config.test_case`:
+
+```json
+{
+  "tool_type": "vardrgate_api_test",
+  "config": {
+    "test_case_id": "<uuid>",
+    "test_case": { "id": "bola-check", "identities": [ ... ], "request": { ... } }
+  }
+}
+```
+
+That keeps `scan_jobs.config` flat for validation while giving the runner the object its config parser requires. The expansion is never written back, so revising a case changes what the next hand-off carries. A job whose case has been deleted is auto-failed with `"authorization test case ... no longer exists"`.
 
 ### `POST /jobs/{job_id}/claim`
 Atomically claim a pending job. Sets `status: "running"` and stamps `started_at` only if the job is currently `pending`. Returns `409` if the job is already running, done, or failed — prevents two VardrRunner instances from double-claiming the same job.
@@ -985,6 +1000,54 @@ VardrRunner posts a lifecycle event for a job it owns.
 **Errors**
 - `401` — not authenticated
 - `404` — job not found or belongs to another user
+
+### `POST /jobs/{job_id}/upload`
+
+Receive a VardrGate result for a `vardrgate_api_test` job. Posted by VardrRunner after the tool runs; accepts one `engine.Result`.
+
+**Request body**
+```json
+{
+  "test_case_id": "bola-check",
+  "executions": [
+    { "identity_id": "attacker", "status_code": 200, "observed_outcome": "allow",
+      "duration_ms": 39, "headers": { "Content-Type": "application/json" } }
+  ],
+  "findings": [
+    { "category": "potential_bola", "severity": "high", "confidence": "high",
+      "identity_id": "attacker", "message": "attacker read another user's profile",
+      "evidence": ["expected deny, observed allow (200)"],
+      "detected_at": "2026-08-17T10:00:00Z" }
+  ]
+}
+```
+
+**Where the result lands**
+
+| Result field | Becomes | Notes |
+|---|---|---|
+| `findings[]` | `scan_items` with `source="vardrgate"` | Reuses the triage and promote-to-finding flow nuclei results already use rather than a parallel one |
+| `findings[].category` | `scan_items.type` | `potential_bola`, `cross_tenant_access`, `privilege_escalation`, … |
+| `findings[].severity` | `scan_items.severity` | Same `info…critical` set as everywhere else; an unrecognised value falls back to `info` rather than being guessed upward |
+| `test_case_id` | `scan_items.template_id` | The role a nuclei template id plays |
+| the case's `request.url` | `scan_items.asset` / `matched_at` | Read from the stored case, not the payload |
+| `executions[]` | `evidence` with `kind="tool_result"` | Content-hashed, `sensitivity="confidential"`, one row per identity |
+
+Everything is **redacted on write**. VardrGate excludes credential values and response bodies from its own JSON (`json:"-"`), but a control that depends on the sender behaving is not a control.
+
+Findings land with `status: "new"`, so they appear in the Scanning section for triage like any other machine-generated result.
+
+**Response**
+```json
+{ "job_id": "<uuid>", "scan_items_created": 1, "evidence_created": 2 }
+```
+
+**Errors**
+- `400` — the job is not a `vardrgate_api_test` job
+- `401` — not authenticated
+- `403` — viewer-role member (read-only)
+- `404` — job not found or not accessible
+- `413` — result payload exceeds 512 KB
 
 ### `GET /jobs/{job_id}/events`
 Frontend polls this to stream job lifecycle events into the Terminal. Returns all events in chronological order.
@@ -1187,7 +1250,7 @@ Create a recurring scan.
 **Request body**
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `tool_type` | string | yes | `httpx`, `nuclei`, `subfinder`, `nmap`, `dnsx`, or `naabu` |
+| `tool_type` | string | yes | `httpx`, `nuclei`, `subfinder`, `nmap`, `dnsx`, `naabu`, or `vardrgate_api_test` |
 | `target_source` | string | yes | `scope` or `recon` |
 | `config` | object | no | Tool config, same validation as job creation |
 | `interval` | string | yes | `hourly`, `daily`, or `weekly` |
@@ -1236,7 +1299,7 @@ Create a saved profile. `201` on success.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `name` | string | yes | 1–100 chars |
-| `tool_type` | string | yes | `httpx`, `nuclei`, `subfinder`, `nmap`, `dnsx`, or `naabu` |
+| `tool_type` | string | yes | `httpx`, `nuclei`, `subfinder`, `nmap`, `dnsx`, `naabu`, or `vardrgate_api_test` |
 | `target_source` | string | yes | `scope` or `recon` |
 | `config` | object | no | Tool config, same validation as job creation |
 
@@ -1328,7 +1391,20 @@ Permanently delete a case.
 
 `test_case_id` is VardrGate's own id from `spec.id`, surfaced so a result can be traced back without opening the blob. It is not unique — a case may be revised.
 
-> **Not yet queueable.** `vardrgate_api_test` is still absent from `_VALID_TOOLS`: running a case also needs `POST /jobs/{id}/upload` for the runner to return results to. See `docs/implementation-roadmap.md`.
+### Running a case
+
+Queue a `vardrgate_api_test` job referencing the case by id:
+
+```json
+{ "tool_type": "vardrgate_api_test", "target_source": "scope",
+  "config": { "test_case_id": "<uuid>" } }
+```
+
+Only the reference is stored. `GET /jobs/pending` **inlines the stored spec** as `config.test_case` when handing the job to a runner, which is what VardrGate's config parser expects — so job config stays flat for validation while the runner receives a full object. The expansion exists only in that response; `scan_jobs.config` keeps holding just the id, so editing a case changes what the next run receives.
+
+A job whose case has since been deleted is auto-failed rather than handed over — it can never succeed, and leaving it pending would hang the queue.
+
+Results come back via [`POST /jobs/{job_id}/upload`](#post-jobsjob_idupload).
 
 ---
 

@@ -284,6 +284,14 @@ audit_logs
 - `scan_profiles` are reusable tool + config presets per program, validated identically to `scan_jobs.config`. They let the Composer queue a frequently-used scan in one click. No FK from jobs to profiles — a profile is a template, copied into a job at queue time.
 - `authorization_test_cases` store VardrGate specs per engagement. Unlike a scan profile, a test case is **referenced** rather than copied: a job carries `config = {"test_case_id": ...}` and the spec is inlined when the job is handed to a runner. That keeps `scan_jobs.config` flat for validation, lets one case back many runs, and means revising a case does not require re-queueing. `spec` is stored verbatim because VardrGate owns that schema and is free to extend it without a migration here. **Credential values are never stored** — identities reference secrets via `value_env` / `value_keychain`, resolved by VardrRunner on the operator's machine; a literal non-empty `value` is rejected on write.
 
+### VardrGate job lifecycle
+
+`vardrgate_api_test` is the one job type that resolves no scope or recon targets — the request under test travels inside the stored case.
+
+1. **Queue.** `POST /engagements/{id}/jobs` with `config = {"test_case_id": ...}`. The reference is validated at queue time and scoped to the engagement, so a job can neither name a missing case nor borrow one from another engagement.
+2. **Hand-off.** `GET /jobs/pending` expands the stored spec into `config.test_case` (`_resolve_test_cases` in `routers/jobs.py`). The spec rides on the response only — it is never written back to `scan_jobs.config`, so the job keeps holding just the id and a revised case changes what the next hand-off carries. **This expansion is what lets the integration land without a VardrRunner release**: `VardrGateConfig.from_dict` receives exactly the object it already expects. A job whose case has been deleted is auto-failed here, the same way a dangling pipeline dependency is.
+3. **Result.** `POST /jobs/{id}/upload` maps `findings[]` → `scan_items` (`source="vardrgate"`, `template_id` = the VardrGate case id) and `executions[]` → `evidence`. Reusing `scan_items` means the existing triage and promote-to-finding flow applies rather than a parallel one. Everything is redacted on write: VardrGate excludes credential values and response bodies from its own JSON, but a control that depends on the sender behaving is not a control.
+
 ---
 
 ## Program Serialization (Lazy Loading)
@@ -351,7 +359,7 @@ The sidebar exposes **7 top-level sections** mapped to the engagement workflow:
 
    `PIPELINES` (`jobs/mockData.tsx`) is the single definition; `JobsSection` posts the stage list the Composer hands back, so what is displayed is exactly what is queued.
 
-   **`vardrgate_api_test` is deliberately absent.** VardrRunner has a working handler for it, but VardrMap has no `POST /jobs/{id}/upload` endpoint for the runner to return results to, and no model or authoring UI for the structured `test_case` the tool requires. Adding it to `_VALID_TOOLS` before both exist would let an operator queue a job that cannot complete. See `implementation-roadmap.md`.
+   A third pipeline, **API Assessment** (httpx → `vardrgate_api_test`), needs a stored case. Selecting it — or the standalone `vardrgate` tool — shows a picker of the engagement's `authorization_test_cases`, and **Queue** stays disabled until one is chosen, since a vardrgate job without a case is a guaranteed `400`. The chosen id is injected into the vardrgate stage's config at submit. Excluding that stage drops the requirement.
 4. **Job Board + Terminal** (`jobs/JobBoard.tsx`, `jobs/Terminal.tsx`) — three switchable board views (Stream, Pipeline, Table); a terminal showing status and any backend error message for the selected job.
 
 The `ScanJobUI` type (`frontend/app/types.ts`) extends the API-level `ScanJob` with UI-only fields (`progress`, `yield`, `yieldKind`, `durationMs`, `log[]`). Jobs are loaded via real API polling (5 s when active jobs exist, 30 s idle). The Terminal polls `GET /jobs/{id}/events` every 3 s while the job is pending or running, displaying lifecycle events (`started`, `targets_resolved`, `running`, `uploaded`, `done`/`failed`) as colored log lines; polling stops when the job reaches a terminal state.
