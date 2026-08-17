@@ -78,7 +78,28 @@ working code, not because it matters less.
 - [ ] Observation as a first-class entity
 - [x] Evidence with content hash, provenance, sensitivity, retention (v0.27.0)
 - [x] Centralized redaction (auth headers, cookies, tokens, URL credentials) (v0.27.0)
+- [x] **dnsx + naabu queueable** — VardrRunner already had handlers; VardrMap's
+      `_VALID_TOOLS` did not accept them. Two named pipelines ship with them
+      (v0.30.0)
 - [ ] Finding lifecycle migration + Retest entity
+
+### VardrGate integration — blocked, not forgotten
+
+`vardrgate_api_test` has a complete handler in VardrRunner (`REGISTRY`) and is
+the most differentiated job type in the product family. It is **not** in
+`_VALID_TOOLS` because two pieces are missing on this side:
+
+1. **`POST /jobs/{id}/upload`** — the handler posts its sanitized result there
+   and the endpoint does not exist. Needs a decision on where a VardrGate result
+   lands: job artifact, `Evidence` rows, or promoted `Finding` rows.
+2. **A `test_case` model** — `VardrGateConfig` requires a structured object
+   (request spec, identities, credential references resolved locally by the
+   runner). VardrMap has no model, storage, or authoring UI for it, and
+   `_TOOL_CONFIG_KEYS` only permits flat scalar keys.
+
+Until both land, adding the tool would let an operator queue a job that fails at
+config parse — or, past that, executes and then 404s on upload. Pinned by
+`test_vardrgate_is_not_queueable_yet`.
 
 ## Phase 3 — Private execution
 

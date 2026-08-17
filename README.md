@@ -42,7 +42,7 @@ Bug bounty work is one `engagement_type` among four (`bug_bounty`, `pentest`, `r
 **Scan Jobs orchestration console** — full job management UI in the browser:
 - Bridge zone — animated link visualization showing live VardrMap ↔ VardrRunner connection status; shows real hostname, OS, version, and per-tool availability from the latest heartbeat
 - Telemetry zone — running/completed/results-yielded/avg-runtime stat tiles
-- Composer zone — pick one of four tools (subfinder, httpx, nuclei, nmap) with per-tool config, or the recon pipeline; selecting the pipeline expands a stage editor so you can include or exclude each stage (subfinder → httpx alone is as valid as the full chain)
+- Composer zone — pick one of six tools (subfinder, httpx, nuclei, nmap, dnsx, naabu) with per-tool config, or a named pipeline: **Attack Surface** (subfinder → dnsx → httpx → nuclei) for a surface you have to discover, **Host Enumeration** (naabu → nmap → httpx) for a scope you were given. Selecting a pipeline expands a stage editor so you can include or exclude each stage
 - Job Board + Terminal — three board views (Stream, Pipeline, Table); selecting a job opens a terminal that polls live lifecycle events (started → running → done/failed) every 3 s
 
 **VardrRunner** — local CLI companion ([VardrSec/VardrRunner](https://github.com/VardrSec/VardrRunner), its own repo):

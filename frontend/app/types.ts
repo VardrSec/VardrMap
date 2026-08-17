@@ -88,6 +88,14 @@ export type PipelineStage = {
   config: Record<string, unknown>;
 };
 
+/** A named chain the Composer offers. Stages are individually includable. */
+export type PipelineDef = {
+  id: string;
+  label: string;
+  blurb: string;
+  stages: PipelineStage[];
+};
+
 export type ScanJob = {
   id: string; program_id: string; tool_type: string; target_source: string;
   config: Record<string, unknown>; status: string;
