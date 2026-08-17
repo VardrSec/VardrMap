@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { JobPreview, PipelineStage, PolicyWarning, RunnerStatus, ScanJob, ScanJobUI, ScanProfile, ScheduledScan } from "../types";
+import type { AuthorizationTestCase, JobPreview, PipelineStage, PolicyWarning, RunnerStatus, ScanJob, ScanJobUI, ScanProfile, ScheduledScan } from "../types";
 import { useAppContext } from "../context/AppContext";
 import { TOOLS } from "./jobs/mockData";
 import Bridge from "./jobs/Bridge";
@@ -89,6 +89,7 @@ export default function JobsSection({
   const [jobs,          setJobs]          = useState<ScanJobUI[]>([]);
   const [schedules,     setSchedules]     = useState<ScheduledScan[]>([]);
   const [profiles,      setProfiles]      = useState<ScanProfile[]>([]);
+  const [testCases,     setTestCases]     = useState<AuthorizationTestCase[]>([]);
   const [loading,       setLoading]       = useState(true);
   const [runnerStatus,  setRunnerStatus]  = useState<RunnerStatus | null>(null);
   const [autoRun,       setAutoRun]       = useState(false);
@@ -161,12 +162,24 @@ export default function JobsSection({
     } catch { /* profiles just stay empty */ }
   }, [authFetch, engagementId]);
 
+  // Stored VardrGate cases — a vardrgate job references one by id, so the
+  // Composer needs the list to offer a choice rather than a raw uuid field.
+  const loadTestCases = useCallback(async () => {
+    try {
+      const res = await authFetch(`/engagements/${engagementId}/test-cases`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setTestCases(Array.isArray(data?.test_cases) ? data.test_cases : []);
+    } catch { /* the picker just shows "none stored" */ }
+  }, [authFetch, engagementId]);
+
   // Initial load
   useEffect(() => {
     void loadJobs();
     void loadSchedules();
     void loadProfiles();
-  }, [loadJobs, loadSchedules, loadProfiles]);
+    void loadTestCases();
+  }, [loadJobs, loadSchedules, loadProfiles, loadTestCases]);
 
   // SSE connection for real-time job updates
   useEffect(() => {
@@ -483,6 +496,7 @@ export default function JobsSection({
             onPipeline={queuePipeline}
             onPreview={previewJob}
             profiles={profiles}
+            testCases={testCases}
             onSaveProfile={saveProfile}
             onDeleteProfile={deleteProfile}
             runnerOnline={runnerOnline}

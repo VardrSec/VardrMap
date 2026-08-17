@@ -83,39 +83,45 @@ working code, not because it matters less.
       (v0.30.0)
 - [ ] Finding lifecycle migration + Retest entity
 
-### VardrGate integration — in progress
+### VardrGate integration ✅ (v0.31.0 – v0.32.0)
 
 `vardrgate_api_test` has a complete handler in VardrRunner (`REGISTRY`) and is
-the most differentiated job type in the product family. Closing the gap on this
-side is five steps; the tool stays out of `_VALID_TOOLS` until step 4.
+the most differentiated job type in the product family. It is now queueable
+end to end, with **no VardrRunner change required**.
 
 - [x] **1. `authorization_test_cases` + CRUD** (v0.31.0) — engagement-scoped
       storage for VardrGate specs, referenced by jobs rather than copied into
       them. Credential values are rejected on write: identities must use
       `value_env` / `value_keychain` so the secret resolves on the runner and
       never reaches the database. Migration `0021`.
-- [ ] **2. Inline the spec in `GET /jobs/pending`** — expand
-      `config.test_case_id` into the full `test_case` object when serializing a
-      vardrgate job. This is what keeps `ScanJob.config` flat for validation
-      while still handing `VardrGateConfig.from_dict` exactly what it expects,
-      so **VardrRunner needs no change**.
-- [ ] **3. `POST /jobs/{id}/upload`** — the handler posts its sanitized result
-      there and the endpoint does not exist. Map `findings[]` → `ScanItem`
-      (`source="vardrgate"`, `template_id=test_case_id`) so the existing triage
-      and promote-to-finding flow applies, and `executions[]` → `Evidence`.
-      Note VardrGate already excludes credential values and response bodies from
-      its JSON output (`json:"-"`), so the payload arrives sanitized.
-- [ ] **4. Add `vardrgate_api_test` to `_VALID_TOOLS`** and remove the pin in
-      `test_vardrgate_is_not_queueable_yet`.
-- [ ] **5. API Assessment pipeline** — `httpx → vardrgate_api_test`.
+- [x] **2. Spec inlined in `GET /jobs/pending`** (v0.32.0) — `_resolve_test_cases`
+      expands `config.test_case_id` into `config.test_case` on the response only.
+      `ScanJob.config` stays flat for validation while
+      `VardrGateConfig.from_dict` receives exactly the object it expects. A job
+      whose case was deleted is auto-failed rather than left pending.
+- [x] **3. `POST /jobs/{id}/upload`** (v0.32.0) — `findings[]` → `ScanItem`
+      (`source="vardrgate"`, `template_id` = the VardrGate case id) so the
+      existing triage and promote-to-finding flow applies, and `executions[]` →
+      `Evidence` with content hashing. Redacted on write regardless of what the
+      sender omits.
+- [x] **4. `vardrgate_api_test` in `_VALID_TOOLS`** (v0.32.0) — config is
+      `{test_case_id, timeout}`, validated at queue time and scoped to the
+      engagement so a case cannot be borrowed from another one.
+- [x] **5. API Assessment pipeline** (v0.32.0) — `httpx → vardrgate_api_test`,
+      with a test-case picker in the Composer and Queue disabled until a case is
+      chosen.
 
-Until steps 2–3 land, adding the tool would let an operator queue a job that
-fails at config parse — or, past that, executes and then 404s on upload.
+**Not yet built.** Authoring is still "store the JSON VardrGate produced".
+VardrGate's `discover` command and `internal/scaffold` generate cases from an
+OpenAPI spec or a Postman collection, so wiring `discover` in as its own job
+type — turning a spec upload into a set of stored cases — is the natural next
+iteration.
 
-Authoring is largely solved upstream: VardrGate's `discover` command and
-`internal/scaffold` generate cases from an OpenAPI spec or Postman collection,
-so v1 authoring is "store the JSON VardrGate produced". Wiring `discover` in as
-its own job type is a later iteration.
+**Validated against the Go structs, not a live run.** The result mapping was
+built by reading `engine.Result` and `model.Finding` in the VardrGate repo. The
+shape should be confirmed against one real VardrGate invocation; `severity` is
+the field most worth checking, since an unrecognised value deliberately falls
+back to `info` rather than being guessed upward.
 
 ## Phase 3 — Private execution
 

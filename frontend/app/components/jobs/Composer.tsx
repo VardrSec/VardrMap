@@ -2,7 +2,13 @@
 
 import { useState } from "react";
 import { PIPELINES, TOOLS } from "./mockData";
-import type { JobPreview, PipelineStage, ScanProfile, ToolDef } from "../../types";
+import type {
+  AuthorizationTestCase, JobPreview, PipelineStage, ScanProfile, ToolDef,
+} from "../../types";
+
+// Self-contained: the request under test lives in the stored case, so this tool
+// resolves no scope/recon targets and needs a case reference instead of config.
+const VARDRGATE = "vardrgate_api_test";
 
 type QueueSpec = {
   tool: string;
@@ -21,6 +27,7 @@ type ComposerProps = {
   onPipeline: (stages: PipelineStage[]) => void;
   onPreview: (spec: { tool: string; source: string; config: Record<string, unknown> }) => Promise<JobPreview | null>;
   profiles: ScanProfile[];
+  testCases: AuthorizationTestCase[];
   onSaveProfile: (spec: { tool: string; source: string; config: Record<string, unknown> }, name: string) => void;
   onDeleteProfile: (id: string) => void;
   runnerOnline: boolean;
@@ -62,9 +69,42 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 const inputCls =
   "w-full rounded-md border border-[#2e2e2e] bg-[#161616] px-2.5 py-2 text-sm text-[#f1f5f9] placeholder-[#3a3a3a] transition focus:outline-none";
 
+/** Pick which stored VardrGate case a vardrgate job runs. */
+function TestCasePicker({ cases, value, onChange, accent }: {
+  cases: AuthorizationTestCase[]; value: string; onChange: (v: string) => void; accent: string;
+}) {
+  return (
+    <Field label="Authorization Test Case">
+      {cases.length === 0 ? (
+        <p className="font-mono text-[10px] leading-relaxed text-[#f59e0b]">
+          no test cases stored for this engagement — add one before running vardrgate
+        </p>
+      ) : (
+        <select
+          className={inputCls}
+          aria-label="Authorization test case"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onFocus={(e) => { e.target.style.borderColor = accent; }}
+          onBlur={(e) => { e.target.style.borderColor = "#2e2e2e"; }}>
+          <option value="">select a case…</option>
+          {cases.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}{c.test_case_id ? ` · ${c.test_case_id}` : ""}
+            </option>
+          ))}
+        </select>
+      )}
+    </Field>
+  );
+}
+
 type ComposerPropsWithTool = ComposerProps & { initialTool?: string };
 
-export default function Composer({ accent, onQueue, onPipeline, onPreview, profiles, onSaveProfile, onDeleteProfile, runnerOnline, scopeCount, reconCount, programName, initialTool }: ComposerPropsWithTool) {
+export default function Composer({ accent, onQueue, onPipeline, onPreview, profiles, testCases, onSaveProfile, onDeleteProfile, runnerOnline, scopeCount, reconCount, programName, initialTool }: ComposerPropsWithTool) {
+  // Which stored case a vardrgate job runs. Shared by the standalone tool and
+  // the API Assessment pipeline, since both queue the same job type.
+  const [caseId, setCaseId] = useState("");
   // Pipelines and tools share one mutually-exclusive selection — picking either
   // clears the other. `toolId` is kept across the toggle so returning to a tool
   // restores the config that was already typed into it.
@@ -130,17 +170,34 @@ export default function Composer({ accent, onQueue, onPipeline, onPreview, profi
     }));
   }
 
+  // A vardrgate job is unrunnable without a case, and the API refuses it, so
+  // block here rather than letting the operator queue a guaranteed 400.
+  const needsCase =
+    (pipeline ? activeStages.some((s) => s.tool_type === VARDRGATE) : toolId === VARDRGATE);
+  const caseMissing = needsCase && !caseId;
+
+  /** Stages as posted: the vardrgate stage carries the chosen case reference. */
+  const stagesToQueue = (): PipelineStage[] =>
+    activeStages.map((s) =>
+      s.tool_type === VARDRGATE
+        ? { ...s, config: { ...s.config, test_case_id: caseId } }
+        : s,
+    );
+
   function submit() {
+    if (caseMissing) return;
     if (pipeline) {
       if (activeStages.length === 0) return;
-      const list = activeStages.map((s) => `  ${s.tool_type} (${s.target_source})`).join("\n");
-      const tail = activeStages.length > 1 ? ", each waiting on the one before it" : "";
-      if (!confirm(`Queue ${pipeline.label}?\n\n${list}\n\n${activeStages.length} job${activeStages.length === 1 ? "" : "s"} will be queued${tail}.`)) return;
-      onPipeline(activeStages);
+      const stages = stagesToQueue();
+      const list = stages.map((s) => `  ${s.tool_type} (${s.target_source})`).join("\n");
+      const tail = stages.length > 1 ? ", each waiting on the one before it" : "";
+      if (!confirm(`Queue ${pipeline.label}?\n\n${list}\n\n${stages.length} job${stages.length === 1 ? "" : "s"} will be queued${tail}.`)) return;
+      onPipeline(stages);
       return;
     }
+    const config = toolId === VARDRGATE ? { test_case_id: caseId } : { ...cfg };
     onQueue({
-      tool: toolId, source, config: { ...cfg }, targets: sourceCount, yieldKind: tool.yields,
+      tool: toolId, source, config, targets: sourceCount, yieldKind: tool.yields,
       interval: recurrence === "once" ? undefined : recurrence,
     });
   }
@@ -268,6 +325,11 @@ export default function Composer({ accent, onQueue, onPipeline, onPreview, profi
             {activeStages.length === 0 && (
               <p className="mt-1.5 font-mono text-[10px] text-[#f59e0b]">include at least one stage to queue</p>
             )}
+            {needsCase && (
+              <div className="mt-3">
+                <TestCasePicker cases={testCases} value={caseId} onChange={setCaseId} accent={accent} />
+              </div>
+            )}
           </Field>
         ) : (
         <Field label="Target Source">
@@ -287,7 +349,13 @@ export default function Composer({ accent, onQueue, onPipeline, onPreview, profi
         </Field>
         )}
 
-        {!pipeline && (
+        {/* vardrgate takes a stored case, not typed config — offer the same
+            picker the pipeline uses rather than a raw uuid field. */}
+        {!pipeline && toolId === VARDRGATE && (
+          <TestCasePicker cases={testCases} value={caseId} onChange={setCaseId} accent={accent} />
+        )}
+
+        {!pipeline && toolId !== VARDRGATE && (
         <div className="grid grid-cols-2 gap-3">
           {tool.config.map((c) =>
             c.type === "toggle" ? (
@@ -429,7 +497,8 @@ export default function Composer({ accent, onQueue, onPipeline, onPreview, profi
             {previewing ? "…" : "Preview"}
           </button>
           <button onClick={submit}
-            disabled={!!pipeline && activeStages.length === 0}
+            disabled={(!!pipeline && activeStages.length === 0) || caseMissing}
+            title={caseMissing ? "Select an authorization test case first" : undefined}
             className="flex-1 rounded-md px-4 py-2.5 text-sm font-semibold text-[#161616] transition active:scale-[0.98] disabled:opacity-50"
             style={{ backgroundColor: accent }}>
             {pipeline ? "Queue Pipeline" : recurrence === "once" ? "Queue Job" : `Schedule ${recurrence}`}

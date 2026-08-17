@@ -1,11 +1,14 @@
+import hashlib
+import json
 from datetime import datetime, timedelta, timezone
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 import enforcement
+import redaction
 import sse as _sse
 from db import get_db
 from deps import (
@@ -16,7 +19,17 @@ from deps import (
     require_member_write,
 )
 from limiter import limiter
-from models import JobEvent, ReconItem, ScanJob, ScheduledScan, ScopeItem, User
+from models import (
+    AuthorizationTestCase,
+    Evidence,
+    JobEvent,
+    ReconItem,
+    ScanItem,
+    ScanJob,
+    ScheduledScan,
+    ScopeItem,
+    User,
+)
 from notifications import send_webhook
 
 router = APIRouter(tags=["jobs"])
@@ -38,7 +51,11 @@ class EventCreate(BaseModel):
     text: str = Field(default="", max_length=2000)
 
 
-_VALID_TOOLS = {"httpx", "nuclei", "subfinder", "nmap", "dnsx", "naabu"}
+# VardrGate jobs are self-contained: the request under test travels inside the
+# stored test case rather than being resolved from scope or recon.
+_VARDRGATE = "vardrgate_api_test"
+
+_VALID_TOOLS = {"httpx", "nuclei", "subfinder", "nmap", "dnsx", "naabu", _VARDRGATE}
 _VALID_SOURCES = {"scope", "recon"}
 
 # Per-tool allowed config keys. Keys not in this set are rejected.
@@ -49,6 +66,9 @@ _TOOL_CONFIG_KEYS: dict[str, set[str]] = {
     "nmap":      {"top_ports", "timing"},
     "dnsx":      {"limit", "timeout"},
     "naabu":     {"top_ports", "limit", "timeout"},
+    # Only the reference. The spec is stored in authorization_test_cases and
+    # inlined at hand-off, which keeps this config flat like every other tool's.
+    _VARDRGATE:  {"test_case_id", "timeout"},
 }
 _NUCLEI_SEVERITIES = {"info", "low", "medium", "high", "critical"}
 
@@ -62,6 +82,35 @@ _INT_CONFIG_BOUNDS: dict[tuple[str, str], tuple[int, int]] = {
     ("naabu", "limit"):      (1, 1_000_000),
     ("naabu", "timeout"):    (1, 86_400),
 }
+
+
+def _validate_test_case_ref(program_id: str, config: dict, db: Session) -> None:
+    """A vardrgate job must name a test case that exists in this engagement.
+
+    Checked at queue time rather than at hand-off: a job referencing a missing or
+    borrowed case can never run, and refusing it here beats letting it sit pending
+    until a runner picks it up and fails it. Scoping by `program_id` also stops the
+    field being used to pull another engagement's case into a job.
+    """
+    tc_id = str((config or {}).get("test_case_id") or "").strip()
+    if not tc_id:
+        raise HTTPException(
+            status_code=400,
+            detail=f"{_VARDRGATE} requires config.test_case_id",
+        )
+    exists = (
+        db.query(AuthorizationTestCase.id)
+        .filter(
+            AuthorizationTestCase.id == tc_id,
+            AuthorizationTestCase.program_id == program_id,
+        )
+        .first()
+    )
+    if not exists:
+        raise HTTPException(
+            status_code=404,
+            detail="Test case not found",
+        )
 
 
 def _validate_job_config(tool_type: str, config: dict) -> None:
@@ -163,6 +212,8 @@ def create_job(
         raise HTTPException(status_code=400, detail="target_source must be scope or recon")
     if body.config:
         _validate_job_config(body.tool_type, body.config)
+    if body.tool_type == _VARDRGATE:
+        _validate_test_case_ref(program_id, body.config or {}, db)
     if body.depends_on:
         _validate_dependency(body.depends_on, program_id, current_user["github_id"], db)
 
@@ -264,6 +315,8 @@ def create_pipeline(
             raise HTTPException(status_code=400, detail=f"stage {i}: target_source must be scope or recon")
         if stage.config:
             _validate_job_config(stage.tool_type, stage.config)
+        if stage.tool_type == _VARDRGATE:
+            _validate_test_case_ref(program_id, stage.config or {}, db)
 
     created: list[ScanJob] = []
     prev_id: Optional[str] = None
@@ -406,6 +459,10 @@ def get_pending_jobs(
     Pipeline stages with an unmet dependency are held back: a job waits until its
     parent is "done", and is auto-failed if its parent failed (or vanished) so it
     never hangs the queue forever.
+
+    A `vardrgate_api_test` job stores only `test_case_id`; the stored spec is
+    inlined here so the runner receives the `test_case` object its config parser
+    expects. See `_inline_test_cases`.
     """
     _materialize_due_schedules(db, current_user["github_id"])
     pending = (
@@ -418,7 +475,77 @@ def get_pending_jobs(
         .all()
     )
     eligible = _filter_by_dependencies(pending, db)
-    return {"jobs": [serialize_job(j) for j in eligible]}
+    eligible, specs = _resolve_test_cases(eligible, db)
+    return {"jobs": [_serialize_with_spec(j, specs) for j in eligible]}
+
+
+def _resolve_test_cases(
+    jobs: list[ScanJob], db: Session
+) -> tuple[list[ScanJob], dict[str, dict]]:
+    """Look up the stored spec for each vardrgate job. Returns (eligible, job_id -> spec).
+
+    A vardrgate job stores only `test_case_id`, which keeps `ScanJob.config` flat
+    for validation and lets one stored case back many runs. VardrRunner's
+    `VardrGateConfig.from_dict` requires `test_case` as an object, so the spec is
+    inlined at hand-off — which is what lets this integration land without a
+    VardrRunner release.
+
+    The spec is returned alongside rather than written onto the job, so the
+    expansion exists only in the response and can never be flushed back into
+    `scan_jobs.config`.
+
+    A job whose case has been deleted is auto-failed rather than handed over: it
+    can never succeed, and leaving it pending would hang the queue the same way a
+    dangling dependency does.
+    """
+    targets = [j for j in jobs if j.tool_type == _VARDRGATE]
+    if not targets:
+        return jobs, {}
+
+    wanted = {str((j.config or {}).get("test_case_id") or "") for j in targets}
+    wanted.discard("")
+    # Keyed by (case id, engagement) so a case can never be pulled across engagements.
+    stored: dict[tuple[str, str], dict] = {}
+    if wanted:
+        for row in (
+            db.query(AuthorizationTestCase)
+            .filter(AuthorizationTestCase.id.in_(wanted))
+            .all()
+        ):
+            stored[(row.id, row.program_id)] = row.spec or {}
+
+    eligible: list[ScanJob] = []
+    specs: dict[str, dict] = {}
+    failed = False
+    now = datetime.now(timezone.utc)
+    for job in jobs:
+        if job.tool_type != _VARDRGATE:
+            eligible.append(job)
+            continue
+        tc_id = str((job.config or {}).get("test_case_id") or "")
+        spec = stored.get((tc_id, job.program_id))
+        if not spec:
+            job.status = "failed"
+            job.completed_at = now
+            job.error_message = (
+                f"authorization test case {tc_id or '(unset)'} no longer exists"
+            )
+            failed = True
+            continue
+        eligible.append(job)
+        specs[job.id] = spec
+
+    if failed:
+        db.commit()
+    return eligible, specs
+
+
+def _serialize_with_spec(job: ScanJob, specs: dict[str, dict]) -> dict:
+    data = serialize_job(job)
+    spec = specs.get(job.id)
+    if spec is not None:
+        data["config"] = {**data["config"], "test_case": spec}
+    return data
 
 
 def _filter_by_dependencies(pending: list[ScanJob], db: Session) -> list[ScanJob]:
@@ -691,3 +818,176 @@ def get_job_events(
         .all()
     )
     return {"events": [serialize_event(e) for e in events]}
+
+
+# -----------------------------------------------------------------------------
+# VardrGate result upload
+# -----------------------------------------------------------------------------
+
+# VardrGate's model.Severity — identical to the set used everywhere else here, so
+# no translation is needed, only validation.
+_VG_SEVERITIES = {"info", "low", "medium", "high", "critical"}
+_MAX_RESULT_BYTES = 512_000
+
+
+class VardrGateUpload(BaseModel):
+    """One `engine.Result` from VardrGate.
+
+    Fields mirror the Go struct. `executions[].body` and every credential value
+    carry `json:"-"` upstream, so a well-behaved runner never sends them — but
+    everything stored here is redacted regardless, because the guarantee should
+    not rest on the sender.
+    """
+
+    test_case_id: str = Field(default="", max_length=200)
+    executions: list[dict] = Field(default_factory=list, max_length=100)
+    findings: list[dict] = Field(default_factory=list, max_length=500)
+
+
+def _finding_description(finding: dict) -> str:
+    """Readable detail: which identity, how confident, and the evidence lines."""
+    parts: list[str] = []
+    identity = str(finding.get("identity_id") or "").strip()
+    if identity:
+        parts.append(f"identity: {identity}")
+    confidence = str(finding.get("confidence") or "").strip()
+    if confidence:
+        parts.append(f"confidence: {confidence}")
+    evidence = finding.get("evidence")
+    if isinstance(evidence, list):
+        for line in evidence[:20]:
+            if str(line).strip():
+                parts.append(str(line))
+    return redaction.redact_text("\n".join(parts))
+
+
+@router.post("/jobs/{job_id}/upload")
+def upload_job_result(
+    job_id: str,
+    body: VardrGateUpload,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Receive a VardrGate result and file it against the engagement.
+
+    Findings become `scan_items` with `source="vardrgate"`, which puts them
+    through the triage and promote-to-finding flow nuclei results already use
+    rather than inventing a parallel one. `template_id` carries the VardrGate test
+    case id, the same role a nuclei template id plays.
+
+    Executions become `evidence` — the request/response record backing each
+    finding, with the content hash and retention handling that entity already
+    provides.
+
+    Everything is redacted on write. VardrGate excludes credential values and
+    response bodies from its own JSON, but a control that depends on the sender
+    behaving is not a control.
+    """
+    job = (
+        db.query(ScanJob)
+        .filter(
+            ScanJob.id == job_id,
+            ScanJob.program_id.in_(accessible_engagement_ids(current_user["github_id"], db)),
+        )
+        .first()
+    )
+    if not job:
+        raise HTTPException(status_code=404)
+    _writable_engagement(job, current_user, db)
+
+    if job.tool_type != _VARDRGATE:
+        raise HTTPException(
+            status_code=400,
+            detail=f"job {job_id} is a '{job.tool_type}' job; /upload accepts {_VARDRGATE} results",
+        )
+
+    if len(json.dumps(body.model_dump())) > _MAX_RESULT_BYTES:
+        raise HTTPException(status_code=413, detail="result payload is too large")
+
+    # The test case id on the job is authoritative: it is what was queued. A
+    # mismatched id in the payload means the runner ran something else.
+    queued_case = str((job.config or {}).get("test_case_id") or "")
+    template_id = str(body.test_case_id or "")[:200]
+
+    target = ""
+    case = (
+        db.query(AuthorizationTestCase)
+        .filter(
+            AuthorizationTestCase.id == queued_case,
+            AuthorizationTestCase.program_id == job.program_id,
+        )
+        .first()
+    )
+    if case:
+        target = str(((case.spec or {}).get("request") or {}).get("url") or "")[:2000]
+        if not template_id:
+            template_id = case.test_case_id or ""
+
+    created_items = 0
+    for finding in body.findings:
+        if not isinstance(finding, dict):
+            continue
+        severity = str(finding.get("severity") or "info").lower().strip()
+        if severity not in _VG_SEVERITIES:
+            # Unknown severity ranks below info upstream; mirror that rather than
+            # guessing, so an added level never silently reads as critical.
+            severity = "info"
+        message = redaction.redact_text(str(finding.get("message") or ""))
+        db.add(
+            ScanItem(
+                program_id=job.program_id,
+                source="vardrgate",
+                template_id=template_id,
+                title=message[:200] or str(finding.get("category") or "authorization finding"),
+                severity=severity,
+                asset=target,
+                matched_at=target,
+                type=str(finding.get("category") or "")[:50],
+                description=_finding_description(finding),
+                status="new",
+                job_id=job.id,
+            )
+        )
+        created_items += 1
+
+    created_evidence = 0
+    for execution in body.executions:
+        if not isinstance(execution, dict):
+            continue
+        identity = str(execution.get("identity_id") or "unknown")
+        detail: dict[str, Any] = {
+            "identity_id": identity,
+            "status_code": execution.get("status_code"),
+            "observed_outcome": execution.get("observed_outcome"),
+            "duration_ms": execution.get("duration_ms"),
+            "headers": execution.get("headers") or {},
+        }
+        if execution.get("error"):
+            detail["error"] = execution.get("error")
+            detail["error_kind"] = execution.get("error_kind")
+        text = json.dumps(redaction.redact_mapping(detail), indent=2, sort_keys=True, default=str)
+        db.add(
+            Evidence(
+                program_id=job.program_id,
+                kind="tool_result",
+                title=f"vardrgate · {identity} → {execution.get('status_code', '?')}"[:200],
+                body=text,
+                content_hash=hashlib.sha256(text.encode("utf-8")).hexdigest(),
+                collector="vardrrunner",
+                source="vardrgate",
+                sensitivity="confidential",
+                retention="engagement",
+                redacted=True,
+                collected_at=datetime.now(timezone.utc),
+            )
+        )
+        created_evidence += 1
+
+    log_action(db, current_user["github_id"], "create", "vardrgate_result", job.id, job.program_id)
+    db.commit()
+    _sse.notify(job.program_id, {"type": "job_update", "job_id": job.id, "status": job.status})
+    return {
+        "job_id": job.id,
+        "scan_items_created": created_items,
+        "evidence_created": created_evidence,
+    }

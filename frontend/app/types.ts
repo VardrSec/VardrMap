@@ -88,6 +88,19 @@ export type PipelineStage = {
   config: Record<string, unknown>;
 };
 
+/** A stored VardrGate authorization test case. Jobs reference one by `id`. */
+export type AuthorizationTestCase = {
+  id: string;
+  program_id: string;
+  name: string;
+  /** VardrGate's own spec.id, surfaced for traceability. */
+  test_case_id: string;
+  description: string;
+  spec: Record<string, unknown>;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
 /** A named chain the Composer offers. Stages are individually includable. */
 export type PipelineDef = {
   id: string;

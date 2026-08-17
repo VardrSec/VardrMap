@@ -34,6 +34,7 @@ Bug bounty work is one `engagement_type` among four (`bug_bounty`, `pentest`, `r
 - Browse recon results and scan findings; update status individually or in bulk
 - Log manual test cases with hypothesis, payload, evidence, and status
 - Evidence with content hash, sensitivity, and retention — secrets redacted on write
+- **API authorization testing** via [VardrGate](https://github.com/VardrSec/VardrGate) — store a test case describing one request replayed as several identities, queue it, and get BOLA / BFLA / cross-tenant / privilege-escalation findings back as triageable results. Credentials are referenced (`value_env` / `value_keychain`), never stored.
 - Track findings with severity, asset, status, and full write-up fields
 - Draft structured vulnerability reports linked to findings; preview as markdown and export as PDF
 - Generate personal API keys (`vmap_` tokens) for external tool access (e.g. Burp Suite)
@@ -42,7 +43,7 @@ Bug bounty work is one `engagement_type` among four (`bug_bounty`, `pentest`, `r
 **Scan Jobs orchestration console** — full job management UI in the browser:
 - Bridge zone — animated link visualization showing live VardrMap ↔ VardrRunner connection status; shows real hostname, OS, version, and per-tool availability from the latest heartbeat
 - Telemetry zone — running/completed/results-yielded/avg-runtime stat tiles
-- Composer zone — pick one of six tools (subfinder, httpx, nuclei, nmap, dnsx, naabu) with per-tool config, or a named pipeline: **Attack Surface** (subfinder → dnsx → httpx → nuclei) for a surface you have to discover, **Host Enumeration** (naabu → nmap → httpx) for a scope you were given. Selecting a pipeline expands a stage editor so you can include or exclude each stage
+- Composer zone — pick one of seven tools (subfinder, httpx, nuclei, nmap, dnsx, naabu, vardrgate) with per-tool config, or a named pipeline: **Attack Surface** (subfinder → dnsx → httpx → nuclei) for a surface you have to discover, **Host Enumeration** (naabu → nmap → httpx) for a scope you were given, **API Assessment** (httpx → vardrgate) for API authorization testing. Selecting a pipeline expands a stage editor so you can include or exclude each stage
 - Job Board + Terminal — three board views (Stream, Pipeline, Table); selecting a job opens a terminal that polls live lifecycle events (started → running → done/failed) every 3 s
 
 **VardrRunner** — local CLI companion ([VardrSec/VardrRunner](https://github.com/VardrSec/VardrRunner), its own repo):
