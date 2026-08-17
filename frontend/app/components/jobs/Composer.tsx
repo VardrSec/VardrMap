@@ -1,8 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { TOOLS } from "./mockData";
-import type { JobPreview, ScanProfile, ToolDef } from "../../types";
+import { PIPELINES, TOOLS } from "./mockData";
+import type {
+  AuthorizationTestCase, JobPreview, PipelineStage, ScanProfile, ToolDef,
+} from "../../types";
+
+// Self-contained: the request under test lives in the stored case, so this tool
+// resolves no scope/recon targets and needs a case reference instead of config.
+const VARDRGATE = "vardrgate_api_test";
 
 type QueueSpec = {
   tool: string;
@@ -18,9 +24,10 @@ const RECURRENCE = ["once", "hourly", "daily", "weekly"] as const;
 type ComposerProps = {
   accent: string;
   onQueue: (spec: QueueSpec) => void;
-  onPipeline: () => void;
+  onPipeline: (stages: PipelineStage[]) => void;
   onPreview: (spec: { tool: string; source: string; config: Record<string, unknown> }) => Promise<JobPreview | null>;
   profiles: ScanProfile[];
+  testCases: AuthorizationTestCase[];
   onSaveProfile: (spec: { tool: string; source: string; config: Record<string, unknown> }, name: string) => void;
   onDeleteProfile: (id: string) => void;
   runnerOnline: boolean;
@@ -34,6 +41,8 @@ function ToolPick({ tool, selected, accent, onClick }: {
 }) {
   return (
     <button onClick={onClick}
+      aria-pressed={selected}
+      aria-label={`Select ${tool.label}`}
       className="flex items-start gap-2.5 rounded-lg border px-3 py-2.5 text-left transition"
       style={{
         borderColor: selected ? `${accent}80` : "#2e2e2e",
@@ -60,9 +69,54 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 const inputCls =
   "w-full rounded-md border border-[#2e2e2e] bg-[#161616] px-2.5 py-2 text-sm text-[#f1f5f9] placeholder-[#3a3a3a] transition focus:outline-none";
 
+/** Pick which stored VardrGate case a vardrgate job runs. */
+function TestCasePicker({ cases, value, onChange, accent }: {
+  cases: AuthorizationTestCase[]; value: string; onChange: (v: string) => void; accent: string;
+}) {
+  return (
+    <Field label="Authorization Test Case">
+      {cases.length === 0 ? (
+        <p className="font-mono text-[10px] leading-relaxed text-[#f59e0b]">
+          no test cases stored for this engagement — add one before running vardrgate
+        </p>
+      ) : (
+        <select
+          className={inputCls}
+          aria-label="Authorization test case"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          onFocus={(e) => { e.target.style.borderColor = accent; }}
+          onBlur={(e) => { e.target.style.borderColor = "#2e2e2e"; }}>
+          <option value="">select a case…</option>
+          {cases.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}{c.test_case_id ? ` · ${c.test_case_id}` : ""}
+            </option>
+          ))}
+        </select>
+      )}
+    </Field>
+  );
+}
+
 type ComposerPropsWithTool = ComposerProps & { initialTool?: string };
 
-export default function Composer({ accent, onQueue, onPipeline, onPreview, profiles, onSaveProfile, onDeleteProfile, runnerOnline, scopeCount, reconCount, programName, initialTool }: ComposerPropsWithTool) {
+export default function Composer({ accent, onQueue, onPipeline, onPreview, profiles, testCases, onSaveProfile, onDeleteProfile, runnerOnline, scopeCount, reconCount, programName, initialTool }: ComposerPropsWithTool) {
+  // Which stored case a vardrgate job runs. Shared by the standalone tool and
+  // the API Assessment pipeline, since both queue the same job type.
+  const [caseId, setCaseId] = useState("");
+  // Pipelines and tools share one mutually-exclusive selection — picking either
+  // clears the other. `toolId` is kept across the toggle so returning to a tool
+  // restores the config that was already typed into it.
+  // null = a tool is selected. Otherwise the id of the chosen pipeline.
+  const [pipelineId, setPipelineId] = useState<string | null>(null);
+  // Stage inclusion, keyed pipeline → tool_type. Scoped per pipeline because
+  // httpx appears in more than one — excluding it from one must not touch the other.
+  const [stageOn, setStageOn] = useState<Record<string, Record<string, boolean>>>(
+    () => Object.fromEntries(
+      PIPELINES.map((p) => [p.id, Object.fromEntries(p.stages.map((s) => [s.tool_type, true]))]),
+    ),
+  );
   const [toolId, setToolId] = useState(initialTool && initialTool in TOOLS ? initialTool : "nuclei");
   const [source, setSource] = useState(() => {
     const t = TOOLS[initialTool && initialTool in TOOLS ? initialTool : "nuclei"];
@@ -78,6 +132,7 @@ export default function Composer({ accent, onQueue, onPipeline, onPreview, profi
   const tool = TOOLS[toolId];
 
   function pick(id: string) {
+    setPipelineId(null);
     setToolId(id);
     const t = TOOLS[id];
     setSource(t.sources[0]);
@@ -87,11 +142,62 @@ export default function Composer({ accent, onQueue, onPipeline, onPreview, profi
     setPreview(null);
   }
 
+  function pickPipeline(id: string) {
+    setPipelineId(id);
+    // Stages carry their own source and config, and /schedules is single-tool
+    // only, so a pipeline can only run once. Reset it rather than showing a
+    // recurrence that would be silently dropped.
+    setRecurrence("once");
+    setPreview(null);
+  }
+
   const sourceCount = source === "scope" ? scopeCount : reconCount;
 
+  const pipeline = pipelineId ? PIPELINES.find((p) => p.id === pipelineId) ?? null : null;
+
+  // Order is preserved from the pipeline definition; the backend relinks
+  // depends_on sequentially over whatever it receives, so dropping a middle
+  // stage chains the survivors rather than leaving a dangling wait.
+  const activeStages = pipeline
+    ? pipeline.stages.filter((s) => stageOn[pipeline.id]?.[s.tool_type])
+    : [];
+
+  function toggleStage(toolType: string) {
+    if (!pipeline) return;
+    setStageOn((prev) => ({
+      ...prev,
+      [pipeline.id]: { ...prev[pipeline.id], [toolType]: !prev[pipeline.id]?.[toolType] },
+    }));
+  }
+
+  // A vardrgate job is unrunnable without a case, and the API refuses it, so
+  // block here rather than letting the operator queue a guaranteed 400.
+  const needsCase =
+    (pipeline ? activeStages.some((s) => s.tool_type === VARDRGATE) : toolId === VARDRGATE);
+  const caseMissing = needsCase && !caseId;
+
+  /** Stages as posted: the vardrgate stage carries the chosen case reference. */
+  const stagesToQueue = (): PipelineStage[] =>
+    activeStages.map((s) =>
+      s.tool_type === VARDRGATE
+        ? { ...s, config: { ...s.config, test_case_id: caseId } }
+        : s,
+    );
+
   function submit() {
+    if (caseMissing) return;
+    if (pipeline) {
+      if (activeStages.length === 0) return;
+      const stages = stagesToQueue();
+      const list = stages.map((s) => `  ${s.tool_type} (${s.target_source})`).join("\n");
+      const tail = stages.length > 1 ? ", each waiting on the one before it" : "";
+      if (!confirm(`Queue ${pipeline.label}?\n\n${list}\n\n${stages.length} job${stages.length === 1 ? "" : "s"} will be queued${tail}.`)) return;
+      onPipeline(stages);
+      return;
+    }
+    const config = toolId === VARDRGATE ? { test_case_id: caseId } : { ...cfg };
     onQueue({
-      tool: toolId, source, config: { ...cfg }, targets: sourceCount, yieldKind: tool.yields,
+      tool: toolId, source, config, targets: sourceCount, yieldKind: tool.yields,
       interval: recurrence === "once" ? undefined : recurrence,
     });
   }
@@ -108,6 +214,7 @@ export default function Composer({ accent, onQueue, onPipeline, onPreview, profi
 
   function loadProfile(p: ScanProfile) {
     if (p.tool_type in TOOLS) {
+      setPipelineId(null);
       setToolId(p.tool_type);
       setSource(p.target_source);
       setCfg({ ...p.config });
@@ -132,26 +239,99 @@ export default function Composer({ accent, onQueue, onPipeline, onPreview, profi
         <span className="font-mono text-[10px] text-[#52525b]">{programName}</span>
       </div>
 
-      {/* One-click recon pipeline: subfinder → httpx → nuclei, chained via depends_on */}
-      <button
-        onClick={onPipeline}
-        aria-label="Queue recon pipeline"
-        className="mb-3 flex w-full items-center gap-2 rounded-lg border px-3 py-2.5 text-left transition"
-        style={{ borderColor: `${accent}66`, backgroundColor: `${accent}12` }}>
-        <span className="font-mono text-base leading-none" style={{ color: accent }}>⚡</span>
-        <span className="min-w-0">
-          <span className="block font-mono text-[13px] font-semibold text-[#f1f5f9]">Recon Pipeline</span>
-          <span className="mt-0.5 block text-[10px] leading-tight text-[#52525b]">subfinder → httpx → nuclei, chained automatically</span>
-        </span>
-      </button>
+      {/* Pipelines are selections like any tool, not actions. Selecting one
+          clears the tool highlight so only one thing is ever chosen. */}
+      <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-widest text-[#52525b]">Pipelines</label>
+      <div className="mb-3 grid gap-2">
+        {PIPELINES.map((p) => {
+          const on = pipelineId === p.id;
+          // The selected card's subtitle reflects the current stage selection so
+          // it never advertises a chain the operator has edited away.
+          const chain = on
+            ? (activeStages.length === 0
+                ? "no stages selected"
+                : activeStages.map((s) => s.tool_type).join(" → "))
+            : p.stages.map((s) => s.tool_type).join(" → ");
+          return (
+            <button
+              key={p.id}
+              onClick={() => pickPipeline(p.id)}
+              aria-pressed={on}
+              aria-label={`Select ${p.label}`}
+              className="flex w-full items-start gap-2.5 rounded-lg border px-3 py-2.5 text-left transition"
+              style={{
+                borderColor: on ? `${accent}80` : "#2e2e2e",
+                backgroundColor: on ? `${accent}12` : "#161616",
+              }}>
+              <span className="mt-0.5 font-mono text-base leading-none" style={{ color: on ? accent : "#52525b" }}>⚡</span>
+              <span className="min-w-0 flex-1">
+                <span className="block font-mono text-[13px] font-semibold" style={{ color: on ? "#f1f5f9" : "#cbd5e1" }}>{p.label}</span>
+                <span className="mt-0.5 block text-[10px] leading-tight text-[#52525b]">{chain}</span>
+                {!on && <span className="mt-0.5 block text-[10px] leading-tight text-[#3a3a3a]">{p.blurb}</span>}
+              </span>
+              <span className="mt-0.5 font-mono text-[10px] leading-none" style={{ color: on ? accent : "#52525b" }}>
+                {on ? "▾" : "▸"}
+              </span>
+            </button>
+          );
+        })}
+      </div>
 
+      <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-widest text-[#52525b]">Tools</label>
       <div className="grid gap-2">
         {Object.values(TOOLS).map((t) => (
-          <ToolPick key={t.id} tool={t} selected={toolId === t.id} accent={accent} onClick={() => pick(t.id)} />
+          <ToolPick key={t.id} tool={t} selected={!pipeline && toolId === t.id} accent={accent} onClick={() => pick(t.id)} />
         ))}
       </div>
 
       <div className="mt-4 space-y-3">
+        {pipeline ? (
+          /* Include/exclude stages. Each carries its own source and config, so
+             there is nothing else to configure here. */
+          <Field label="Stages">
+            <ol className="space-y-1.5">
+              {pipeline.stages.map((s) => {
+                const on = !!stageOn[pipeline.id]?.[s.tool_type];
+                // "waits on" names the previous *included* stage — dropping a
+                // middle stage relinks the chain rather than dangling.
+                const idx = activeStages.findIndex((a) => a.tool_type === s.tool_type);
+                const waitsOn = idx > 0 ? activeStages[idx - 1].tool_type : null;
+                return (
+                  <li key={s.tool_type}>
+                    <button
+                      onClick={() => toggleStage(s.tool_type)}
+                      aria-pressed={on}
+                      aria-label={`${on ? "Exclude" : "Include"} ${s.tool_type}`}
+                      className="flex w-full items-center gap-2 rounded-md border px-2.5 py-1.5 text-left transition"
+                      style={{
+                        borderColor: on ? `${accent}80` : "#2e2e2e",
+                        backgroundColor: on ? `${accent}12` : "#161616",
+                        opacity: on ? 1 : 0.55,
+                      }}>
+                      <span className="font-mono text-[10px] leading-none" style={{ color: on ? accent : "#52525b" }}>
+                        {on ? "✓" : "○"}
+                      </span>
+                      <span className="font-mono text-base leading-none" style={{ color: on ? accent : "#52525b" }}>{TOOLS[s.tool_type]?.glyph}</span>
+                      <span className="font-mono text-[11px]" style={{ color: on ? "#cbd5e1" : "#52525b" }}>{s.tool_type}</span>
+                      <span className="font-mono text-[10px] text-[#52525b]">
+                        {s.target_source} · {s.target_source === "scope" ? scopeCount : reconCount}
+                      </span>
+                      {waitsOn && <span className="ml-auto font-mono text-[10px] text-[#52525b]">waits on {waitsOn}</span>}
+                    </button>
+                  </li>
+                );
+              })}
+            </ol>
+            {activeStages.length === 0 && (
+              <p className="mt-1.5 font-mono text-[10px] text-[#f59e0b]">include at least one stage to queue</p>
+            )}
+            {needsCase && (
+              <div className="mt-3">
+                <TestCasePicker cases={testCases} value={caseId} onChange={setCaseId} accent={accent} />
+              </div>
+            )}
+          </Field>
+        ) : (
         <Field label="Target Source">
           <div className="flex gap-1.5">
             {tool.sources.map((s) => (
@@ -167,7 +347,15 @@ export default function Composer({ accent, onQueue, onPipeline, onPreview, profi
             ))}
           </div>
         </Field>
+        )}
 
+        {/* vardrgate takes a stored case, not typed config — offer the same
+            picker the pipeline uses rather than a raw uuid field. */}
+        {!pipeline && toolId === VARDRGATE && (
+          <TestCasePicker cases={testCases} value={caseId} onChange={setCaseId} accent={accent} />
+        )}
+
+        {!pipeline && toolId !== VARDRGATE && (
         <div className="grid grid-cols-2 gap-3">
           {tool.config.map((c) =>
             c.type === "toggle" ? (
@@ -197,7 +385,11 @@ export default function Composer({ accent, onQueue, onPipeline, onPreview, profi
             )
           )}
         </div>
+        )}
 
+        {/* Recurrence is single-tool only — /schedules stores one tool_type, so a
+            recurring pipeline would silently drop its later stages. */}
+        {!pipeline && (
         <Field label="Recurrence">
           <div className="flex gap-1.5">
             {RECURRENCE.map((r) => (
@@ -213,8 +405,11 @@ export default function Composer({ accent, onQueue, onPipeline, onPreview, profi
             ))}
           </div>
         </Field>
+        )}
 
-        {/* Saved profiles: load config in one click, or save the current config */}
+        {/* Saved profiles: load config in one click, or save the current config.
+            Profiles are per-tool, so they don't apply to a pipeline. */}
+        {!pipeline && (
         <Field label="Saved Profiles">
           <div className="space-y-1.5">
             {toolProfiles.length > 0 ? (
@@ -248,15 +443,34 @@ export default function Composer({ accent, onQueue, onPipeline, onPreview, profi
             )}
           </div>
         </Field>
+        )}
 
         <div className="flex items-center gap-2 rounded-lg border border-[#2e2e2e] bg-[#0d0d0d] px-3 py-2">
-          <span className="font-mono text-base leading-none" style={{ color: accent }}>{tool.glyph}</span>
-          <p className="font-mono text-[11px] leading-tight text-[#52525b]">
-            <span className="text-[#94a3b8]">{tool.label}</span>{" on "}
-            <span className="text-[#94a3b8]">{sourceCount}</span>{" "}{source} targets → yields{" "}
-            <span style={{ color: accent }}>{tool.yields}</span>
-            {recurrence !== "once" && <>{" · repeats "}<span style={{ color: accent }}>{recurrence}</span></>}
-          </p>
+          <span className="font-mono text-base leading-none" style={{ color: accent }}>{pipeline ? "⚡" : tool.glyph}</span>
+          {pipeline ? (
+            activeStages.length === 0 ? (
+              <p className="font-mono text-[11px] leading-tight text-[#52525b]">no stages selected</p>
+            ) : (
+              <p className="font-mono text-[11px] leading-tight text-[#52525b]">
+                <span className="text-[#94a3b8]">
+                  {activeStages.length} {activeStages.length === 1 ? "job" : "chained jobs"}
+                </span>
+                {" starting from "}
+                <span className="text-[#94a3b8]">
+                  {activeStages[0].target_source === "scope" ? scopeCount : reconCount}
+                </span>
+                {` ${activeStages[0].target_source} targets → yields `}
+                <span style={{ color: accent }}>{TOOLS[activeStages[activeStages.length - 1].tool_type]?.yields}</span>
+              </p>
+            )
+          ) : (
+            <p className="font-mono text-[11px] leading-tight text-[#52525b]">
+              <span className="text-[#94a3b8]">{tool.label}</span>{" on "}
+              <span className="text-[#94a3b8]">{sourceCount}</span>{" "}{source} targets → yields{" "}
+              <span style={{ color: accent }}>{tool.yields}</span>
+              {recurrence !== "once" && <>{" · repeats "}<span style={{ color: accent }}>{recurrence}</span></>}
+            </p>
+          )}
         </div>
 
         {/* Dry-run preview of resolved targets */}
@@ -274,15 +488,20 @@ export default function Composer({ accent, onQueue, onPipeline, onPreview, profi
         )}
 
         <div className="flex gap-2">
-          <button onClick={runPreview} disabled={previewing}
+          {/* Preview resolves one tool against one source; a pipeline's later
+              stages consume targets that don't exist until earlier ones run. */}
+          <button onClick={runPreview} disabled={previewing || !!pipeline}
+            title={pipeline ? "Preview applies to a single tool, not a chain" : undefined}
             className="rounded-md border px-4 py-2.5 text-sm font-semibold transition active:scale-[0.98] disabled:opacity-50"
             style={{ borderColor: "#2e2e2e", color: "#94a3b8" }}>
             {previewing ? "…" : "Preview"}
           </button>
           <button onClick={submit}
-            className="flex-1 rounded-md px-4 py-2.5 text-sm font-semibold text-[#161616] transition active:scale-[0.98]"
+            disabled={(!!pipeline && activeStages.length === 0) || caseMissing}
+            title={caseMissing ? "Select an authorization test case first" : undefined}
+            className="flex-1 rounded-md px-4 py-2.5 text-sm font-semibold text-[#161616] transition active:scale-[0.98] disabled:opacity-50"
             style={{ backgroundColor: accent }}>
-            {recurrence === "once" ? "Queue Job" : `Schedule ${recurrence}`}
+            {pipeline ? "Queue Pipeline" : recurrence === "once" ? "Queue Job" : `Schedule ${recurrence}`}
           </button>
         </div>
 

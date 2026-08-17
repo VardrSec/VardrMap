@@ -40,7 +40,7 @@ See `CHANGELOG.md` and `changelog/v0.20.0.md` – `v0.20.2.md` for details.
 
 - [ ] **RBAC depth** — read-only viewer role; audit-log membership changes.
 - [x] **VardrRunner repo extraction** — extracted to
-      [jorge-aquino/VardrRunner](https://github.com/jorge-aquino/VardrRunner).
+      [VardrSec/VardrRunner](https://github.com/VardrSec/VardrRunner).
 
 ---
 

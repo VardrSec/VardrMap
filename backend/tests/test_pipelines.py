@@ -28,6 +28,49 @@ def test_create_pipeline_chains_dependencies(client, auth_headers, program_id):
     assert jobs[2]["depends_on"] == jobs[1]["id"]
 
 
+def test_pipeline_chains_a_subset_without_a_dangling_wait(client, auth_headers, program_id):
+    """The Composer's stage editor posts only the stages the operator included.
+
+    Dropping the middle stage must chain the survivors to each other — a stage
+    left waiting on a job that was never created would hang in `pending` forever.
+    """
+    res = client.post(
+        f"/programs/{program_id}/pipelines",
+        json={"stages": [
+            {"tool_type": "subfinder", "target_source": "scope"},
+            {"tool_type": "nuclei", "target_source": "recon"},
+        ]},
+        headers=auth_headers,
+    )
+    assert res.status_code == 201, res.text
+    jobs = res.json()["jobs"]
+    assert [j["tool_type"] for j in jobs] == ["subfinder", "nuclei"]
+    assert jobs[0]["depends_on"] is None
+    assert jobs[1]["depends_on"] == jobs[0]["id"]
+
+
+def test_single_stage_pipeline_has_no_dependency(client, auth_headers, program_id):
+    res = client.post(
+        f"/programs/{program_id}/pipelines",
+        json={"stages": [{"tool_type": "httpx", "target_source": "recon"}]},
+        headers=auth_headers,
+    )
+    assert res.status_code == 201, res.text
+    jobs = res.json()["jobs"]
+    assert len(jobs) == 1
+    assert jobs[0]["depends_on"] is None
+
+
+def test_pipeline_rejects_an_empty_stage_list(client, auth_headers, program_id):
+    """Backs the Composer disabling Queue at zero stages — the API refuses it too."""
+    res = client.post(
+        f"/programs/{program_id}/pipelines",
+        json={"stages": []},
+        headers=auth_headers,
+    )
+    assert res.status_code == 422
+
+
 def test_pipeline_rejects_bad_stage_atomically(client, auth_headers, program_id):
     before = client.get(f"/programs/{program_id}/jobs", headers=auth_headers).json()["jobs"]
     res = client.post(

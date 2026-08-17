@@ -7,12 +7,12 @@ VardrMap is part of the VardrSec product family. Each product is a separate depl
 | Product | Purpose | Status |
 |---|---|---|
 | VardrMap | Web app — stores programs, scope, findings, reports, recon, scans | Active |
-| VardrRunner | Local CLI runner — runs tools on the user's machine, uploads results | Separate repo: [jorge-aquino/VardrRunner](https://github.com/jorge-aquino/VardrRunner) |
+| VardrRunner | Local CLI runner — runs tools on the user's machine, uploads results | Separate repo: [VardrSec/VardrRunner](https://github.com/VardrSec/VardrRunner) |
 | VardrVault | Secrets management for VardrSec products | Planned |
 | VardrScanner | Purpose-built scanning engine | Planned |
 
 VardrRunner was extracted from this monorepo into its own repository,
-[jorge-aquino/VardrRunner](https://github.com/jorge-aquino/VardrRunner). It integrates with
+[VardrSec/VardrRunner](https://github.com/VardrSec/VardrRunner). It integrates with
 VardrMap purely over the HTTP API using a `vmap_` key — there is no runner code in this
 repo. The section below documents the **integration contract** (how the runner consumes
 VardrMap's API); install, CLI, and runner internals are documented in the VardrRunner repo.
@@ -238,10 +238,21 @@ scan_profiles
   program_id (FK → programs.id, CASCADE DELETE, indexed)
   owner_github_id (indexed)
   name (VARCHAR 100)
-  tool_type ("httpx"|"nuclei"|"subfinder"|"nmap")
+  tool_type (see routers/jobs.py _VALID_TOOLS)
   target_source ("scope"|"recon")
   config (JSON — same shape and validation as scan_jobs.config)
   created_at
+
+authorization_test_cases
+  id (PK)
+  program_id (FK → programs.id, CASCADE DELETE, indexed)
+  owner_github_id (indexed)
+  name (VARCHAR 200)
+  test_case_id (VARCHAR 200 — VardrGate's own spec.id, surfaced for traceability;
+    not unique, a case may be revised)
+  description
+  spec (JSON — VardrGate AuthorizationTestCase, stored verbatim)
+  created_at, updated_at (nullable)
 
 audit_logs
   id (PK)
@@ -267,10 +278,19 @@ audit_logs
 - `scheduled_scans` have no backend cron. Due schedules (`enabled` and `next_run_at <= now`) are materialized into pending `scan_jobs` inside `GET /jobs/pending` — the runner's poll drives the clock. `next_run_at` advances from *now* rather than the previous `next_run_at`, so a runner that was offline for a week creates one catch-up job, not seven.
 - `users.webhook_url` (stored plaintext — it must be usable, unlike hashed API keys; only ever returned to its owner) and `users.notify_min_severity` drive outbound notifications, sent via FastAPI BackgroundTasks so webhook latency never delays API responses. URLs are validated against an SSRF guard (HTTPS only, no localhost/private/link-local targets).
 - `job_events` are appended by VardrRunner via `POST /jobs/{id}/events` at each lifecycle stage. The frontend Terminal polls `GET /jobs/{id}/events` (3 s interval while job is pending/running, stops on terminal state). Events cascade-delete with their parent job. Rate-limited to 600/min.
-- **Pipelines** (`POST /programs/{id}/pipelines`) create an ordered chain of `scan_jobs` linked by `depends_on`. A dependent stage is withheld from `GET /jobs/pending` until its parent is `done`; the runner's own poll drives the clock (same pattern as scheduled scans). If a parent `failed`, `GET /jobs/pending` auto-fails the dependent stage so it never hangs. The canonical chain is subfinder → httpx → nuclei.
+- **Pipelines** (`POST /programs/{id}/pipelines`) create an ordered chain of `scan_jobs` linked by `depends_on`. A dependent stage is withheld from `GET /jobs/pending` until its parent is `done`; the runner's own poll drives the clock (same pattern as scheduled scans). If a parent `failed`, `GET /jobs/pending` auto-fails the dependent stage so it never hangs. The endpoint accepts any valid ordered chain. The UI offers two named chains from `PIPELINES` (`frontend/app/components/jobs/mockData.tsx`) — Attack Surface (subfinder → dnsx → httpx → nuclei) and Host Enumeration (naabu → nmap → httpx) — with each stage individually includable, so it may post any ordered subset. `depends_on` is linked sequentially over whatever arrives, so a subset still chains correctly.
 - **Provenance:** `recon_items.job_id` and `scan_items.job_id` record which `scan_job` produced each row (stamped from the optional `job_id` form field on `POST /imports`; null for manual uploads). `GET /programs/{id}/recon?job_id=` and `GET /programs/{id}/scans?job_id=` filter by it, so the Terminal can deep-link from a finished job to exactly the rows it yielded.
 - **AI triage** (`POST /programs/{id}/scans/triage`) sends a batch of un-promoted `scan_items` to Claude (Haiku) and returns a per-item `priority`/`false_positive`/`rationale`. Unlike `findings/{id}/suggest` (which enriches an already-created finding), triage is the first pass over raw tool output. Only ids present in the request are echoed back, so the model cannot smuggle in other rows. Requires `ANTHROPIC_API_KEY`.
 - `scan_profiles` are reusable tool + config presets per program, validated identically to `scan_jobs.config`. They let the Composer queue a frequently-used scan in one click. No FK from jobs to profiles — a profile is a template, copied into a job at queue time.
+- `authorization_test_cases` store VardrGate specs per engagement. Unlike a scan profile, a test case is **referenced** rather than copied: a job carries `config = {"test_case_id": ...}` and the spec is inlined when the job is handed to a runner. That keeps `scan_jobs.config` flat for validation, lets one case back many runs, and means revising a case does not require re-queueing. `spec` is stored verbatim because VardrGate owns that schema and is free to extend it without a migration here. **Credential values are never stored** — identities reference secrets via `value_env` / `value_keychain`, resolved by VardrRunner on the operator's machine; a literal non-empty `value` is rejected on write.
+
+### VardrGate job lifecycle
+
+`vardrgate_api_test` is the one job type that resolves no scope or recon targets — the request under test travels inside the stored case.
+
+1. **Queue.** `POST /engagements/{id}/jobs` with `config = {"test_case_id": ...}`. The reference is validated at queue time and scoped to the engagement, so a job can neither name a missing case nor borrow one from another engagement.
+2. **Hand-off.** `GET /jobs/pending` expands the stored spec into `config.test_case` (`_resolve_test_cases` in `routers/jobs.py`). The spec rides on the response only — it is never written back to `scan_jobs.config`, so the job keeps holding just the id and a revised case changes what the next hand-off carries. **This expansion is what lets the integration land without a VardrRunner release**: `VardrGateConfig.from_dict` receives exactly the object it already expects. A job whose case has been deleted is auto-failed here, the same way a dangling pipeline dependency is.
+3. **Result.** `POST /jobs/{id}/upload` maps `findings[]` → `scan_items` (`source="vardrgate"`, `template_id` = the VardrGate case id) and `executions[]` → `evidence`. Reusing `scan_items` means the existing triage and promote-to-finding flow applies rather than a parallel one. Everything is redacted on write: VardrGate excludes credential values and response bodies from its own JSON, but a control that depends on the sender behaving is not a control.
 
 ---
 
@@ -300,13 +320,13 @@ Each section component fetches its own full data set with a separate request whe
 
 ### Navigation Model
 
-The sidebar exposes **8 top-level sections** mapped to the bug bounty workflow:
+The sidebar exposes **7 top-level sections** mapped to the engagement workflow:
 
 | Section | `Section` value | What it shows |
 |---|---|---|
 | Dashboard | `"dashboard"` | Orchestration console (Jobs tab) + file import (Import tab) |
 | Scope | `"scope"` | In-scope / out-of-scope asset management |
-| Overview | `"overview"` | Program stats, 6 quick-action buttons, inline program edit form |
+| Overview | `"overview"` | Engagement stats, 6 quick-action buttons, inline engagement edit form |
 | Review | `"review"` | Recon / Scans / Manual / Services tab switcher |
 | Findings | `"findings"` | Finding log with severity, status, promote-to-report flow |
 | Reports | `"reports"` | Report drafting and PDF export |
@@ -322,7 +342,24 @@ The sidebar exposes **8 top-level sections** mapped to the bug bounty workflow:
 
 1. **Bridge** (`jobs/Bridge.tsx`) — animated link visualization showing VardrMap ↔ VardrRunner connection; runner node shows real hostname, OS, version, and per-tool availability chips from the latest heartbeat; collapses to a slim strip. Collapse state persists to `localStorage`.
 2. **Telemetry** (`jobs/Telemetry.tsx`) — four stat tiles: running, completed, results yielded, avg runtime.
-3. **Composer** (`jobs/Composer.tsx`) — tool picker (subfinder/httpx/nuclei/nmap) with per-tool config fields; submits new jobs.
+3. **Composer** (`jobs/Composer.tsx`) — a single selection across the named pipelines and the six tools (subfinder/httpx/nuclei/nmap/dnsx/naabu). Picking a pipeline clears the tool highlight and vice versa, so only one thing is ever chosen; the tool's config is preserved across the toggle. Nothing is queued until **Queue**, and a pipeline confirms first since it queues several jobs at once.
+
+   Two pipelines ship in `PIPELINES` (`jobs/mockData.tsx`):
+
+   | Pipeline | Chain | For |
+   |---|---|---|
+   | **Attack Surface** | subfinder → dnsx → httpx → nuclei | An external surface you have to discover. Each stage feeds the next through the recon store. |
+   | **Host Enumeration** | naabu → nmap → httpx | A scope you were given. These read the same scope rather than feeding each other; chaining them keeps three tools off the client's hosts at once. |
+
+   Selecting a pipeline expands it into a **stage editor**: each stage can be included or excluded, so subfinder → httpx alone is as valid as the full chain. Order always follows the pipeline definition, so re-including a stage restores its original position rather than appending it. Stage inclusion is stored per pipeline (`Record<pipelineId, Record<toolType, boolean>>`) because httpx appears in both — excluding it from one must not touch the other. The card blurb, the summary line and the confirm dialog all read from the current selection, so none of them can advertise a chain the operator has edited away. Queue is disabled while zero stages are included.
+
+   Excluding a middle stage is safe: the Composer posts only the included stages and the backend links `depends_on` sequentially over whatever it receives, so the survivors chain to each other rather than leaving a dangling wait.
+
+   Target source, recurrence and saved profiles are hidden for a pipeline — stages carry their own source and config, profiles are per-tool, and `/schedules` stores a single `tool_type` so a recurring pipeline would silently drop its later stages. Preview is disabled too: it resolves one tool against one source, and later stages consume targets that do not exist until earlier ones run.
+
+   `PIPELINES` (`jobs/mockData.tsx`) is the single definition; `JobsSection` posts the stage list the Composer hands back, so what is displayed is exactly what is queued.
+
+   A third pipeline, **API Assessment** (httpx → `vardrgate_api_test`), needs a stored case. Selecting it — or the standalone `vardrgate` tool — shows a picker of the engagement's `authorization_test_cases`, and **Queue** stays disabled until one is chosen, since a vardrgate job without a case is a guaranteed `400`. The chosen id is injected into the vardrgate stage's config at submit. Excluding that stage drops the requirement.
 4. **Job Board + Terminal** (`jobs/JobBoard.tsx`, `jobs/Terminal.tsx`) — three switchable board views (Stream, Pipeline, Table); a terminal showing status and any backend error message for the selected job.
 
 The `ScanJobUI` type (`frontend/app/types.ts`) extends the API-level `ScanJob` with UI-only fields (`progress`, `yield`, `yieldKind`, `durationMs`, `log[]`). Jobs are loaded via real API polling (5 s when active jobs exist, 30 s idle). The Terminal polls `GET /jobs/{id}/events` every 3 s while the job is pending or running, displaying lifecycle events (`started`, `targets_resolved`, `running`, `uploaded`, `done`/`failed`) as colored log lines; polling stops when the job reaches a terminal state.
@@ -380,7 +417,7 @@ VardrMap frontend (Vercel)
 - Raw tool output is saved locally before upload, so a failed upload never loses data.
 
 For the full tool allowlist, target-resolution flags, and CLI reference, see the
-[VardrRunner docs](https://github.com/jorge-aquino/VardrRunner/tree/main/docs).
+[VardrRunner docs](https://github.com/VardrSec/VardrRunner/tree/main/docs).
 
 ### Job Queue Flow
 
@@ -491,16 +528,21 @@ runner authenticates as a user, so a team cannot share runner infrastructure;
 and a firm cannot share a client record. The identity anchor is a GitHub user,
 not an organization. Phase 1b converts this; see `implementation-roadmap.md`.
 
-### Policy enforcement
+### Policy evaluation
 
 Scope and authorization evaluation is centralized in `backend/policy.py` — a
 pure module with no database or framework dependency, so it is exhaustively
 testable. Callers pass a `PolicyInput`; it returns a `PolicyDecision` carrying
-`allowed` and a stable `reason` code.
+`allowed` and a stable `reason` code. `backend/enforcement.py` adapts it to the
+ORM via `check()`, which returns the decision rather than raising.
 
-It is invoked at **two** points, job creation and job claim, because a job
-queued inside a testing window and claimed after it closes must be denied. See
-`security-model.md` for the full deny table.
+It is invoked at **three** points — job creation, job claim, and the
+`PATCH /jobs/{id}` transition into `running` — so the result reflects state at
+the moment work starts, not just when it was queued.
+
+Findings are **advisory**: they ride back on the response as a `warnings` array
+and the job runs anyway. Only `stop_work_active` raises (`403`). See
+`security-model.md` for the reason-code table and the rationale.
 
 ### Asset graph (Phase 2)
 

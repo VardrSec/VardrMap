@@ -1,6 +1,12 @@
 # ADR 0001 — Central policy engine for execution authorization
 
-**Status:** Accepted · **Date:** 2026-08-12 · **Supersedes:** none
+**Status:** Accepted, amended v0.29.0 · **Date:** 2026-08-12 · **Supersedes:** none
+
+> **Amendment (v0.29.0) — enforcement is now advisory.** The decision to
+> centralize evaluation in a pure module stands and is unchanged; what changed is
+> what the platform does with the result. Findings are returned to the caller as
+> warnings and the job runs; only stop-work still refuses. Rationale in
+> § Amendment at the end of this document.
 
 ## Context
 
@@ -93,3 +99,36 @@ not sit in the queue looking pending.
 **Separate `ScopeRule` / `ScopeTarget` / `Exclusion` tables.** `scope_items`
 already discriminates in/out with a `kind`. Three tables where one suffices is a
 speculative abstraction, and splitting them would fragment existing data.
+
+## Amendment (v0.29.0) — advisory, not enforcing
+
+The original decision made execution default-deny. That is reversed: findings
+are now warnings, and the job runs.
+
+**Why.** Enforcing scope means the platform interrupts paid work whenever its
+reading of a rule disagrees with the operator's. Scope in the field is messier
+than any rule set — verbal expansions mid-engagement, hosts that appear
+overnight, ranges that shift — and v0.28.0 demonstrated the failure mode
+concretely: tightening subdomain matching silently started denying jobs on
+engagements that had been running fine. Being wrong in that direction costs the
+operator an engagement; being wrong the other way costs them a warning they chose
+to ignore.
+
+The broader principle: this is a tool, and the tools it sits alongside do not
+police their users. Burp will proxy any host you point it at; nmap will scan any
+range you give it. Responsibility for staying inside scope belongs to the
+operator, and a platform that claims to enforce it takes on a liability it cannot
+actually discharge — a missed case reads as a guarantee that failed.
+
+**What is kept.** Everything structural. `policy.py` is unchanged: same pure
+module, same reason codes, same test suite. `enforcement.py` still gathers ORM
+facts, but `check()` returns the decision instead of raising. Reason codes remain
+a public contract, so a caller that wants a warning to be fatal can branch on it.
+
+**The exception.** `stop_work_active` still returns `403`. It is not a judgement
+about scope — it is the operator's own halt switch, and a brake that can be
+ignored is not a brake.
+
+**Not audited.** Warnings are no longer written to `audit_logs`. A scope finding
+is advice to the operator, not a security event filed against them. Stop-work
+engage/release remains audited.
