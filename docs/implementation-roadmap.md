@@ -83,23 +83,39 @@ working code, not because it matters less.
       (v0.30.0)
 - [ ] Finding lifecycle migration + Retest entity
 
-### VardrGate integration — blocked, not forgotten
+### VardrGate integration — in progress
 
 `vardrgate_api_test` has a complete handler in VardrRunner (`REGISTRY`) and is
-the most differentiated job type in the product family. It is **not** in
-`_VALID_TOOLS` because two pieces are missing on this side:
+the most differentiated job type in the product family. Closing the gap on this
+side is five steps; the tool stays out of `_VALID_TOOLS` until step 4.
 
-1. **`POST /jobs/{id}/upload`** — the handler posts its sanitized result there
-   and the endpoint does not exist. Needs a decision on where a VardrGate result
-   lands: job artifact, `Evidence` rows, or promoted `Finding` rows.
-2. **A `test_case` model** — `VardrGateConfig` requires a structured object
-   (request spec, identities, credential references resolved locally by the
-   runner). VardrMap has no model, storage, or authoring UI for it, and
-   `_TOOL_CONFIG_KEYS` only permits flat scalar keys.
+- [x] **1. `authorization_test_cases` + CRUD** (v0.31.0) — engagement-scoped
+      storage for VardrGate specs, referenced by jobs rather than copied into
+      them. Credential values are rejected on write: identities must use
+      `value_env` / `value_keychain` so the secret resolves on the runner and
+      never reaches the database. Migration `0021`.
+- [ ] **2. Inline the spec in `GET /jobs/pending`** — expand
+      `config.test_case_id` into the full `test_case` object when serializing a
+      vardrgate job. This is what keeps `ScanJob.config` flat for validation
+      while still handing `VardrGateConfig.from_dict` exactly what it expects,
+      so **VardrRunner needs no change**.
+- [ ] **3. `POST /jobs/{id}/upload`** — the handler posts its sanitized result
+      there and the endpoint does not exist. Map `findings[]` → `ScanItem`
+      (`source="vardrgate"`, `template_id=test_case_id`) so the existing triage
+      and promote-to-finding flow applies, and `executions[]` → `Evidence`.
+      Note VardrGate already excludes credential values and response bodies from
+      its JSON output (`json:"-"`), so the payload arrives sanitized.
+- [ ] **4. Add `vardrgate_api_test` to `_VALID_TOOLS`** and remove the pin in
+      `test_vardrgate_is_not_queueable_yet`.
+- [ ] **5. API Assessment pipeline** — `httpx → vardrgate_api_test`.
 
-Until both land, adding the tool would let an operator queue a job that fails at
-config parse — or, past that, executes and then 404s on upload. Pinned by
-`test_vardrgate_is_not_queueable_yet`.
+Until steps 2–3 land, adding the tool would let an operator queue a job that
+fails at config parse — or, past that, executes and then 404s on upload.
+
+Authoring is largely solved upstream: VardrGate's `discover` command and
+`internal/scaffold` generate cases from an OpenAPI spec or Postman collection,
+so v1 authoring is "store the JSON VardrGate produced". Wiring `discover` in as
+its own job type is a later iteration.
 
 ## Phase 3 — Private execution
 
