@@ -9,12 +9,14 @@ import ReconSection from "./ReconSection";
 import ScanningSection from "./ScanningSection";
 import ManualSection from "./ManualSection";
 import ServicesSection from "./ServicesSection";
+import ApiSurfaceSection from "./ApiSurfaceSection";
 
-const TABS: { id: ReviewTab; label: string; countKey: keyof import("../types").Engagement }[] = [
+const TABS: { id: ReviewTab; label: string; countKey?: keyof import("../types").Engagement }[] = [
   { id: "recon",    label: "Recon",    countKey: "recon_count"        },
   { id: "scans",    label: "Scans",    countKey: "scans_count"        },
   { id: "manual",   label: "Manual",   countKey: "manual_tests_count" },
   { id: "services", label: "Services", countKey: "services_count"     },
+  { id: "api-surface", label: "API Surface" },
 ];
 
 export default function ReviewSection({ engagement }: { engagement: Engagement }) {
@@ -57,7 +59,7 @@ export default function ReviewSection({ engagement }: { engagement: Engagement }
         </div>
         <div className="flex rounded-lg border border-[#2e2e2e] bg-[#1a1a1a] p-0.5">
           {TABS.map((t) => {
-            const count = engagement[t.countKey] as number;
+            const count = t.countKey ? engagement[t.countKey] as number : 0;
             return (
               <button key={t.id} onClick={() => selectTab(t.id)}
                 className="flex items-center gap-1.5 rounded-md px-4 py-1.5 font-mono text-[11px] uppercase tracking-wider transition"
@@ -85,6 +87,7 @@ export default function ReviewSection({ engagement }: { engagement: Engagement }
         />
       )}
       {activeTab === "services" && <ServicesSection engagementId={engagement.id} hideHeader />}
+      {activeTab === "api-surface" && <ApiSurfaceSection engagementId={engagement.id} />}
     </div>
   );
 }

@@ -243,3 +243,11 @@ cd frontend && npm run build
 ```
 
 Both should pass clean before committing. The project uses `eslint-config-next` — the rules that matter most are `no-explicit-any` and `react-hooks/exhaustive-deps`.
+## Burp Suite extension
+
+The optional Java 21 Montoya extension lives in `integrations/vardr-burp` and is
+independent of VardrRunner. Build it with `gradle jar`, load the resulting JAR
+as a Java extension in Burp, then configure the VardrMap backend URL,
+engagement ID, and a full-scope personal API key in its suite tab. The key is
+held in memory only. Use the request context menu to promote selected traffic;
+automatic capture is intentionally unavailable.

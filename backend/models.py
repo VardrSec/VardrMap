@@ -211,6 +211,7 @@ class Engagement(Base):
     members = relationship("EngagementMember", back_populates="engagement", cascade="all, delete-orphan")
     scan_profiles = relationship("ScanProfile", back_populates="engagement", cascade="all, delete-orphan")
     test_cases = relationship("AuthorizationTestCase", back_populates="engagement", cascade="all, delete-orphan")
+    api_endpoints = relationship("ApiEndpoint", back_populates="engagement", cascade="all, delete-orphan")
 
 
 class Authorization(Base):
@@ -414,6 +415,61 @@ class Evidence(Base):
     redacted = Column(Boolean, nullable=False, default=True)
     collected_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+
+
+class ApiEndpoint(Base):
+    """A canonical API operation observed during an engagement."""
+
+    __tablename__ = "api_endpoints"
+    __table_args__ = (
+        UniqueConstraint("program_id", "method", "canonical_key", name="uq_api_endpoint_operation"),
+    )
+
+    id = Column(String, primary_key=True, default=new_uuid)
+    program_id = Column(String, ForeignKey("programs.id", ondelete="CASCADE"), nullable=False, index=True)
+    asset_id = Column(String, ForeignKey("assets.id", ondelete="SET NULL"), nullable=True, index=True)
+    method = Column(String(10), nullable=False)
+    scheme = Column(String(10), default="https")
+    host = Column(String(400), nullable=False)
+    port = Column(Integer, nullable=True)
+    path_template = Column(String(1000), nullable=False)
+    canonical_key = Column(String(1500), nullable=False)
+    source = Column(String(60), default="burp")
+    notes = Column(Text, default="")
+    observation_count = Column(Integer, nullable=False, default=0)
+    first_seen_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    last_seen_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    engagement = relationship("Engagement", back_populates="api_endpoints")
+    exchanges = relationship("ApiExchange", back_populates="endpoint", cascade="all, delete-orphan")
+
+
+class ApiExchange(Base):
+    """A deliberately promoted, redacted HTTP request/response pair."""
+
+    __tablename__ = "api_exchanges"
+
+    id = Column(String, primary_key=True, default=new_uuid)
+    program_id = Column(String, ForeignKey("programs.id", ondelete="CASCADE"), nullable=False, index=True)
+    endpoint_id = Column(String, ForeignKey("api_endpoints.id", ondelete="CASCADE"), nullable=False, index=True)
+    source_tool = Column(String(30), default="unknown")
+    identity_label = Column(String(100), default="anonymous")
+    request_headers = Column(Text, default="")
+    request_body = Column(Text, default="")
+    response_headers = Column(Text, default="")
+    response_body = Column(Text, default="")
+    request_hash = Column(String(64), nullable=False)
+    response_hash = Column(String(64), nullable=False)
+    response_status = Column(Integer, nullable=True)
+    response_length = Column(Integer, nullable=True)
+    response_mime = Column(String(100), default="")
+    response_time_ms = Column(Integer, nullable=True)
+    parameter_names = Column(JSON, default=list)
+    note = Column(String(1000), default="")
+    captured_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    endpoint = relationship("ApiEndpoint", back_populates="exchanges")
 
 
 class AuditLog(Base):
