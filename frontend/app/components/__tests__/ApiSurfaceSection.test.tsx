@@ -2,6 +2,9 @@ import "@testing-library/jest-dom";
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+jest.mock("react-markdown", () => ({ __esModule: true, default: ({ children }: { children: string }) => children }));
+jest.mock("remark-gfm", () => ({ __esModule: true, default: () => {} }));
+
 import { renderWithApp } from "../../../test-utils/renderWithApp";
 import ApiSurfaceSection from "../ApiSurfaceSection";
 
