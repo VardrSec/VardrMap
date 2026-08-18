@@ -1,6 +1,6 @@
 import { AppSession, FindingFormState, ManualTestFormState, Engagement, ReportFormState, Section } from "../types";
 
-export type ReviewTab = "recon" | "scans" | "manual" | "services";
+export type ReviewTab = "recon" | "scans" | "manual" | "services" | "api-surface";
 
 export type AppState = {
   session: AppSession | null;

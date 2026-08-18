@@ -86,6 +86,21 @@ Both paths return the same `{"github_id": ..., "username": ..., "email": ...}` d
 
 ## Data Model
 
+### API surface and Burp exchanges
+
+`ApiEndpoint` is a canonical HTTP operation scoped to an engagement: method,
+host and a path template such as `/users/{id}`. Repeated observations upsert the
+same operation. `ApiExchange` is a deliberately promoted request/response pair
+linked to that operation, with an operator-provided logical identity label,
+response metadata and parameter names.
+
+Raw Proxy history is never synchronized. The Burp extension sends only selected
+messages, strips URL query values by retaining only the parsed operation path,
+and redacts credentials locally. The backend independently redacts every header
+and body again before writing it. Identity labels such as `anonymous`,
+`standard-user`, and `admin` describe a test perspective; they do not store or
+model the corresponding account or credential.
+
 All primary keys are UUID strings. All tables have `created_at` (UTC datetime).
 
 ```

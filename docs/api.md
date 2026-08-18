@@ -1624,6 +1624,41 @@ answered before it runs anything.
 
 ---
 
+## API Surface (Burp integration)
+
+These routes require a browser JWT or a full-scope personal API key. Every
+resource is scoped to the authenticated operator's engagement; cross-user reads
+return `404`.
+
+### `POST /engagements/{program_id}/api/exchanges`
+
+Promote one selected HTTP exchange. Required fields are `method` and an absolute
+HTTP(S) `url`. Optional fields are `path_template`, `source_tool` (`proxy`,
+`repeater`, `intruder`, `scanner`, `organizer`, or `unknown`), `identity_label`,
+request/response headers and bodies, response metadata, `note`, and
+`captured_at`. Header/body fields are limited to 200,000 characters each.
+
+The URL query and fragment are never stored. If `path_template` is omitted,
+integer, UUID, and long opaque path segments become placeholders. Credentials
+are redacted before storage. Returns `201` with `endpoint` and `exchange`.
+
+### `GET /engagements/{program_id}/api/endpoints`
+
+List canonical operations. Supports `search`, `method`, `limit` (maximum 500),
+and `offset`. Each row includes observed status codes, identity labels, and an
+observation count.
+
+### `GET /engagements/{program_id}/api/endpoints/{endpoint_id}`
+
+Return an operation with retained, redacted exchanges. Supports `limit` (default
+50, maximum 200) and `offset`; `exchange_total` reports the unpaginated count.
+
+### `DELETE /engagements/{program_id}/api/exchanges/{exchange_id}`
+
+Delete one retained exchange and decrement its operation's observation count.
+
+---
+
 ## Deprecated: `/programs/*`
 
 The resource was renamed from *program* to *engagement* when VardrMap widened

@@ -86,6 +86,19 @@ export type Service = {
   service_name: string; product: string; version: string; state: string; source: string;
   created_at: string | null; last_scanned_at: string | null;
 };
+export type ApiExchange = {
+  id: string; endpoint_id: string; source_tool: string; identity_label: string;
+  request_headers: string; request_body: string; response_headers: string; response_body: string;
+  request_hash: string; response_hash: string; response_status: number | null;
+  response_length: number | null; response_mime: string; response_time_ms: number | null;
+  parameter_names: string[]; note: string; captured_at: string | null; created_at: string | null;
+};
+export type ApiEndpoint = {
+  id: string; program_id: string; method: string; scheme: string; host: string;
+  port: number | null; path_template: string; source: string; notes: string;
+  observation_count: number; statuses: number[]; identities: string[];
+  first_seen_at: string | null; last_seen_at: string | null; exchanges?: ApiExchange[];
+};
 export type RadarProgram = {
   id: string; platform: string; platform_id: string; name: string; url: string;
   max_payout: number | null; is_new: boolean;
