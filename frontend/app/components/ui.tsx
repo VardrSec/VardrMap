@@ -23,12 +23,17 @@ export function SeverityBadge({ severity }: { severity: string }) {
 export function StatusBadge({ status }: { status: string }) {
   const s = status?.toLowerCase();
   const color =
-    s === "validated" || s === "accepted" || s === "promoted" ? "bg-emerald-950 text-emerald-400 border-emerald-800" :
-    s === "in_progress" || s === "triaged"                    ? "bg-blue-950 text-blue-400 border-blue-800" :
-    s === "false_positive"                                    ? "bg-red-950 text-red-400 border-red-800" :
-    s === "reviewed"                                          ? "bg-purple-950 text-purple-400 border-purple-800" :
-    s === "closed" || s === "resolved"                        ? "bg-[#161616] text-[#6e6a86] border-[#2a2a3e]" :
-                                                                "bg-[#161616] text-[#6b7280] border-[#2a2a3e]";
+    // "delivered" is the deliverable reaching the client — the report lifecycle's
+    // success state, alongside the finding/scan states that already read green.
+    s === "validated" || s === "promoted" || s === "delivered" ? "bg-emerald-950 text-emerald-400 border-emerald-800" :
+    s === "in_progress" || s === "triaged"                     ? "bg-blue-950 text-blue-400 border-blue-800" :
+    s === "false_positive"                                     ? "bg-red-950 text-red-400 border-red-800" :
+    // "final" is signed off internally but not yet handed over; "internal_review"
+    // is in flight. Amber reads as "needs an action from you".
+    s === "final"                                              ? "bg-amber-950 text-amber-400 border-amber-800" :
+    s === "reviewed" || s === "internal_review"                ? "bg-purple-950 text-purple-400 border-purple-800" :
+    s === "closed" || s === "archived"                         ? "bg-[#161616] text-[#6e6a86] border-[#2a2a3e]" :
+                                                                 "bg-[#161616] text-[#6b7280] border-[#2a2a3e]";
   return (
     <span className={`inline-flex items-center rounded border px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wider ${color}`}>
       {status ? status.replace(/_/g, " ") : "—"}

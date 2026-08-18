@@ -54,9 +54,9 @@ def test_list_reports_pagination(client, auth_headers, program_id):
 
 def test_update_report(client, auth_headers, program_id):
     rid = client.post(f"/programs/{program_id}/reports", json=_REPORT, headers=auth_headers).json()["id"]
-    res = client.patch(f"/programs/{program_id}/reports/{rid}", json={"status": "submitted"}, headers=auth_headers)
+    res = client.patch(f"/programs/{program_id}/reports/{rid}", json={"status": "delivered"}, headers=auth_headers)
     assert res.status_code == 200
-    assert res.json()["status"] == "submitted"
+    assert res.json()["status"] == "delivered"
 
 
 def test_update_report_partial(client, auth_headers, program_id):
@@ -69,7 +69,7 @@ def test_update_report_partial(client, auth_headers, program_id):
 
 
 def test_update_nonexistent_report_returns_404(client, auth_headers, program_id):
-    res = client.patch(f"/programs/{program_id}/reports/nonexistent", json={"status": "submitted"}, headers=auth_headers)
+    res = client.patch(f"/programs/{program_id}/reports/nonexistent", json={"status": "delivered"}, headers=auth_headers)
     assert res.status_code == 404
 
 
@@ -98,7 +98,7 @@ def test_list_reports_for_other_users_program_returns_404(client, other_headers,
 
 def test_update_report_in_other_users_program_returns_404(client, auth_headers, other_headers, program_id):
     rid = client.post(f"/programs/{program_id}/reports", json=_REPORT, headers=auth_headers).json()["id"]
-    res = client.patch(f"/programs/{program_id}/reports/{rid}", json={"status": "submitted"}, headers=other_headers)
+    res = client.patch(f"/programs/{program_id}/reports/{rid}", json={"status": "delivered"}, headers=other_headers)
     assert res.status_code == 404
 
 

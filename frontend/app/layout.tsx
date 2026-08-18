@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "VardrMap",
-  description: "Private bug bounty workspace — engagement tracking, recon, findings, and reports.",
+  description: "Authorized security testing workspace — engagements, scope, recon, findings, and client reports.",
 };
 
 export default function RootLayout({

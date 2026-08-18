@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { safeMarkdownUrl } from "../lib/safeUrl";
-import { Engagement, Finding, Report, ReportFormState } from "../types";
+import { Engagement, Finding, Report, ReportFormState, REPORT_STATUSES } from "../types";
 import { useAppContext } from "../context/AppContext";
 import { Panel, Input, Textarea, SelectField, PrimaryButton, DangerButton, StatusBadge, SectionHeader } from "./ui";
 
@@ -48,7 +48,7 @@ function ReportFields({ value, onChange }: { value: ReportFormState; onChange: (
         <Input label="CVSS" value={value.cvss} onChange={(v) => onChange({ ...value, cvss: v })} />
       </div>
       <SelectField label="Status" value={value.status} onChange={(v) => onChange({ ...value, status: v })}
-        options={["draft", "submitted", "accepted", "duplicate", "informative", "resolved"]} />
+        options={[...REPORT_STATUSES]} />
     </div>
   );
 }

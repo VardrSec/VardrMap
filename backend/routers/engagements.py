@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from db import get_db
 from deps import (
@@ -20,7 +20,7 @@ from deps import (
 from models import Finding, ManualTest, Engagement, EngagementMember, ReconItem, Report, ScanItem, User
 from schemas import EngagementCreate, EngagementUpdate
 from security import strip_html
-from serializers import serialize_engagement
+from serializers import serialize_engagement, serialize_engagements
 
 router = APIRouter()
 
@@ -62,10 +62,21 @@ def get_programs(
     # and per-engagement invitation. Listing only owned + invited engagements
     # hid every engagement a user could reach solely through their org.
     reachable = accessible_engagement_ids(github_id, db)
+    # selectinload keeps scope_items/import_records to one query each for the whole
+    # page instead of a lazy load per engagement; serialize_engagements folds the
+    # aggregates into grouped queries. Together the endpoint is constant-query
+    # rather than ~10 per engagement.
     all_engagements = (
-        db.query(Engagement).filter(Engagement.id.in_(reachable)).all() if reachable else []
+        db.query(Engagement)
+        .options(
+            selectinload(Engagement.scope_items),
+            selectinload(Engagement.import_records),
+        )
+        .filter(Engagement.id.in_(reachable))
+        .all()
+        if reachable else []
     )
-    items = [serialize_engagement(p, db, github_id=github_id) for p in all_engagements]
+    items = serialize_engagements(all_engagements, db, github_id=github_id)
     # Both keys carry the same list. "engagements" is the name going forward;
     # "programs" is kept because VardrRunner reads it (api.py: .get("programs"))
     # and ships from its own repository on its own schedule.

@@ -19,6 +19,50 @@ def api_md_text() -> str:
     return API_MD.read_text(encoding="utf-8")
 
 
+def status_values_line(prefix: str) -> str:
+    """Return the single `status` values: line that starts with `prefix`.
+
+    Whole-document substring checks only prove a value appears *somewhere*, which
+    is how `accepted` and `rejected` survived in the engagement object long after
+    the finding lifecycle dropped them — the words existed elsewhere in the file.
+    Pinning one line lets a test assert both directions: every current value is
+    listed, and no retired value is.
+    """
+    matches = [
+        line for line in api_md_text().splitlines()
+        if line.startswith(prefix) and "`status` values:" in line
+    ]
+    assert len(matches) == 1, (
+        f"Expected exactly one '`status` values:' line starting with {prefix!r} "
+        f"in docs/api.md, found {len(matches)}. Adjust the prefix or the doc so "
+        f"the contract test pins a single line."
+    )
+    return matches[0]
+
+
+def assert_exact_status_values(line: str, literal, label: str) -> None:
+    """The documented line must list every enum value and nothing retired."""
+    import re
+    import typing
+
+    expected = set(typing.get_args(literal))
+    # Only the part after "`status` values:" — the same line names other fields.
+    tail = line.split("`status` values:", 1)[1]
+    documented = set(re.findall(r"`([a-z_]+)`", tail))
+
+    missing = expected - documented
+    obsolete = documented - expected
+    assert not missing, (
+        f"{label}: value(s) {sorted(missing)} are missing from the documented "
+        f"status list in docs/api.md.\n  line: {line.strip()}"
+    )
+    assert not obsolete, (
+        f"{label}: docs/api.md still documents retired status value(s) "
+        f"{sorted(obsolete)} that the schema no longer accepts. A client "
+        f"branching on them would be wrong.\n  line: {line.strip()}"
+    )
+
+
 # --------------------------------------------------------------------------- #
 # Route coverage
 # --------------------------------------------------------------------------- #
@@ -101,16 +145,59 @@ def test_scan_statuses_in_api_md():
 
 
 def test_finding_statuses_in_api_md():
-    """FindingStatus Literal values must all appear in docs/api.md."""
+    """Documented finding statuses must match FindingStatus exactly."""
+    from schemas import FindingStatus
+    assert_exact_status_values(
+        status_values_line("`title` is required. `severity` values:"),
+        FindingStatus,
+        "Findings",
+    )
+
+
+def test_report_statuses_in_api_md():
+    """Documented report statuses must match ReportStatus exactly.
+
+    Guards the deliverable lifecycle against a slide back to bounty vocabulary:
+    `submitted`/`accepted`/`duplicate`/`informative`/`resolved` reappearing here
+    fails as 'retired'.
+    """
+    from schemas import ReportStatus
+    assert_exact_status_values(
+        status_values_line("`title` is required. `finding_id` is optional"),
+        ReportStatus,
+        "Reports",
+    )
+
+
+def test_engagement_object_findings_by_status_uses_current_statuses():
+    """The engagement object example must not show retired finding statuses.
+
+    This is the drift that prompted the check: the example kept `accepted` and
+    `rejected` long after the lifecycle became new/candidate/triaged/in_progress/
+    closed, and a whole-document substring test could not see it.
+    """
+    import json
+    import re
     import typing
     from schemas import FindingStatus
-    values = list(typing.get_args(FindingStatus))
-    text = api_md_text()
-    missing = [v for v in values if v not in text]
-    assert not missing, (
-        f"Finding status value(s) {missing} are missing from docs/api.md. "
-        "Update the 'status values' line in the Findings section."
-    )
+
+    lines = [
+        line for line in api_md_text().splitlines()
+        if '"findings_by_status"' in line
+    ]
+    assert lines, 'No "findings_by_status" example found in docs/api.md.'
+
+    allowed = set(typing.get_args(FindingStatus))
+    for line in lines:
+        body = re.search(r"\{.*\}", line)
+        assert body, f"Could not parse the findings_by_status example: {line.strip()}"
+        documented = set(json.loads(body.group(0)).keys())
+        obsolete = documented - allowed
+        assert not obsolete, (
+            f"docs/api.md documents retired finding status(es) {sorted(obsolete)} "
+            f"in a findings_by_status example. Current statuses: {sorted(allowed)}."
+            f"\n  line: {line.strip()}"
+        )
 
 
 # --------------------------------------------------------------------------- #
@@ -158,3 +245,37 @@ def test_program_object_has_services_count(client, auth_headers, program_id):
             f"Engagement object missing 'services_count'. "
             "Update serialize_engagement or docs/api.md."
         )
+
+
+def test_report_object_matches_documented_fields(client, auth_headers, program_id):
+    """Every field the report example documents must actually be serialized.
+
+    `created_at` was documented and stored but never returned, so a client
+    following the docs got `undefined`. Deriving the expected set from the doc
+    example means the two cannot drift apart again.
+    """
+    import json
+    import re
+
+    created = client.post(
+        f"/programs/{program_id}/reports",
+        json={"title": "Contract check"},
+        headers=auth_headers,
+    )
+    assert created.status_code == 200, created.text
+    body = created.json()
+
+    example = next(
+        (line for line in api_md_text().splitlines() if '"reports": [ {' in line),
+        None,
+    )
+    assert example, 'No "reports": [ { ... } ] example found in docs/api.md.'
+    documented = set(json.loads(re.search(r"\{.*\}", example).group(0)).keys())
+
+    missing = documented - body.keys()
+    assert not missing, (
+        f"Report object is missing documented field(s) {sorted(missing)}. "
+        f"Either serialize them in serialize_report or correct docs/api.md."
+    )
+    # Sorted by created_at, so it has to be populated, not merely present.
+    assert body["created_at"], "created_at must be populated on a new report."

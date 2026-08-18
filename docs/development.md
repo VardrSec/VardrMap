@@ -64,7 +64,7 @@ The app is now at `http://localhost:3000`.
 | `DATABASE_URL` | Yes | PostgreSQL connection string. For Railway, this is provided automatically. Local example: `postgresql://user:password@localhost:5432/vardrmap` |
 | `BACKEND_JWT_SECRET` | Yes | Random secret shared with the frontend for JWT signing. Generate with: `python -c "import secrets; print(secrets.token_hex(32))"`. Must match the frontend value exactly. |
 | `ALLOWED_ORIGINS` | Yes | Comma-separated list of allowed CORS origins. Local: `http://localhost:3000` |
-| `ENV` | No | Environment name. Set to `development` locally. Railway sets `RAILWAY_ENVIRONMENT_NAME` automatically. Controls whether HSTS is sent. |
+| `ENV` | No | Environment name. Set to `development` locally. Railway sets `RAILWAY_ENVIRONMENT_NAME` automatically. HSTS is sent only when this resolves to exactly `production` — any other value, including a typo, fails to the safe side and sends no HSTS. |
 | `MAX_UPLOAD_BYTES` | No | Max file size for tool imports in bytes. Default: `2097152` (2 MB). |
 | `ANTHROPIC_API_KEY` | No | Anthropic API key. Required for `POST /programs/{id}/findings/{id}/suggest` (AI triage). If absent, the endpoint returns `503`. Obtain at [console.anthropic.com](https://console.anthropic.com). |
 | `LOG_LEVEL` | No | Logging verbosity — `DEBUG`/`INFO`/`WARNING`/`ERROR`. Default: `INFO`. Logs are written to stdout (Railway captures stdout as the service log). An unrecognized value falls back to `INFO`. |
@@ -104,7 +104,7 @@ cd backend
 pytest tests -v
 ```
 
-All 329 tests should pass.
+All 700+ tests should pass.
 
 The frontend has its own Jest suite — run it with `cd frontend && npm test`. It
 covers the global reducer (`app/context/__tests__/`) and React components
@@ -115,8 +115,11 @@ environment).
 
 | File | What it tests |
 |---|---|
-| `tests/test_programs.py` | Program CRUD, ownership isolation (BOLA) |
-| `tests/test_findings.py` | Finding CRUD, cross-program access denial |
+| `tests/test_engagements.py` | Engagement CRUD, ownership isolation (BOLA), type/status/date fields |
+| `tests/test_findings.py` | Finding CRUD, cross-engagement access denial |
+| `tests/test_security_headers.py` | Security headers on normal, error, auth-failure and CORS preflight responses; HSTS is production-only |
+| `tests/test_report_lifecycle.py` | Deliverable statuses accepted, retired bounty statuses rejected, migration mapping |
+| `tests/test_engagement_list_queries.py` | `GET /engagements` query count does not grow per engagement |
 | `tests/test_imports.py` | File upload parsing, extension/size validation, BOLA |
 | `tests/test_jobs.py` | Scan job CRUD, BOLA isolation, status transitions |
 | `tests/test_job_events.py` | Job event creation, ordering, cascade delete, BOLA isolation |
@@ -136,7 +139,17 @@ Migrations use Alembic. The migration chain is:
 0001baseline → 0002addcreatedat → 0003addapikeys → 0004addscanjobs → 0005runnerheartbeats
   → 0006addjobeevents → 0007servicesapikey → 0008radarservice → 0009submissions
   → 0010schednotify → 0011rbacreconscopes → 0012programidindexes → 0013pipelineprofiles
-  → 0014clientsauthorizations → 0015dropsubmissions (head)
+  → 0014clientsauthorizations → 0015dropsubmissions → 0016policyengine → 0017organizations
+  → 0018assetgraph → 0019evidence → 0020assetfks → 0021authztestcases
+  → 0022reportlifecycle (head)
+```
+
+Confirm the chain has not forked before committing a new revision — two
+revisions naming the same `down_revision` make `alembic upgrade head` fail, and
+Railway will not come up:
+
+```bash
+.\venv\Scripts\python.exe -m alembic heads   # must print exactly one line
 ```
 
 ### Production (Railway)

@@ -1,7 +1,7 @@
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from models import Authorization, Client, Finding, ImportRecord, ManualTest, Engagement, EngagementMember, ReconItem, Report, ScanItem, ScopeItem, Service
+from models import Authorization, Client, Finding, ImportRecord, ManualTest, Engagement, EngagementMember, OrganizationMember, ReconItem, Report, ScanItem, ScopeItem, Service
 
 
 def serialize_scope_item(item: ScopeItem) -> dict:
@@ -51,6 +51,9 @@ def serialize_report(r: Report) -> dict:
         "cwe": r.cwe or "",
         "cvss": r.cvss or "",
         "status": r.status,
+        # Documented in api.md and used to order the list endpoint, but omitted
+        # here until now — clients could not show when a deliverable was drafted.
+        "created_at": _iso(r.created_at),
     }
 
 
@@ -107,52 +110,171 @@ _SEVERITIES = ["critical", "high", "medium", "low", "info"]
 _FINDING_STATUSES = ["new", "candidate", "triaged", "in_progress", "closed"]
 
 
+_COUNTED = [
+    (ReconItem,  "recon"),
+    (ScanItem,   "scans"),
+    (ManualTest, "manual"),
+    (Finding,    "findings"),
+    (Report,     "reports"),
+    (Service,    "services"),
+]
+
+
+def _resolve_roles(
+    engagements: list[Engagement], github_id: str, db: Session
+) -> dict[str, str]:
+    """Effective role per engagement id, in two queries for the whole page.
+
+    Mirrors `deps.engagement_access` exactly, including precedence —
+    **owner > organization role > direct engagement membership**, highest rank
+    wins — but resolves the whole list at once.
+
+    Doing this per engagement was the N+1 that survived the first pass at
+    batching: ownership short-circuits before any query, so a caller who owns
+    everything never pays for it, and the original query-count test used exactly
+    such a caller. An invited member, a viewer, or an organization member paid
+    two extra queries *per engagement*.
+    """
+    # Imported here, not at module scope, to keep the existing one-way import
+    # direction (routers -> serializers -> models) intact. Once per page.
+    from deps import ROLE_RANK
+
+    if not engagements:
+        return {}
+
+    # Ownership needs no query — it is already on the row.
+    roles: dict[str, list[str]] = {
+        e.id: (["owner"] if e.owner_github_id == github_id else []) for e in engagements
+    }
+
+    # Only engagements the caller does not own need a lookup.
+    unowned = [e for e in engagements if e.owner_github_id != github_id]
+    if unowned:
+        org_ids = {e.org_id for e in unowned if e.org_id}
+        org_roles: dict[str, str] = {}
+        if org_ids:
+            org_roles = {
+                org_id: role
+                for org_id, role in db.query(
+                    OrganizationMember.org_id, OrganizationMember.role
+                )
+                .filter(
+                    OrganizationMember.org_id.in_(org_ids),
+                    OrganizationMember.github_id == github_id,
+                )
+                .all()
+            }
+
+        member_roles = {
+            program_id: role or "member"
+            for program_id, role in db.query(
+                EngagementMember.program_id, EngagementMember.role
+            )
+            .filter(
+                EngagementMember.program_id.in_([e.id for e in unowned]),
+                EngagementMember.member_github_id == github_id,
+            )
+            .all()
+        }
+
+        for e in unowned:
+            if e.org_id and e.org_id in org_roles:
+                roles[e.id].append(org_roles[e.org_id])
+            if e.id in member_roles:
+                roles[e.id].append(member_roles[e.id])
+
+    # Same tie-break as engagement_access; no access falls back to viewer, which
+    # is what the serializer reported before.
+    return {
+        eid: (max(found, key=lambda r: ROLE_RANK.get(r, 0)) if found else "viewer")
+        for eid, found in roles.items()
+    }
+
+
+def serialize_engagements(
+    engagements: list[Engagement], db: Session, github_id: str | None = None
+) -> list[dict]:
+    """Serialize many engagements with a fixed number of queries.
+
+    The per-engagement version issued six COUNTs plus two GROUP BYs *each*, so
+    `GET /engagements` cost roughly 8N aggregate queries — a user with twenty
+    engagements paid a hundred and sixty round trips to render one list.
+
+    Here each aggregate is one GROUP BY over the whole id set, so the query count
+    is constant in the number of engagements. This is the single implementation:
+    `serialize_engagement` delegates to it, so the list and detail endpoints
+    cannot drift apart in shape.
+    """
+    if not engagements:
+        return []
+
+    ids = [e.id for e in engagements]
+
+    # One grouped COUNT per child table instead of one COUNT per (table, engagement).
+    counts: dict[str, dict[str, int]] = {key: {} for _, key in _COUNTED}
+    for model, key in _COUNTED:
+        rows = (
+            db.query(model.program_id, func.count(model.id))  # type: ignore[attr-defined]
+            .filter(model.program_id.in_(ids))  # type: ignore[attr-defined]
+            .group_by(model.program_id)  # type: ignore[attr-defined]
+            .all()
+        )
+        counts[key] = {pid: cnt for pid, cnt in rows}
+
+    sev_by_engagement: dict[str, dict[str, int]] = {}
+    for pid, sev, cnt in (
+        db.query(Finding.program_id, Finding.severity, func.count(Finding.id))
+        .filter(Finding.program_id.in_(ids))
+        .group_by(Finding.program_id, Finding.severity)
+        .all()
+    ):
+        if sev in _SEVERITIES:
+            sev_by_engagement.setdefault(pid, {})[sev] = cnt
+
+    status_by_engagement: dict[str, dict[str, int]] = {}
+    for pid, status, cnt in (
+        db.query(Finding.program_id, Finding.status, func.count(Finding.id))
+        .filter(Finding.program_id.in_(ids))
+        .group_by(Finding.program_id, Finding.status)
+        .all()
+    ):
+        if status in _FINDING_STATUSES:
+            status_by_engagement.setdefault(pid, {})[status] = cnt
+
+    # Two queries for every role on the page, rather than two per engagement.
+    role_by_id = _resolve_roles(engagements, github_id, db) if github_id else {}
+
+    return [
+        _engagement_dict(
+            e,
+            my_role=role_by_id.get(e.id, "owner"),
+            counts={key: counts[key].get(e.id, 0) for _, key in _COUNTED},
+            findings_by_severity={
+                s: sev_by_engagement.get(e.id, {}).get(s, 0) for s in _SEVERITIES
+            },
+            findings_by_status={
+                s: status_by_engagement.get(e.id, {}).get(s, 0) for s in _FINDING_STATUSES
+            },
+        )
+        for e in engagements
+    ]
+
+
 def serialize_engagement(p: Engagement, db: Session, github_id: str | None = None) -> dict:
-    # Single query per table using COUNT aggregation — avoids N+1 on list endpoints.
-    counts: dict[str, int] = {}
-    for model, key in [
-        (ReconItem,   "recon"),
-        (ScanItem,    "scans"),
-        (ManualTest,  "manual"),
-        (Finding,     "findings"),
-        (Report,      "reports"),
-        (Service,     "services"),
-    ]:
-        row = db.query(func.count(model.id)).filter(model.program_id == p.id).scalar()  # type: ignore[attr-defined]
-        counts[key] = row or 0
+    """One engagement. Delegates so list and detail share exactly one shape."""
+    return serialize_engagements([p], db, github_id=github_id)[0]
 
-    sev_rows = (
-        db.query(Finding.severity, func.count(Finding.id))
-        .filter(Finding.program_id == p.id)
-        .group_by(Finding.severity)
-        .all()
-    )
-    findings_by_severity = {s: 0 for s in _SEVERITIES}
-    for sev, cnt in sev_rows:
-        if sev in findings_by_severity:
-            findings_by_severity[sev] = cnt
 
-    status_rows = (
-        db.query(Finding.status, func.count(Finding.id))
-        .filter(Finding.program_id == p.id)
-        .group_by(Finding.status)
-        .all()
-    )
-    findings_by_status = {s: 0 for s in _FINDING_STATUSES}
-    for status, cnt in status_rows:
-        if status in findings_by_status:
-            findings_by_status[status] = cnt
-
-    # Resolve through deps.engagement_access so ownership, organization
-    # membership and per-engagement invitation are all honoured. Reading only
-    # EngagementMember reported an org admin as "member", which is the role the
-    # UI then uses to decide what to show.
-    my_role = "owner"
-    if github_id and github_id != p.owner_github_id:
-        from deps import engagement_access
-
-        my_role = engagement_access(p, github_id, db) or "viewer"
-
+def _engagement_dict(
+    p: Engagement,
+    *,
+    my_role: str,
+    counts: dict[str, int],
+    findings_by_severity: dict[str, int],
+    findings_by_status: dict[str, int],
+) -> dict:
+    """Pure shaping. Every value it needs is resolved and passed in, so it issues
+    no queries of its own — that is what keeps the list endpoint constant-query."""
     return {
         "id": p.id,
         "owner_github_id": p.owner_github_id,

@@ -9,7 +9,27 @@ FindingStatus = Literal["new", "candidate", "triaged", "in_progress", "closed"]
 ManualStatus = Literal["new", "in_progress", "validated", "closed"]
 ScanStatus = Literal["new", "reviewed", "false_positive", "promoted"]
 ScopeKind = Literal["domain", "subdomain", "url", "cidr", "api", "mobile"]
-ReportStatus = Literal["draft", "submitted", "accepted", "duplicate", "informative", "resolved"]
+# A report is a client deliverable, so its statuses describe where the document
+# is on its way to the client rather than a bounty platform's verdict on a
+# submission. The retired values (submitted/accepted/duplicate/informative/
+# resolved) described what someone else decided; migration 0022 maps stored rows.
+#
+# **These are independent workflow labels, not an enforced state machine.** Any
+# status may be set at creation or update, in any order — a report can be created
+# directly as `delivered`, or moved from `delivered` back to `draft`. Nothing
+# validates transitions.
+#
+# That is deliberate. The same reasoning applies as to scope (see ADR 0001
+# § Amendment): the platform records what the operator says is true rather than
+# policing it. Real deliverables get re-opened after client feedback, are
+# imported mid-flight from another system, or are archived from any point — and a
+# transition guard would block legitimate work to enforce a tidiness nobody
+# asked for. `archived` in particular has to be reachable from anywhere, since a
+# draft superseded before it ever reaches a client still needs somewhere to go.
+#
+# The ordering below reads as the common path, nothing more:
+#     draft -> internal_review -> final -> delivered
+ReportStatus = Literal["draft", "internal_review", "final", "delivered", "archived"]
 ToolType = Literal["ffuf", "httpx", "nuclei"]
 EngagementType = Literal["bug_bounty", "pentest", "red_team", "internal"]
 EngagementStatus = Literal["planned", "active", "reporting", "closed"]
