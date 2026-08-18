@@ -25,7 +25,15 @@ export type ScanTriageResult = {
 };
 export type ManualTest = { id: string; title: string; hypothesis: string; payload: string; evidence: string; status: string };
 export type Finding = { id: string; title: string; severity: string; asset: string; status: string; summary: string; steps: string; impact: string; remediation: string; created_at?: string | null };
-export type Report = { id: string; finding_id: string; title: string; summary: string; steps: string; impact: string; remediation: string; cwe: string; cvss: string; status: string };
+/**
+ * A report is a client deliverable, so its lifecycle tracks the document's
+ * journey to the client — not a bounty platform's verdict on a submission.
+ * Mirrors `ReportStatus` in `backend/schemas.py`.
+ */
+export const REPORT_STATUSES = ["draft", "internal_review", "final", "delivered", "archived"] as const;
+export type ReportStatus = (typeof REPORT_STATUSES)[number];
+
+export type Report = { id: string; finding_id: string; title: string; summary: string; steps: string; impact: string; remediation: string; cwe: string; cvss: string; status: ReportStatus; created_at: string };
 export type EngagementType = "bug_bounty" | "pentest" | "red_team" | "internal";
 export type EngagementStatus = "planned" | "active" | "reporting" | "closed";
 
@@ -51,6 +59,14 @@ export type Engagement = {
   engagement_status: EngagementStatus;
   starts_at: string;
   ends_at: string;
+  /** Organisation the engagement belongs to. Serialized by the backend. */
+  org_id?: string;
+  /**
+   * The operator's own halt switch. Serialized so a client can show the brake is
+   * on without having to infer it from a refused request.
+   */
+  stop_work_at?: string;
+  stop_work_reason?: string;
   scope: { in: ScopeItem[]; out: ScopeItem[] };
   imports: ImportRecord[];
   recon_count: number;

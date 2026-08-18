@@ -1,4 +1,4 @@
-# VardrMap — Claude Instructions
+# VardrMap — Codex Instructions
 
 Penetration testing platform. FastAPI backend (Railway) + Next.js 16 frontend (Vercel) + PostgreSQL (Railway). GitHub OAuth login; frontend mints short-lived HS256 JWTs for backend requests.
 
@@ -24,7 +24,7 @@ VardrMap started as a bug bounty dashboard and is now a professional pentest eng
 - **`git fetch` before starting.** `main` is protected and everything lands via PR, so local `main` is routinely behind. Check `git status -sb` and `gh run list --limit 1` before writing code, not before pushing.
 - **New migration:** `alembic heads` must return exactly one line afterwards. Two branches whose revisions name the same `down_revision` is a failed `alembic upgrade head`, which means `start.sh` fails and Railway does not come up. Check `CHANGELOG.md` for the version you intend to claim, too.
 - **Destructive migrations need explicit sign-off.** Dropping a table or column deletes production data on the next Railway deploy. Say so plainly and get a yes before writing it; note the data loss in the migration docstring.
-- No "Co-Authored-By: Claude" in commits
+- No "Co-Authored-By: Codex" in commits
 - Run `npm run lint` + `npm run typecheck` + `npm run build` in `frontend/` before committing frontend changes
 - Every behavior-changing change needs matching documentation
 

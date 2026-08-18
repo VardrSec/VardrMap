@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Engagement, RadarProgram } from "../types";
 import { useAppContext } from "../context/AppContext";
 import { Panel, SectionHeader, Input, Textarea, PrimaryButton, DangerButton } from "./ui";
+import EngagementStatusPanel from "./EngagementStatusPanel";
 
 const SEVERITY_CONFIG = [
   { key: "critical", color: "#f38ba8", label: "Critical" },
@@ -218,6 +219,9 @@ export default function OverviewSection({ engagement }: { engagement: Engagement
           <QuickActionButton key={a.label} {...a} />
         ))}
       </div>
+
+      {/* Operational state — authorization, window, stop-work, setup gaps */}
+      <EngagementStatusPanel engagement={engagement} />
 
       {/* Stats */}
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">

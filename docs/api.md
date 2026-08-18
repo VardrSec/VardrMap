@@ -254,7 +254,7 @@ Transitions to `done` / `failed` are never blocked — a runner must always be a
   "manual_tests_count": 3,
   "findings_count": 7,
   "findings_by_severity": { "critical": 1, "high": 2, "medium": 3, "low": 1, "info": 0 },
-  "findings_by_status":   { "new": 4, "triaged": 2, "accepted": 1, "rejected": 0 },
+  "findings_by_status":   { "new": 4, "candidate": 1, "triaged": 2, "in_progress": 1, "closed": 0 },
   "reports_count": 3,
   "services_count": 8,
   "my_role": "owner"
@@ -468,7 +468,13 @@ Create a report.
   "status": "draft"
 }
 ```
-`title` is required. `finding_id` is optional — reports can exist without a linked finding. `status` values: `draft`, `submitted`, `accepted`, `rejected`.
+`title` is required. `finding_id` is optional — reports can exist without a linked finding. `status` values: `draft`, `internal_review`, `final`, `delivered`, `archived`.
+
+A report is a client deliverable, so the statuses describe where the document is on its way to the client. The common path is `draft → internal_review → final → delivered`.
+
+**Transitions are not enforced.** These are independent workflow labels: any status may be set at creation or on update, in any order. A report can be created directly as `delivered`, moved from `delivered` back to `draft` after client feedback, or `archived` from any point. The API validates only that the value is one of the five.
+
+The retired bounty-submission values (`submitted`, `accepted`, `duplicate`, `informative`, `resolved`) are rejected with `422`; migration `0022reportlifecycle` maps stored rows.
 
 **Response:** report object
 

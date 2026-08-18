@@ -4,6 +4,7 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 | Version | Date | Summary |
 |---|---|---|
+| [v0.33.0](changelog/v0.33.0.md) | 2026-08-17 | **Security** — security headers were absent from CORS preflight responses (middleware ordering); HSTS now production-only. **Breaking** — report statuses become a client-deliverable lifecycle. Pentest-first framing and engagement creation, engagement status panel, constant-query engagement list, corrected API contract drift |
 | [v0.32.0](changelog/v0.32.0.md) | 2026-08-17 | VardrGate authorization testing end to end — spec inlined at hand-off (no VardrRunner change), `POST /jobs/{id}/upload` mapping findings to scan items and executions to evidence, `vardrgate_api_test` queueable, API Assessment pipeline |
 | [v0.31.0](changelog/v0.31.0.md) | 2026-08-16 | Authorization test cases — engagement-scoped storage for VardrGate specs, referenced by jobs rather than copied; credential values rejected on write (step 1 of 5 toward queueable `vardrgate_api_test`) |
 | [v0.30.0](changelog/v0.30.0.md) | 2026-08-16 | dnsx and naabu queueable (VardrRunner already had handlers); two named pipelines — Attack Surface and Host Enumeration — replace the single recon chain, with per-pipeline stage selection |

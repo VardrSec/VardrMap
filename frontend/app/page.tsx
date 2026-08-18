@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { signIn, signOut } from "next-auth/react";
 import { Section } from "./types";
-import { AppProvider, normalizeEngagement, useAppContext } from "./context/AppContext";
+import { AppProvider, useAppContext } from "./context/AppContext";
 import DashboardSection  from "./components/DashboardSection";
 import ScopeSection      from "./components/ScopeSection";
 import OverviewSection   from "./components/OverviewSection";
@@ -11,6 +11,7 @@ import ReviewSection     from "./components/ReviewSection";
 import FindingsSection   from "./components/FindingsSection";
 import ReportsSection      from "./components/ReportsSection";
 import SettingsSection     from "./components/SettingsSection";
+import NewEngagementForm   from "./components/NewEngagementForm";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -32,28 +33,12 @@ const NAV_ITEMS: { section: Section; label: string; icon: string }[] = [
 
 function AppShell() {
   const {
-    state, selectedEngagement, authFetch, setMessage,
+    state, selectedEngagement, setMessage,
     selectEngagement, navigate, loadEngagements,
   } = useAppContext();
   const { session, authLoading, engagements, selectedEngagementId, activeSection, message } = state;
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [newEngagement, setNewEngagement] = useState({ name: "", platform: "", program_url: "" });
-  const [loading, setLoading] = useState(false);
-
-  async function createEngagement() {
-    if (!newEngagement.name.trim()) return;
-    setLoading(true);
-    try {
-      const res = await authFetch("/engagements", { method: "POST", body: JSON.stringify(newEngagement) });
-      if (!res.ok) throw new Error();
-      const created = normalizeEngagement(await res.json());
-      await loadEngagements();
-      selectEngagement(created.id);
-      setNewEngagement({ name: "", platform: "", program_url: "" });
-      setMessage("Engagement created.");
-    } catch { setMessage("Failed to create engagement."); } finally { setLoading(false); }
-  }
 
   const isError = message.toLowerCase().includes("fail") ||
                   message.toLowerCase().includes("error") ||
@@ -84,7 +69,7 @@ function AppShell() {
             </svg>
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-[#f1f5f9]">VardrMap</h1>
-          <p className="mt-2 text-sm text-[#52525b]">Sign in with GitHub to access your private bug bounty workspace.</p>
+          <p className="mt-2 text-sm text-[#52525b]">Sign in with GitHub to access your authorized security testing workspace.</p>
           <button onClick={() => signIn("github")} className="mt-7 w-full rounded-lg bg-[#f59e0b] px-4 py-2.5 text-sm font-semibold text-[#161616] transition hover:bg-[#fbbf24] active:scale-[0.98]">
             Sign in with GitHub
           </button>
@@ -154,17 +139,10 @@ function AppShell() {
           {/* Create engagement + sign out */}
           {!sidebarCollapsed && (
             <div className="border-t border-[#2e2e2e] px-3 py-4 space-y-2">
-              <p className="text-[9px] font-semibold uppercase tracking-widest text-[#52525b]">New Engagement</p>
-              <input className="w-full rounded-md border border-[#2e2e2e] bg-[#161616] px-2.5 py-1.5 text-xs text-[#f1f5f9] placeholder-[#3a3a3a] transition focus:border-[#f59e0b] focus:outline-none"
-                placeholder="Engagement name" value={newEngagement.name} onChange={(e) => setNewEngagement({ ...newEngagement, name: e.target.value })} />
-              <input className="w-full rounded-md border border-[#2e2e2e] bg-[#161616] px-2.5 py-1.5 text-xs text-[#f1f5f9] placeholder-[#3a3a3a] transition focus:border-[#f59e0b] focus:outline-none"
-                placeholder="Platform" value={newEngagement.platform} onChange={(e) => setNewEngagement({ ...newEngagement, platform: e.target.value })} />
-              <input className="w-full rounded-md border border-[#2e2e2e] bg-[#161616] px-2.5 py-1.5 text-xs text-[#f1f5f9] placeholder-[#3a3a3a] transition focus:border-[#f59e0b] focus:outline-none"
-                placeholder="Engagement URL" value={newEngagement.program_url} onChange={(e) => setNewEngagement({ ...newEngagement, program_url: e.target.value })} />
-              <button onClick={createEngagement} disabled={loading}
-                className="w-full rounded-md bg-[#f59e0b] px-3 py-1.5 text-xs font-semibold text-[#161616] transition hover:bg-[#fbbf24] active:scale-[0.98] disabled:opacity-50">
-                {loading ? "Working…" : "Create Engagement"}
-              </button>
+              <NewEngagementForm
+                onCreated={async (id) => { await loadEngagements(); selectEngagement(id); }}
+                onMessage={setMessage}
+              />
               <button onClick={() => signOut({ callbackUrl: "/" })}
                 className="w-full rounded-md border border-[#2e2e2e] px-3 py-1.5 text-xs text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#94a3b8]">
                 Sign out
