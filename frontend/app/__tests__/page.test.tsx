@@ -2,13 +2,13 @@ import "@testing-library/jest-dom";
 import { screen } from "@testing-library/react";
 
 jest.mock("next-auth/react", () => ({ signIn: jest.fn(), signOut: jest.fn() }));
-jest.mock("../components/DashboardSection", () => () => <div>Dashboard content</div>);
-jest.mock("../components/ScopeSection", () => () => null);
-jest.mock("../components/OverviewSection", () => () => null);
-jest.mock("../components/ReviewSection", () => () => null);
-jest.mock("../components/FindingsSection", () => () => null);
-jest.mock("../components/ReportsSection", () => () => null);
-jest.mock("../components/SettingsSection", () => () => null);
+jest.mock("../components/DashboardSection", () => function DashboardSection() { return <div>Dashboard content</div>; });
+jest.mock("../components/ScopeSection", () => function ScopeSection() { return null; });
+jest.mock("../components/OverviewSection", () => function OverviewSection() { return null; });
+jest.mock("../components/ReviewSection", () => function ReviewSection() { return null; });
+jest.mock("../components/FindingsSection", () => function FindingsSection() { return null; });
+jest.mock("../components/ReportsSection", () => function ReportsSection() { return null; });
+jest.mock("../components/SettingsSection", () => function SettingsSection() { return null; });
 
 import { renderWithApp } from "../../test-utils/renderWithApp";
 import { Engagement } from "../types";
