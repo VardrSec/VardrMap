@@ -31,7 +31,7 @@ const NAV_ITEMS: { section: Section; label: string; icon: string }[] = [
 // App shell — rendered inside AppProvider so it can call useAppContext
 // ---------------------------------------------------------------------------
 
-function AppShell() {
+export function AppShell() {
   const {
     state, selectedEngagement, setMessage,
     selectEngagement, navigate, loadEngagements,
@@ -115,7 +115,7 @@ function AppShell() {
           {!sidebarCollapsed && (
             <div className="border-b border-[#2e2e2e] px-3 py-3">
               <label className="mb-1.5 block text-[9px] font-semibold uppercase tracking-widest text-[#52525b]">Active Engagement</label>
-              <select className="w-full rounded-md border border-[#2e2e2e] bg-[#161616] px-2.5 py-1.5 text-xs text-[#f1f5f9] transition focus:border-[#f59e0b] focus:outline-none"
+              <select aria-label="Active Engagement" className="w-full rounded-md border border-[#2e2e2e] bg-[#161616] px-2.5 py-1.5 text-xs text-[#f1f5f9] transition focus:border-[#f59e0b] focus:outline-none"
                 value={selectedEngagementId} onChange={(e) => selectEngagement(e.target.value)}>
                 <option value="">Choose an engagement</option>
                 {engagements.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -139,10 +139,12 @@ function AppShell() {
           {/* Create engagement + sign out */}
           {!sidebarCollapsed && (
             <div className="border-t border-[#2e2e2e] px-3 py-4 space-y-2">
-              <NewEngagementForm
-                onCreated={async (id) => { await loadEngagements(); selectEngagement(id); }}
-                onMessage={setMessage}
-              />
+              {!selectedEngagement && (
+                <NewEngagementForm
+                  onCreated={async (id) => { await loadEngagements(); selectEngagement(id); }}
+                  onMessage={setMessage}
+                />
+              )}
               <button onClick={() => signOut({ callbackUrl: "/" })}
                 className="w-full rounded-md border border-[#2e2e2e] px-3 py-1.5 text-xs text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#94a3b8]">
                 Sign out
