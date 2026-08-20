@@ -192,15 +192,23 @@ Tests use SQLite and rebuild the schema from scratch on every run via `drop_all(
 ## VardrRunner Setup
 
 VardrRunner is the local CLI that runs tools on your machine and uploads results to
-VardrMap. **It now lives in its own repository:
-[VardrSec/VardrRunner](https://github.com/VardrSec/VardrRunner).** Install, CLI,
-daemon, and tool-prerequisite instructions are documented there — see its
+VardrMap. Install the published package in an isolated environment:
+
+```bash
+pipx install vardrrunner
+```
+
+`pip install vardrrunner` is also supported. For a one-shot command without a
+persistent installation, use `uvx vardrrunner <command>`; use the pipx install
+for daemon operation. The source lives in
+[VardrSec/VardrRunner](https://github.com/VardrSec/VardrRunner). CLI, daemon,
+source-development, and tool-prerequisite instructions are documented there — see its
 [README](https://github.com/VardrSec/VardrRunner#readme) and
 [docs/](https://github.com/VardrSec/VardrRunner/tree/main/docs).
 
 > **Naming:** the CLI command is `vardrrunner`. API keys use the `vmap_` prefix — these are different things.
 
-To connect a runner to this VardrMap instance:
+To connect a runner to this VardrMap instance after installation:
 
 1. Create a `vmap_` API key in **Settings → API Keys** (use a `runner`-scoped key for a VPS).
 2. On the runner, run `vardrrunner login vardrmap` and enter your VardrMap URL + the key.

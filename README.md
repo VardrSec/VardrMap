@@ -48,6 +48,7 @@ Bug bounty work is one `engagement_type` among four (`bug_bounty`, `pentest`, `r
 - Job Board + Terminal — three board views (Stream, Pipeline, Table); selecting a job opens a terminal that polls live lifecycle events (started → running → done/failed) every 3 s
 
 **VardrRunner** — local CLI companion ([VardrSec/VardrRunner](https://github.com/VardrSec/VardrRunner), its own repo):
+- Install the isolated CLI from PyPI with `pipx install vardrrunner` (`uvx vardrrunner …` for one-shot use)
 - Authenticate with `vardrrunner login vardrmap` using a `vmap_` API key
 - `vardrrunner status` — verify config, API connectivity, and local tool availability
 - `vardrrunner heartbeat` — report hostname, OS, version, and per-tool availability to VardrMap; auto-sent at start of `jobs run`

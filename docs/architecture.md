@@ -11,7 +11,8 @@ VardrMap is part of the VardrSec product family. Each product is a separate depl
 | VardrVault | Secrets management for VardrSec products | Planned |
 | VardrScanner | Purpose-built scanning engine | Planned |
 
-VardrRunner was extracted from this monorepo into its own repository,
+VardrRunner is distributed from [PyPI](https://pypi.org/project/vardrrunner/)
+(`pipx install vardrrunner`) and developed in its own repository,
 [VardrSec/VardrRunner](https://github.com/VardrSec/VardrRunner). It integrates with
 VardrMap purely over the HTTP API using a `vmap_` key — there is no runner code in this
 repo. The section below documents the **integration contract** (how the runner consumes

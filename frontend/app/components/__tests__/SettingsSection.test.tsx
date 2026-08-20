@@ -8,7 +8,7 @@ jest.mock("react-markdown", () => ({ __esModule: true, default: ({ children }: {
 jest.mock("remark-gfm", () => ({ __esModule: true, default: () => {} }));
 
 import { renderWithApp } from "../../../test-utils/renderWithApp";
-import SettingsSection from "../SettingsSection";
+import SettingsSection, { runnerSetupScript } from "../SettingsSection";
 
 const BASE_ROUTES = {
   "GET /auth/apikeys": { body: { keys: [] } },
@@ -16,6 +16,20 @@ const BASE_ROUTES = {
 };
 
 describe("SettingsSection workflows", () => {
+  it("uses the published PyPI package for runner onboarding", () => {
+    const script = runnerSetupScript("vmap_test", new Date("2026-08-20T00:00:00Z"));
+    expect(script).toContain("pipx install vardrrunner");
+    expect(script).toContain("vardrrunner login vardrmap");
+    expect(script).not.toContain("Documents\\code\\VardrRunner");
+    expect(script).not.toContain("Activate.ps1");
+  });
+
+  it("shows the PyPI install command before a runner key is generated", async () => {
+    renderWithApp(<SettingsSection />, { routes: BASE_ROUTES });
+    expect(await screen.findByText("pipx install vardrrunner")).toBeInTheDocument();
+    expect(screen.getByText(/uvx vardrrunner/)).toBeInTheDocument();
+  });
+
   it("loads and renders existing API keys on mount", async () => {
     renderWithApp(<SettingsSection />, {
       routes: {

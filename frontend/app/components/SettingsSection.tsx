@@ -6,8 +6,31 @@ import { useAppContext } from "../context/AppContext";
 import { Panel, Input, PrimaryButton, DangerButton, SectionHeader } from "./ui";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+const VARDRUNNER_INSTALL_COMMAND = "pipx install vardrrunner";
 
 const SEVERITIES = ["info", "low", "medium", "high", "critical"] as const;
+
+export function runnerSetupScript(token: string, generatedAt = new Date()): string {
+  return [
+    "# VardrRunner one-time setup",
+    `# Generated ${generatedAt.toISOString()}`,
+    "",
+    "# Install the isolated VardrRunner CLI from PyPI when it is not already available",
+    "if (-not (Get-Command vardrrunner -ErrorAction SilentlyContinue)) {",
+    "  if (-not (Get-Command pipx -ErrorAction SilentlyContinue)) {",
+    '    Write-Error "pipx is required. Install it from https://pipx.pypa.io/stable/installation/, restart PowerShell, and run this script again."',
+    "    exit 1",
+    "  }",
+    `  ${VARDRUNNER_INSTALL_COMMAND}`,
+    "  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }",
+    "}",
+    "",
+    `vardrrunner login vardrmap --url ${API_URL} --key ${token}`,
+    "vardrrunner daemon install",
+    "vardrrunner daemon start",
+    "vardrrunner doctor",
+  ].join("\r\n");
+}
 
 export default function SettingsSection() {
   const { authFetch, setMessage } = useAppContext();
@@ -131,26 +154,7 @@ export default function SettingsSection() {
   }
 
   function downloadPs1(token: string) {
-    const script = [
-      "# VardrRunner one-time setup",
-      `# Generated ${new Date().toISOString()}`,
-      "",
-      "# Activate the VardrRunner virtual environment",
-      "$venvPaths = @(",
-      '  "$env:USERPROFILE\\Documents\\code\\VardrRunner\\.venv\\Scripts\\Activate.ps1",',
-      '  "$env:USERPROFILE\\Documents\\code\\VardrRunner\\venv\\Scripts\\Activate.ps1"',
-      ")",
-      "$activated = $false",
-      "foreach ($p in $venvPaths) {",
-      "  if (Test-Path $p) { . $p; $activated = $true; break }",
-      "}",
-      'if (-not $activated) { Write-Error "Could not find VardrRunner venv. Run this from the VardrRunner directory after installing it."; exit 1 }',
-      "",
-      `vardrrunner login vardrmap --url ${API_URL} --key ${token}`,
-      "vardrrunner daemon install",
-      "vardrrunner daemon start",
-      "vardrrunner doctor",
-    ].join("\r\n");
+    const script = runnerSetupScript(token);
     const blob = new Blob([script], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -188,8 +192,21 @@ export default function SettingsSection() {
 
       <Panel title="Connect Runner">
         <p className="mb-4 text-xs text-[#52525b]">
-          Generate a runner-scoped key and copy the exact commands to start VardrRunner on your machine.
+          Install VardrRunner from PyPI, then generate a runner-scoped key and connect this machine.
         </p>
+
+        <div className="mb-4">
+          <div className="mb-1 font-mono text-[10px] uppercase tracking-widest text-[#52525b]">1 · Install from PyPI</div>
+          <div className="flex items-center gap-2">
+            <code className="flex-1 overflow-x-auto rounded-md border border-[#2e2e2e] bg-[#161616] px-3 py-2 font-mono text-xs text-[#f1f5f9] whitespace-nowrap">
+              {VARDRUNNER_INSTALL_COMMAND}
+            </code>
+            <button onClick={() => copyCmd(VARDRUNNER_INSTALL_COMMAND)} className="flex-shrink-0 rounded-md border border-[#2e2e2e] px-3 py-2 text-xs text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#94a3b8]">
+              Copy
+            </button>
+          </div>
+          <p className="mt-1.5 text-[10px] text-[#3a3a3a]">Requires Python and pipx. For a one-shot command without installation, use <code>uvx vardrrunner …</code>.</p>
+        </div>
 
         {!runnerToken ? (
           <PrimaryButton onClick={generateRunnerKey} label="Generate Runner Key" />
@@ -199,22 +216,22 @@ export default function SettingsSection() {
             {[
               {
                 id: "login",
-                label: "1 · Authenticate",
+                label: "2 · Authenticate",
                 cmd: `vardrrunner login vardrmap --url ${API_URL} --key ${runnerToken}`,
               },
               {
                 id: "install",
-                label: "2 · Install as startup task (runs on login)",
+                label: "3 · Install as startup task (runs on login)",
                 cmd: "vardrrunner daemon install",
               },
               {
                 id: "daemon",
-                label: "3 · Start now (without rebooting)",
+                label: "4 · Start now (without rebooting)",
                 cmd: "vardrrunner daemon start",
               },
               {
                 id: "doctor",
-                label: "4 · Verify tools",
+                label: "5 · Verify tools",
                 cmd: "vardrrunner doctor",
               },
             ].map(({ id, label, cmd }) => (
