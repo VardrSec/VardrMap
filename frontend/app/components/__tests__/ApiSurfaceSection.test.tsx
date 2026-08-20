@@ -1,5 +1,5 @@
 import "@testing-library/jest-dom";
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 jest.mock("react-markdown", () => ({ __esModule: true, default: ({ children }: { children: string }) => children }));
@@ -18,7 +18,7 @@ const endpoint = {
 describe("ApiSurfaceSection", () => {
   it("renders the operation inventory and identity coverage", async () => {
     renderWithApp(<ApiSurfaceSection engagementId="prog-1" />, {
-      routes: { "GET /engagements/prog-1/api/endpoints?": { body: { endpoints: [endpoint], total: 1 } } },
+      routes: { "GET /engagements/prog-1/api/endpoints?limit=100&offset=0": { body: { endpoints: [endpoint], total: 1 } } },
     });
     expect(await screen.findByText("/users/{id}")).toBeInTheDocument();
     expect(screen.getByText("200 · 403")).toBeInTheDocument();
@@ -28,8 +28,8 @@ describe("ApiSurfaceSection", () => {
   it("loads redacted exchange detail on inspect", async () => {
     renderWithApp(<ApiSurfaceSection engagementId="prog-1" />, {
       routes: {
-        "GET /engagements/prog-1/api/endpoints?": { body: { endpoints: [endpoint], total: 1 } },
-        "GET /engagements/prog-1/api/endpoints/ep-1": { body: {
+        "GET /engagements/prog-1/api/endpoints?limit=100&offset=0": { body: { endpoints: [endpoint], total: 1 } },
+        "GET /engagements/prog-1/api/endpoints/ep-1?limit=50&offset=0": { body: {
           ...endpoint, exchange_total: 1, exchanges: [{
             id: "x-1", endpoint_id: "ep-1", source_tool: "repeater", identity_label: "standard-user",
             request_headers: "Authorization: [REDACTED]", request_body: "", response_headers: "",
@@ -47,9 +47,20 @@ describe("ApiSurfaceSection", () => {
 
   it("explains the manual-promotion empty state", async () => {
     renderWithApp(<ApiSurfaceSection engagementId="prog-1" />, {
-      routes: { "GET /engagements/prog-1/api/endpoints?": { body: { endpoints: [], total: 0 } } },
+      routes: { "GET /engagements/prog-1/api/endpoints?limit=100&offset=0": { body: { endpoints: [], total: 0 } } },
     });
     expect(await screen.findByText("No API exchanges promoted yet.")).toBeInTheDocument();
     expect(screen.getByText(/Automatic capture stays off/)).toBeInTheDocument();
+  });
+
+  it("shows operation pagination when the inventory exceeds one page", async () => {
+    const { authFetch } = renderWithApp(<ApiSurfaceSection engagementId="prog-1" />, {
+      routes: {
+        "GET /engagements/prog-1/api/endpoints?limit=100&offset=0": { body: { endpoints: [endpoint], total: 101 } },
+        "GET /engagements/prog-1/api/endpoints?limit=100&offset=100": { body: { endpoints: [], total: 101 } },
+      },
+    });
+    await userEvent.click(await screen.findByRole("button", { name: "Next" }));
+    await waitFor(() => expect(authFetch).toHaveBeenCalledWith("/engagements/prog-1/api/endpoints?limit=100&offset=100"));
   });
 });

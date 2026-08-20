@@ -34,6 +34,7 @@ Bug bounty work is one `engagement_type` among four (`bug_bounty`, `pentest`, `r
 - Browse recon results and scan findings; update status individually or in bulk
 - Log manual test cases with hypothesis, payload, evidence, and status
 - Evidence with content hash, sensitivity, and retention — secrets redacted on write
+- **Burp-assisted API Surface** — explicitly promote selected Proxy, Repeater, Intruder, Scanner, or Organizer exchanges into a canonical operation inventory with identity/status coverage and retained redacted request/response evidence. Passive capture remains off.
 - **API authorization testing** via [VardrGate](https://github.com/VardrSec/VardrGate) — store a test case describing one request replayed as several identities, queue it, and get BOLA / BFLA / cross-tenant / privilege-escalation findings back as triageable results. Credentials are referenced (`value_env` / `value_keychain`), never stored.
 - Track findings with severity, asset, status, and full write-up fields
 - Draft structured vulnerability reports linked to findings; preview as markdown and export as PDF

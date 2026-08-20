@@ -250,4 +250,6 @@ independent of VardrRunner. Build it with `gradle jar`, load the resulting JAR
 as a Java extension in Burp, then configure the VardrMap backend URL,
 engagement ID, and a full-scope personal API key in its suite tab. The key is
 held in memory only. Use the request context menu to promote selected traffic;
-automatic capture is intentionally unavailable.
+automatic capture is intentionally unavailable. Select the originating Burp
+tool in the suite tab so API Surface provenance is useful; multi-selected
+messages are promoted individually.

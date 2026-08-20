@@ -91,6 +91,14 @@ def test_two_secret_references_are_rejected(client, auth_headers, program_id):
     assert res.status_code == 400
 
 
+def test_static_header_reference_requires_a_header_name(client, auth_headers, program_id):
+    spec = _spec()
+    spec["identities"][2]["credential"] = {
+        "type": "static_header", "value_env": "SESSION_COOKIE",
+    }
+    assert _create(client, auth_headers, program_id, spec=spec).status_code == 400
+
+
 def test_a_stored_case_round_trips_references_and_no_populated_value(
     client, auth_headers, program_id
 ):
@@ -159,6 +167,54 @@ def test_unknown_credential_type_is_rejected(client, auth_headers, program_id):
     spec = _spec()
     spec["identities"][0]["credential"] = {"type": "mtls", "value_env": "X"}
     assert _create(client, auth_headers, program_id, spec=spec).status_code == 400
+
+
+def test_unsafe_request_requires_mutating_acknowledgement(client, auth_headers, program_id):
+    spec = _spec(request={"method": "POST", "url": "https://api.example.com/users"})
+    assert _create(client, auth_headers, program_id, spec=spec).status_code == 400
+    spec["mutating"] = True
+    assert _create(client, auth_headers, program_id, spec=spec).status_code == 201
+
+
+def test_expected_access_decision_is_validated(client, auth_headers, program_id):
+    spec = _spec()
+    spec["expected_access"][0]["decision"] = "sometimes"
+    assert _create(client, auth_headers, program_id, spec=spec).status_code == 400
+
+
+def test_deny_statuses_are_validated(client, auth_headers, program_id):
+    assert _create(client, auth_headers, program_id, spec=_spec(deny_status=[200])).status_code == 400
+    assert _create(client, auth_headers, program_id, spec=_spec(deny_status=[700])).status_code == 400
+    assert _create(client, auth_headers, program_id, spec=_spec(deny_status=[401, 404])).status_code == 201
+
+
+def test_resource_references_are_validated(client, auth_headers, program_id):
+    bad_owner = _spec(resource={"owner_identity": "ghost"})
+    assert _create(client, auth_headers, program_id, spec=bad_owner).status_code == 400
+    bad_role = _spec(resource={"required_role": "admin"}, role_hierarchy=["user"])
+    assert _create(client, auth_headers, program_id, spec=bad_role).status_code == 400
+
+
+def test_setup_shape_identity_and_mutation_are_validated(client, auth_headers, program_id):
+    bad_identity = _spec(setup=[{
+        "name": "login", "as": "ghost",
+        "request": {"method": "GET", "url": "https://api.example.com/login"},
+    }])
+    assert _create(client, auth_headers, program_id, spec=bad_identity).status_code == 400
+    unsafe = _spec(setup=[{
+        "name": "create", "request": {"method": "POST", "url": "https://api.example.com/users"},
+    }])
+    assert _create(client, auth_headers, program_id, spec=unsafe).status_code == 400
+
+
+def test_names_and_descriptions_are_sanitized(client, auth_headers, program_id):
+    response = _create(
+        client, auth_headers, program_id,
+        name="<b>BOLA</b>", description="<script>bad()</script>safe",
+    )
+    assert response.status_code == 201
+    assert "<" not in response.json()["name"]
+    assert "<" not in response.json()["description"]
 
 
 def test_an_empty_spec_is_rejected(client, auth_headers, program_id):

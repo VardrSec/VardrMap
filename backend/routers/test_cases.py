@@ -16,11 +16,12 @@ VardrGate owns that schema; this module validates only what it must:
    bearer token into the database, and the platform's rule is that raw secrets
    are never stored.
 """
+import json
 from datetime import datetime, timezone
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from db import get_db
@@ -44,6 +45,7 @@ class TestCaseCreate(BaseModel):
     description: Optional[str] = Field(default="", max_length=5000)
     spec: dict
 
+    @field_validator("name", "description", mode="before")
     @classmethod
     def _clean(cls, v):
         return strip_html(v) if v else ""
@@ -53,6 +55,11 @@ class TestCaseUpdate(BaseModel):
     name: Optional[str] = Field(default=None, min_length=1, max_length=200)
     description: Optional[str] = Field(default=None, max_length=5000)
     spec: Optional[dict] = None
+
+    @field_validator("name", "description", mode="before")
+    @classmethod
+    def _clean(cls, v):
+        return strip_html(v) if v else v
 
 
 def _reject_literal_credentials(spec: dict) -> None:
@@ -109,13 +116,18 @@ def _reject_literal_credentials(spec: dict) -> None:
                     f"'value_keychain'"
                 ),
             )
+        if refs and ctype == "static_header" and not str(cred.get("header") or "").strip():
+            raise HTTPException(
+                status_code=400,
+                detail=f"identities[{i}].credential static_header needs a header name",
+            )
 
 
 def _validate_spec(spec: Any) -> dict:
     """Shape checks that mirror VardrGate's own validate(), plus the secret rule."""
     if not isinstance(spec, dict) or not spec:
         raise HTTPException(status_code=400, detail="spec must be a non-empty object")
-    if len(str(spec)) > _MAX_SPEC_BYTES:
+    if len(json.dumps(spec, separators=(",", ":"), default=str).encode("utf-8")) > _MAX_SPEC_BYTES:
         raise HTTPException(status_code=400, detail="spec is too large")
 
     if not str(spec.get("id") or "").strip():
@@ -141,6 +153,12 @@ def _validate_spec(spec: Any) -> dict:
         raise HTTPException(status_code=400, detail="spec.request.method is required")
     if not str(request.get("url") or "").strip():
         raise HTTPException(status_code=400, detail="spec.request.url is required")
+    method = str(request.get("method") or "").upper()
+    if method in {"POST", "PUT", "PATCH", "DELETE"} and spec.get("mutating") is not True:
+        raise HTTPException(
+            status_code=400,
+            detail=f"request method {method} requires spec.mutating=true",
+        )
 
     # expected_access is optional in the model but a case without it emits no
     # findings, so a stored one is almost certainly a mistake worth flagging.
@@ -152,6 +170,55 @@ def _validate_spec(spec: Any) -> dict:
                 status_code=400,
                 detail=f"expected_access[{i}].identity_id does not match any identity",
             )
+        if expected.get("decision") not in {"allow", "deny", "skip"}:
+            raise HTTPException(
+                status_code=400,
+                detail=f"expected_access[{i}].decision must be allow, deny, or skip",
+            )
+
+    for i, code in enumerate(spec.get("deny_status") or []):
+        if type(code) is not int or code < 100 or code > 599:
+            raise HTTPException(status_code=400, detail=f"deny_status[{i}] is not a valid HTTP status")
+        if 200 <= code < 300:
+            raise HTTPException(status_code=400, detail=f"deny_status[{i}] cannot be a success status")
+
+    resource = spec.get("resource")
+    if resource is not None and not isinstance(resource, dict):
+        raise HTTPException(status_code=400, detail="spec.resource must be an object")
+    if isinstance(resource, dict):
+        owner = str(resource.get("owner_identity") or "")
+        if owner and owner not in seen:
+            raise HTTPException(status_code=400, detail="resource.owner_identity does not match any identity")
+        required_role = str(resource.get("required_role") or "")
+        role_hierarchy = spec.get("role_hierarchy") or []
+        if not isinstance(role_hierarchy, list):
+            raise HTTPException(status_code=400, detail="spec.role_hierarchy must be an array")
+        if required_role and required_role not in role_hierarchy:
+            raise HTTPException(status_code=400, detail="resource.required_role is not in role_hierarchy")
+
+    setup_names: set[str] = set()
+    for i, step in enumerate(spec.get("setup") or []):
+        if not isinstance(step, dict):
+            raise HTTPException(status_code=400, detail=f"setup[{i}] must be an object")
+        setup_request = step.get("request")
+        if not isinstance(setup_request, dict) or not str(setup_request.get("method") or "").strip() or not str(setup_request.get("url") or "").strip():
+            raise HTTPException(status_code=400, detail=f"setup[{i}] must have a request method and url")
+        as_identity = str(step.get("as") or "")
+        if as_identity and as_identity not in seen:
+            raise HTTPException(status_code=400, detail=f"setup[{i}] runs as an unknown identity")
+        name = str(step.get("name") or "")
+        if name and name in setup_names:
+            raise HTTPException(status_code=400, detail=f"setup[{i}] has a duplicate name")
+        setup_names.add(name)
+        setup_method = str(setup_request.get("method") or "").upper()
+        if setup_method in {"POST", "PUT", "PATCH", "DELETE"} and spec.get("mutating") is not True:
+            raise HTTPException(status_code=400, detail=f"setup[{i}] uses {setup_method} and requires spec.mutating=true")
+        capture = step.get("capture") or {}
+        if not isinstance(capture, dict) or any(
+            not str(k).strip() or not isinstance(v, str) or not v.strip()
+            for k, v in capture.items()
+        ):
+            raise HTTPException(status_code=400, detail=f"setup[{i}] capture entries require a name and path")
 
     _reject_literal_credentials(spec)
     return spec

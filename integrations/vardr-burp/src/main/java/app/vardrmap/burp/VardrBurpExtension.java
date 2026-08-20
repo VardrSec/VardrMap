@@ -26,6 +26,7 @@ public final class VardrBurpExtension implements BurpExtension, ContextMenuItems
     private final JTextField engagementId = new JTextField(32);
     private final JPasswordField apiKey = new JPasswordField(32);
     private final JTextField identityLabel = new JTextField("anonymous", 20);
+    private final JComboBox<String> sourceTool = new JComboBox<>(new String[] {"proxy", "repeater", "intruder", "scanner", "organizer", "unknown"});
     private final JLabel status = new JLabel("Not configured");
     private final Gson gson = new Gson();
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
@@ -47,10 +48,11 @@ public final class VardrBurpExtension implements BurpExtension, ContextMenuItems
         addRow(form, c, 1, "Engagement ID", engagementId);
         addRow(form, c, 2, "Full-scope API key", apiKey);
         addRow(form, c, 3, "Identity label", identityLabel);
-        c.gridx = 1; c.gridy = 4; form.add(status, c);
+        addRow(form, c, 4, "Burp source", sourceTool);
+        c.gridx = 1; c.gridy = 5; form.add(status, c);
         JTextArea notice = new JTextArea("Credentials are held in memory only and are not saved in the Burp project.\nSelected messages are redacted locally, then redacted again by VardrMap before storage.");
         notice.setEditable(false); notice.setOpaque(false); notice.setLineWrap(true); notice.setWrapStyleWord(true);
-        c.gridy = 5; c.weightx = 1; form.add(notice, c);
+        c.gridy = 6; c.weightx = 1; form.add(notice, c);
         JPanel wrapper = new JPanel(new BorderLayout()); wrapper.add(form, BorderLayout.NORTH);
         return wrapper;
     }
@@ -62,12 +64,12 @@ public final class VardrBurpExtension implements BurpExtension, ContextMenuItems
 
     @Override
     public List<Component> provideMenuItems(ContextMenuEvent event) {
-        HttpRequestResponse selected = event.messageEditorRequestResponse()
-                .map(editor -> editor.requestResponse())
-                .orElseGet(() -> event.selectedRequestResponses().isEmpty() ? null : event.selectedRequestResponses().get(0));
-        if (selected == null) return null;
+        List<HttpRequestResponse> selected = event.messageEditorRequestResponse()
+                .map(editor -> List.of(editor.requestResponse()))
+                .orElseGet(event::selectedRequestResponses);
+        if (selected.isEmpty()) return null;
         JMenuItem send = new JMenuItem("Send to VardrMap API Surface");
-        send.addActionListener(ignored -> submit(selected));
+        send.addActionListener(ignored -> selected.forEach(this::submit));
         List<Component> items = new ArrayList<>(); items.add(send); return items;
     }
 
@@ -85,7 +87,7 @@ public final class VardrBurpExtension implements BurpExtension, ContextMenuItems
             Map<String, Object> payload = new HashMap<>();
             payload.put("method", request.method());
             payload.put("url", request.url());
-            payload.put("source_tool", "unknown");
+            payload.put("source_tool", String.valueOf(sourceTool.getSelectedItem()));
             payload.put("identity_label", identityLabel.getText().trim().isBlank() ? "anonymous" : identityLabel.getText().trim());
             payload.put("request_headers", LocalRedactor.redact(String.join("\n", request.headers().stream().map(Object::toString).toList())));
             payload.put("request_body", LocalRedactor.redact(request.bodyToString()));
@@ -94,6 +96,11 @@ public final class VardrBurpExtension implements BurpExtension, ContextMenuItems
                 payload.put("response_body", LocalRedactor.redact(response.bodyToString()));
                 payload.put("response_status", response.statusCode());
                 payload.put("response_length", response.body().length());
+                response.headers().stream().map(Object::toString)
+                        .filter(header -> header.regionMatches(true, 0, "Content-Type:", 0, 13))
+                        .findFirst()
+                        .map(header -> header.substring(13).trim())
+                        .ifPresent(mime -> payload.put("response_mime", mime));
             }
             URI target = URI.create(baseUrl.getText().trim().replaceAll("/+$", "") + "/engagements/" + engagement + "/api/exchanges");
             HttpRequest outgoing = HttpRequest.newBuilder(target).timeout(Duration.ofSeconds(20))

@@ -110,6 +110,10 @@ end to end, with **no VardrRunner change required**.
 - [x] **5. API Assessment pipeline** (v0.32.0) — `httpx → vardrgate_api_test`,
       with a test-case picker in the Composer and Queue disabled until a case is
       chosen.
+- [x] **6. Result and contract hardening** (v0.34.1) — uploads are idempotent,
+      result provenance is checked against the queued case, and stored cases
+      mirror the engine's execution-critical validation before they reach a
+      runner.
 
 **Not yet built.** Authoring is still "store the JSON VardrGate produced".
 VardrGate's `discover` command and `internal/scaffold` generate cases from an
@@ -122,6 +126,14 @@ built by reading `engine.Result` and `model.Finding` in the VardrGate repo. The
 shape should be confirmed against one real VardrGate invocation; `severity` is
 the field most worth checking, since an unrecognised value deliberately falls
 back to `info` rather than being guessed upward.
+
+### Burp-assisted API Surface ✅ (v0.34.0 – v0.34.1)
+
+Selected Burp exchanges can be promoted into a canonical API operation
+inventory without synchronizing Proxy history. VardrMap retains doubly-redacted
+request/response evidence and visualizes status and identity coverage. v0.34.1
+adds operation/exchange pagination, concurrent-safe operation ingestion,
+multi-selection, source-tool provenance, and response content type capture.
 
 ## Phase 3 — Private execution
 

@@ -8,6 +8,8 @@ import { Panel } from "./ui";
 const methodColor: Record<string, string> = {
   GET: "#4ade80", POST: "#89b4fa", PUT: "#f59e0b", PATCH: "#c084fc", DELETE: "#f87171",
 };
+const PAGE_SIZE = 100;
+const EXCHANGE_PAGE_SIZE = 50;
 
 export default function ApiSurfaceSection({ engagementId }: { engagementId: string }) {
   const { authFetch, setMessage } = useAppContext();
@@ -16,6 +18,9 @@ export default function ApiSurfaceSection({ engagementId }: { engagementId: stri
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [method, setMethod] = useState("");
+  const [total, setTotal] = useState(0);
+  const [offset, setOffset] = useState(0);
+  const [exchangeOffset, setExchangeOffset] = useState(0);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -23,20 +28,24 @@ export default function ApiSurfaceSection({ engagementId }: { engagementId: stri
       const params = new URLSearchParams();
       if (search) params.set("search", search);
       if (method) params.set("method", method);
+      params.set("limit", String(PAGE_SIZE));
+      params.set("offset", String(offset));
       const res = await authFetch(`/engagements/${engagementId}/api/endpoints?${params}`);
       if (!res.ok) throw new Error();
       const data = await res.json();
       setEndpoints(data.endpoints ?? []);
+      setTotal(data.total ?? 0);
     } catch { setMessage("Failed to load API surface."); } finally { setLoading(false); }
-  }, [authFetch, engagementId, method, search, setMessage]);
+  }, [authFetch, engagementId, method, offset, search, setMessage]);
 
   useEffect(() => { const timer = setTimeout(() => void load(), 180); return () => clearTimeout(timer); }, [load]);
 
-  async function inspect(endpoint: ApiEndpoint) {
+  async function inspect(endpoint: ApiEndpoint, nextOffset = 0) {
     try {
-      const res = await authFetch(`/engagements/${engagementId}/api/endpoints/${endpoint.id}`);
+      const res = await authFetch(`/engagements/${engagementId}/api/endpoints/${endpoint.id}?limit=${EXCHANGE_PAGE_SIZE}&offset=${nextOffset}`);
       if (!res.ok) throw new Error();
       setSelected(await res.json());
+      setExchangeOffset(nextOffset);
     } catch { setMessage("Failed to load captured exchanges."); }
   }
 
@@ -48,7 +57,7 @@ export default function ApiSurfaceSection({ engagementId }: { engagementId: stri
 
   return <div className="space-y-5">
     <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-      {[["Operations", endpoints.length], ["Exchanges", stats.exchanges], ["Hosts", stats.hosts], ["Identity labels", stats.identities]].map(([label, value]) =>
+      {[["Operations", total], ["Visible exchanges", stats.exchanges], ["Visible hosts", stats.hosts], ["Visible identities", stats.identities]].map(([label, value]) =>
         <div key={label} className="rounded-lg border border-[#2e2e2e] bg-[#171717] p-4">
           <div className="font-mono text-2xl text-[#f1f5f9]">{value}</div>
           <div className="mt-1 text-[10px] uppercase tracking-widest text-[#52525b]">{label}</div>
@@ -57,9 +66,9 @@ export default function ApiSurfaceSection({ engagementId }: { engagementId: stri
 
     <Panel title="Observed API operations">
       <div className="mb-4 flex flex-wrap gap-2">
-        <input aria-label="Search API operations" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search host or route…"
+        <input aria-label="Search API operations" value={search} onChange={(e) => { setSearch(e.target.value); setOffset(0); }} placeholder="Search host or route…"
           className="min-w-64 flex-1 rounded border border-[#2e2e2e] bg-[#111] px-3 py-2 text-xs text-[#f1f5f9] outline-none focus:border-[#52525b]" />
-        <select aria-label="Filter by method" value={method} onChange={(e) => setMethod(e.target.value)}
+        <select aria-label="Filter by method" value={method} onChange={(e) => { setMethod(e.target.value); setOffset(0); }}
           className="rounded border border-[#2e2e2e] bg-[#111] px-3 py-2 text-xs text-[#94a3b8]">
           <option value="">All methods</option>
           {["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"].map((item) => <option key={item}>{item}</option>)}
@@ -81,19 +90,33 @@ export default function ApiSurfaceSection({ engagementId }: { engagementId: stri
           <td className="py-2.5 text-right"><button onClick={() => void inspect(item)} className="rounded px-2 py-1 text-[10px] text-[#89b4fa] hover:bg-[#2e2e2e]">Inspect</button></td>
         </tr>)}</tbody>
       </table></div>}
+      {!loading && total > PAGE_SIZE && <div className="mt-4 flex items-center justify-between text-xs text-[#52525b]">
+        <span>Showing {offset + 1}–{Math.min(offset + endpoints.length, total)} of {total}</span>
+        <div className="flex gap-2">
+          <button disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))} className="rounded border border-[#2e2e2e] px-3 py-1.5 disabled:opacity-30">Previous</button>
+          <button disabled={offset + PAGE_SIZE >= total} onClick={() => setOffset(offset + PAGE_SIZE)} className="rounded border border-[#2e2e2e] px-3 py-1.5 disabled:opacity-30">Next</button>
+        </div>
+      </div>}
     </Panel>
 
     {selected && <Panel title={`${selected.method} ${selected.path_template}`}>
       <div className="mb-3 flex flex-wrap gap-2">{selected.identities.map((identity) => <span key={identity} className="rounded bg-[#242424] px-2 py-1 font-mono text-[10px] text-[#c084fc]">{identity}</span>)}</div>
       <div className="space-y-2">{selected.exchanges?.map((exchange) => <details key={exchange.id} className="rounded border border-[#2e2e2e] bg-[#111] p-3">
         <summary className="cursor-pointer font-mono text-xs text-[#94a3b8]">
-          <span className="mr-3 text-[#f1f5f9]">{exchange.response_status ?? "—"}</span>{exchange.identity_label}<span className="ml-3 text-[#52525b]">{exchange.source_tool} · {exchange.response_time_ms ?? "—"} ms</span>
+          <span className="mr-3 text-[#f1f5f9]">{exchange.response_status ?? "—"}</span>{exchange.identity_label}<span className="ml-3 text-[#52525b]">{exchange.source_tool}{exchange.response_time_ms === null ? "" : ` · ${exchange.response_time_ms} ms`}</span>
         </summary>
         <div className="mt-3 grid gap-3 lg:grid-cols-2">
           <Message title="Request" headers={exchange.request_headers} body={exchange.request_body} />
           <Message title="Response" headers={exchange.response_headers} body={exchange.response_body} />
         </div>
       </details>)}</div>
+      {(selected.exchange_total ?? 0) > EXCHANGE_PAGE_SIZE && <div className="mt-4 flex items-center justify-between text-xs text-[#52525b]">
+        <span>Showing {exchangeOffset + 1}–{Math.min(exchangeOffset + (selected.exchanges?.length ?? 0), selected.exchange_total ?? 0)} of {selected.exchange_total}</span>
+        <div className="flex gap-2">
+          <button disabled={exchangeOffset === 0} onClick={() => void inspect(selected, Math.max(0, exchangeOffset - EXCHANGE_PAGE_SIZE))} className="rounded border border-[#2e2e2e] px-3 py-1.5 disabled:opacity-30">Previous exchanges</button>
+          <button disabled={exchangeOffset + EXCHANGE_PAGE_SIZE >= (selected.exchange_total ?? 0)} onClick={() => void inspect(selected, exchangeOffset + EXCHANGE_PAGE_SIZE)} className="rounded border border-[#2e2e2e] px-3 py-1.5 disabled:opacity-30">Next exchanges</button>
+        </div>
+      </div>}
     </Panel>}
   </div>;
 }

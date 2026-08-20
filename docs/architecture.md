@@ -269,6 +269,13 @@ authorization_test_cases
   spec (JSON — VardrGate AuthorizationTestCase, stored verbatim)
   created_at, updated_at (nullable)
 
+job_result_receipts
+  id (PK)
+  job_id (FK → scan_jobs.id, CASCADE DELETE, unique)
+  payload_hash (SHA-256 of canonical result JSON)
+  scan_items_created, evidence_created
+  created_at
+
 audit_logs
   id (PK)
   github_id (no FK — records survive user deletion)
@@ -305,7 +312,7 @@ audit_logs
 
 1. **Queue.** `POST /engagements/{id}/jobs` with `config = {"test_case_id": ...}`. The reference is validated at queue time and scoped to the engagement, so a job can neither name a missing case nor borrow one from another engagement.
 2. **Hand-off.** `GET /jobs/pending` expands the stored spec into `config.test_case` (`_resolve_test_cases` in `routers/jobs.py`). The spec rides on the response only — it is never written back to `scan_jobs.config`, so the job keeps holding just the id and a revised case changes what the next hand-off carries. **This expansion is what lets the integration land without a VardrRunner release**: `VardrGateConfig.from_dict` receives exactly the object it already expects. A job whose case has been deleted is auto-failed here, the same way a dangling pipeline dependency is.
-3. **Result.** `POST /jobs/{id}/upload` maps `findings[]` → `scan_items` (`source="vardrgate"`, `template_id` = the VardrGate case id) and `executions[]` → `evidence`. Reusing `scan_items` means the existing triage and promote-to-finding flow applies rather than a parallel one. Everything is redacted on write: VardrGate excludes credential values and response bodies from its own JSON, but a control that depends on the sender behaving is not a control.
+3. **Result.** `POST /jobs/{id}/upload` verifies the result's test-case id against the queued case, then maps `findings[]` → `scan_items` (`source="vardrgate"`, `template_id` = the stored VardrGate case id) and `executions[]` → `evidence`, including an optional body-free `response_profile`. A unique `job_result_receipts` row makes retries idempotent: the same canonical payload returns the stored counts, while a different second result is rejected. Reusing `scan_items` means the existing triage and promote-to-finding flow applies rather than a parallel one. Everything is redacted on write: VardrGate excludes credential values and response bodies from its own JSON, but a control that depends on the sender behaving is not a control.
 
 ---
 

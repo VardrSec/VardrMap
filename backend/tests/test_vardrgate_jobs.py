@@ -221,7 +221,40 @@ def test_upload_creates_scan_items_and_evidence(client, auth_headers, program_id
     assert res.status_code == 200, res.text
     assert res.json() == {
         "job_id": job_id, "scan_items_created": 1, "evidence_created": 2,
+        "already_processed": False,
     }
+
+
+def test_repeated_identical_upload_is_idempotent(client, auth_headers, program_id):
+    job_id = _queued_job(client, auth_headers, program_id)
+    first = _upload(client, auth_headers, job_id)
+    second = _upload(client, auth_headers, job_id)
+    assert first.status_code == second.status_code == 200
+    assert second.json()["already_processed"] is True
+
+    db = SessionLocal()
+    try:
+        assert db.query(ScanItem).filter(ScanItem.job_id == job_id).count() == 1
+        assert db.query(Evidence).filter(
+            Evidence.source == "vardrgate", Evidence.program_id == program_id
+        ).count() == 2
+    finally:
+        db.close()
+
+
+def test_different_second_upload_is_rejected(client, auth_headers, program_id):
+    job_id = _queued_job(client, auth_headers, program_id)
+    assert _upload(client, auth_headers, job_id).status_code == 200
+    changed = {**_RESULT, "findings": []}
+    assert _upload(client, auth_headers, job_id, changed).status_code == 409
+
+
+def test_upload_rejects_a_different_test_case_id(client, auth_headers, program_id):
+    job_id = _queued_job(client, auth_headers, program_id)
+    changed = {**_RESULT, "test_case_id": "some-other-case"}
+    response = _upload(client, auth_headers, job_id, changed)
+    assert response.status_code == 400
+    assert "does not match" in response.text
 
 
 def test_findings_land_as_triageable_scan_items(client, auth_headers, program_id):
@@ -269,6 +302,31 @@ def test_executions_land_as_hashed_evidence(client, auth_headers, program_id):
             assert row.redacted is True
             assert len(row.content_hash) == 64
             assert row.sensitivity == "confidential"
+    finally:
+        db.close()
+
+
+def test_structural_response_profile_is_preserved_as_evidence(client, auth_headers, program_id):
+    job_id = _queued_job(client, auth_headers, program_id)
+    payload = {
+        "test_case_id": "bola-check",
+        "executions": [{
+            "identity_id": "attacker", "status_code": 200,
+            "response_profile": {
+                "kind": "json_object", "schema_hash": "abc123",
+                "fields": ["id", "email"], "truncated": False,
+            },
+        }],
+        "findings": [],
+    }
+    assert _upload(client, auth_headers, job_id, payload).status_code == 200
+    db = SessionLocal()
+    try:
+        evidence = db.query(Evidence).filter(
+            Evidence.source == "vardrgate", Evidence.program_id == program_id
+        ).one()
+        assert '"response_profile"' in evidence.body
+        assert '"schema_hash": "abc123"' in evidence.body
     finally:
         db.close()
 
