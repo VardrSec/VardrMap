@@ -1039,20 +1039,30 @@ Receive a VardrGate result for a `vardrgate_api_test` job. Posted by VardrRunner
 | the case's `request.url` | `scan_items.asset` / `matched_at` | Read from the stored case, not the payload |
 | `executions[]` | `evidence` with `kind="tool_result"` | Content-hashed, `sensitivity="confidential"`, one row per identity |
 
+When supplied by VardrGate, `executions[].response_profile` is retained inside
+the evidence body. It describes response structure without storing the response
+body and remains an upstream-owned, extensible object.
+
 Everything is **redacted on write**. VardrGate excludes credential values and response bodies from its own JSON (`json:"-"`), but a control that depends on the sender behaving is not a control.
 
 Findings land with `status: "new"`, so they appear in the Scanning section for triage like any other machine-generated result.
 
 **Response**
 ```json
-{ "job_id": "<uuid>", "scan_items_created": 1, "evidence_created": 2 }
+{ "job_id": "<uuid>", "scan_items_created": 1, "evidence_created": 2, "already_processed": false }
 ```
 
+The first accepted result creates an idempotency receipt. Retrying the identical
+payload returns the same counts with `already_processed: true` and creates no
+new rows. A different second payload returns `409`. The payload's
+`test_case_id` must match the VardrGate id on the case queued for the job.
+
 **Errors**
-- `400` — the job is not a `vardrgate_api_test` job
+- `400` — the job is not a `vardrgate_api_test` job, or the result names a different test case
 - `401` — not authenticated
 - `403` — viewer-role member (read-only)
 - `404` — job not found or not accessible
+- `409` — a different result was already accepted for this job
 - `413` — result payload exceeds 512 KB
 
 ### `GET /jobs/{job_id}/events`
@@ -1325,7 +1335,7 @@ Stored [VardrGate](https://github.com/VardrSec/VardrGate) authorization test cas
 
 A case is stored once and referenced from a job by id, so `ScanJob.config` stays flat (`{"test_case_id": "<uuid>"}`), one case can back many runs, and editing a case does not require re-queueing.
 
-`spec` holds VardrGate's own `AuthorizationTestCase` JSON verbatim — VardrGate owns that schema. VardrMap validates only the shape it must (`id`, at least one uniquely-identified identity, `request.method`, `request.url`, and that every `expected_access.identity_id` matches a declared identity) plus the credential rule below.
+`spec` holds VardrGate's own `AuthorizationTestCase` JSON verbatim — VardrGate owns that schema. Before storage, VardrMap mirrors the engine's execution-critical validation: identity and credential consistency, request shape, explicit `mutating: true` for unsafe requests/setup, expected decisions, denial statuses, setup references, and resource owner/role references. This prevents a case that is already known to be invalid from reaching a runner.
 
 ### Credentials are references, never values
 

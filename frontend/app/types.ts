@@ -98,6 +98,7 @@ export type ApiEndpoint = {
   port: number | null; path_template: string; source: string; notes: string;
   observation_count: number; statuses: number[]; identities: string[];
   first_seen_at: string | null; last_seen_at: string | null; exchanges?: ApiExchange[];
+  exchange_total?: number;
 };
 export type RadarProgram = {
   id: string; platform: string; platform_id: string; name: string; url: string;

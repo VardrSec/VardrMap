@@ -52,6 +52,13 @@ and no "bounty mode" versus "pentest mode".
 | **VardrRunner** | Private execution plane — customer network, CI, workstation | Python |
 | **VardrGate** | API authorization-testing engine (BOLA, cross-tenant, BFLA, privilege escalation) | Go |
 
+Burp Suite is the analyst's interactive HTTP workbench rather than an execution
+plane. The bundled extension promotes only analyst-selected exchanges into
+VardrMap, where they become a canonical API operation map and reusable redacted
+evidence. That bridge is intentionally explicit: VardrMap visualizes and
+correlates the work without cloning Proxy history or turning passive browsing
+into uncontrolled data collection.
+
 The control plane never links against a security tool. It emits versioned JSON
 job envelopes and consumes versioned JSON results. VardrGate is one executor
 behind that contract, not a dependency.
@@ -79,5 +86,6 @@ VardrMap models the **target** and the **authority to test it**:
 
 - An analyst can run an engagement end to end without leaving the product.
 - A client-ready report generates from structured findings, not prose.
-- A scan cannot execute outside its authorization — provably, with tests.
+- Every scan is evaluated against scope, authorization, and testing windows;
+  warnings remain advisory except for the operator-controlled stop-work switch.
 - The same engagement supports one researcher or a consulting team.

@@ -23,6 +23,7 @@ from models import (
     AuthorizationTestCase,
     Evidence,
     JobEvent,
+    JobResultReceipt,
     ReconItem,
     ScanItem,
     ScanJob,
@@ -889,6 +890,7 @@ def upload_job_result(
             ScanJob.id == job_id,
             ScanJob.program_id.in_(accessible_engagement_ids(current_user["github_id"], db)),
         )
+        .with_for_update()
         .first()
     )
     if not job:
@@ -901,8 +903,26 @@ def upload_job_result(
             detail=f"job {job_id} is a '{job.tool_type}' job; /upload accepts {_VARDRGATE} results",
         )
 
-    if len(json.dumps(body.model_dump())) > _MAX_RESULT_BYTES:
+    canonical_payload = json.dumps(
+        body.model_dump(), sort_keys=True, separators=(",", ":"), default=str
+    ).encode("utf-8")
+    if len(canonical_payload) > _MAX_RESULT_BYTES:
         raise HTTPException(status_code=413, detail="result payload is too large")
+    payload_hash = hashlib.sha256(canonical_payload).hexdigest()
+
+    receipt = db.query(JobResultReceipt).filter(JobResultReceipt.job_id == job.id).first()
+    if receipt:
+        if receipt.payload_hash != payload_hash:
+            raise HTTPException(
+                status_code=409,
+                detail="this job already has a different uploaded result",
+            )
+        return {
+            "job_id": job.id,
+            "scan_items_created": receipt.scan_items_created,
+            "evidence_created": receipt.evidence_created,
+            "already_processed": True,
+        }
 
     # The test case id on the job is authoritative: it is what was queued. A
     # mismatched id in the payload means the runner ran something else.
@@ -920,8 +940,13 @@ def upload_job_result(
     )
     if case:
         target = str(((case.spec or {}).get("request") or {}).get("url") or "")[:2000]
-        if not template_id:
-            template_id = case.test_case_id or ""
+        authoritative_id = case.test_case_id or ""
+        if template_id and template_id != authoritative_id:
+            raise HTTPException(
+                status_code=400,
+                detail="result test_case_id does not match the test case queued for this job",
+            )
+        template_id = authoritative_id
 
     created_items = 0
     for finding in body.findings:
@@ -965,6 +990,11 @@ def upload_job_result(
         if execution.get("error"):
             detail["error"] = execution.get("error")
             detail["error_kind"] = execution.get("error_kind")
+        if isinstance(execution.get("response_profile"), dict):
+            # Newer VardrGate versions emit a body-free structural profile.
+            # Preserve it as evidence without coupling this endpoint to that
+            # independently versioned schema.
+            detail["response_profile"] = execution["response_profile"]
         text = json.dumps(redaction.redact_mapping(detail), indent=2, sort_keys=True, default=str)
         db.add(
             Evidence(
@@ -984,10 +1014,17 @@ def upload_job_result(
         created_evidence += 1
 
     log_action(db, current_user["github_id"], "create", "vardrgate_result", job.id, job.program_id)
+    db.add(JobResultReceipt(
+        job_id=job.id,
+        payload_hash=payload_hash,
+        scan_items_created=created_items,
+        evidence_created=created_evidence,
+    ))
     db.commit()
     _sse.notify(job.program_id, {"type": "job_update", "job_id": job.id, "status": job.status})
     return {
         "job_id": job.id,
         "scan_items_created": created_items,
         "evidence_created": created_evidence,
+        "already_processed": False,
     }

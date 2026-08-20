@@ -9,7 +9,8 @@ from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy import or_
+from sqlalchemy import or_, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 import redaction
@@ -149,11 +150,22 @@ def create_exchange(program_id: str, payload: ExchangeCreate, current_user: dict
     ).first()
     now = datetime.now(timezone.utc)
     if not endpoint:
-        endpoint = ApiEndpoint(program_id=program_id, method=payload.method, scheme=parsed.scheme,
-                               host=host, port=parsed.port, path_template=template,
-                               canonical_key=canonical, source="burp", first_seen_at=now, last_seen_at=now)
-        db.add(endpoint)
-        db.flush()
+        try:
+            with db.begin_nested():
+                endpoint = ApiEndpoint(program_id=program_id, method=payload.method, scheme=parsed.scheme,
+                                       host=host, port=parsed.port, path_template=template,
+                                       canonical_key=canonical, source="burp", first_seen_at=now, last_seen_at=now)
+                db.add(endpoint)
+                db.flush()
+        except IntegrityError:
+            # Another Burp promotion created the same operation between our
+            # lookup and insert. Reuse it instead of turning a benign race into
+            # a 500 response.
+            endpoint = db.query(ApiEndpoint).filter(
+                ApiEndpoint.program_id == program_id,
+                ApiEndpoint.method == payload.method,
+                ApiEndpoint.canonical_key == canonical,
+            ).one()
 
     request_headers = redaction.redact_text(payload.request_headers)
     request_body = redaction.redact_text(payload.request_body)
@@ -172,10 +184,17 @@ def create_exchange(program_id: str, payload: ExchangeCreate, current_user: dict
     )
     db.add(row)
     db.flush()
-    endpoint.observation_count += 1
-    endpoint.last_seen_at = now
+    db.execute(
+        update(ApiEndpoint)
+        .where(ApiEndpoint.id == endpoint.id)
+        .values(
+            observation_count=ApiEndpoint.observation_count + 1,
+            last_seen_at=now,
+        )
+    )
     log_action(db, current_user["github_id"], "create", "api_exchange", row.id, program_id)
     db.commit()
+    db.refresh(endpoint)
     db.refresh(row)
     return {"endpoint": _endpoint_dict(endpoint), "exchange": _exchange_dict(row)}
 

@@ -512,6 +512,19 @@ class ScanJob(Base):
     events = relationship("JobEvent", back_populates="job", cascade="all, delete-orphan", order_by="JobEvent.created_at")
 
 
+class JobResultReceipt(Base):
+    """Idempotency receipt for a runner result accepted by the control plane."""
+
+    __tablename__ = "job_result_receipts"
+
+    id = Column(String, primary_key=True, default=new_uuid)
+    job_id = Column(String, ForeignKey("scan_jobs.id", ondelete="CASCADE"), nullable=False, unique=True)
+    payload_hash = Column(String(64), nullable=False)
+    scan_items_created = Column(Integer, nullable=False, default=0)
+    evidence_created = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+
+
 class RunnerHeartbeat(Base):
     __tablename__ = "runner_heartbeats"
     # One row per (user, machine) — upserted on every heartbeat POST so
