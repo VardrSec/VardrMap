@@ -33,11 +33,10 @@ jobs:
       - name: Dependency audit
         run: |
           pip install pip-audit
-          # PYSEC-2026-1325 (CVE-2024-23342): Minerva timing side-channel in the pure-Python
-          # `ecdsa` package, a hard transitive dependency of python-jose with no fixed release.
-          # Not reachable here — VardrMap signs/verifies JWTs with HS256 (HMAC) only, which
-          # never exercises ecdsa. Revisit if we ever adopt EC-based JWTs or python-jose ships a fix.
-          pip-audit -r requirements.txt --ignore-vuln PYSEC-2026-1325
+          # JWTs are verified with PyJWT (HS256/HMAC). python-jose was removed in v0.36.0
+          # because of CVE-2026-85394 (unpatched HS256 algorithm-confusion forgery); dropping
+          # it also removed the `ecdsa` transitive and its PYSEC-2026-1325 ignore.
+          pip-audit -r requirements.txt
 
       - name: Migration consistency check
         run: |
@@ -97,7 +96,13 @@ jobs:
           NEXT_PUBLIC_API_URL: http://localhost:8000
 
       - name: Dependency audit
-        run: npm audit --audit-level=high
+        # Audit production dependencies only. Dev/build-only tooling (eslint
+        # plugins, jest/babel) pulls transitive advisories that are unpatched
+        # upstream (e.g. the braces stack-exhaustion DoS via
+        # @next/eslint-plugin-next) and never ship to the running app, so they
+        # must not block every merge. Anything in the deployed bundle is still
+        # gated at high severity.
+        run: npm audit --omit=dev --audit-level=high
 
   burp-extension:
     name: Burp extension build

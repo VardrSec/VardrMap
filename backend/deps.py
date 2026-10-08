@@ -2,8 +2,9 @@ import hashlib
 import os
 from datetime import datetime, timezone
 
+import jwt
 from fastapi import Depends, Header, HTTPException
-from jose import JWTError, jwt
+from jwt import PyJWTError
 from sqlalchemy.orm import Session
 
 from db import get_db
@@ -69,7 +70,7 @@ def _resolve_jwt(token: str) -> dict[str, str]:
             audience="vardrmap-backend",
             issuer="vardrmap-frontend",
         )
-    except JWTError:
+    except PyJWTError:
         raise HTTPException(status_code=401, detail="Unauthorized")
     github_id = payload.get("sub")
     if not github_id:

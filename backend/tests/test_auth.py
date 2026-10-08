@@ -26,7 +26,7 @@ def test_expired_token_returns_401(client):
 
 
 def test_wrong_audience_returns_401(client):
-    from jose import jwt
+    import jwt
     token = jwt.encode(
         {"sub": "gh_user1", "aud": "wrong-audience", "iss": "vardrmap-frontend"},
         "test-secret-key-for-pytest-needs-32-chars!!",

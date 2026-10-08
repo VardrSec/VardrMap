@@ -10,7 +10,7 @@ os.environ["ALLOWED_ORIGINS"] = "http://localhost:3000"
 import pytest
 from datetime import datetime, timedelta, timezone
 from fastapi.testclient import TestClient
-from jose import jwt
+import jwt
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
