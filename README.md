@@ -139,3 +139,15 @@ See [docs/implementation-roadmap.md](docs/implementation-roadmap.md) for the pha
 - DB table rename (`programs` → `engagements`) and retirement of the legacy path middleware
 
 Shipped: policy evaluation and stop-work (v0.24), organizations (v0.25), asset graph (v0.26), evidence with redaction (v0.27), advisory scope (v0.29). VardrRunner lives in [its own repo](https://github.com/VardrSec/VardrRunner).
+
+---
+
+## License
+
+Copyright (C) 2026 Jorge Aquino.
+
+VardrMap is free software licensed under the **GNU Affero General Public License v3.0**. You may use, study, modify, and redistribute it under those terms — see [`LICENSE`](LICENSE) for the full text. Because VardrMap is typically run as a network service, the AGPL's §13 applies: **if you run a modified version and let others interact with it over a network, you must offer them the complete corresponding source of your modified version.**
+
+As the sole copyright holder, Jorge Aquino can also make VardrMap available under separate commercial terms. If the AGPL does not fit your use, contact the author about a commercial license.
+
+VardrRunner is distributed separately under the MIT license to keep the client easy to adopt.
