@@ -96,7 +96,13 @@ jobs:
           NEXT_PUBLIC_API_URL: http://localhost:8000
 
       - name: Dependency audit
-        run: npm audit --audit-level=high
+        # Audit production dependencies only. Dev/build-only tooling (eslint
+        # plugins, jest/babel) pulls transitive advisories that are unpatched
+        # upstream (e.g. the braces stack-exhaustion DoS via
+        # @next/eslint-plugin-next) and never ship to the running app, so they
+        # must not block every merge. Anything in the deployed bundle is still
+        # gated at high severity.
+        run: npm audit --omit=dev --audit-level=high
 
   burp-extension:
     name: Burp extension build
