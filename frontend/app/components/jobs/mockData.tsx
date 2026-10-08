@@ -75,6 +75,34 @@ export const TOOLS: Record<string, ToolDef> = {
       { key: "limit", label: "Limit", type: "number", placeholder: "500" },
     ],
   },
+  katana: {
+    id: "katana",
+    label: "katana",
+    glyph: "◬",
+    blurb: "Crawl sites for endpoints",
+    yields: "endpoints",
+    yieldsTo: "recon",
+    sources: ["recon", "scope"],
+    config: [
+      { key: "depth", label: "Depth", type: "number", placeholder: "3" },
+      { key: "limit", label: "Limit", type: "number", placeholder: "100" },
+      { key: "js_crawl", label: "Parse JavaScript", type: "toggle", default: false },
+    ],
+  },
+  gau: {
+    id: "gau",
+    label: "gau",
+    glyph: "◷",
+    blurb: "Archived URLs from public sources (passive)",
+    yields: "archived URLs",
+    yieldsTo: "recon",
+    // Like subfinder, gau reads the engagement's wildcard scope entries.
+    sources: ["scope"],
+    config: [
+      { key: "subs", label: "Include subdomains", type: "toggle", default: true },
+      { key: "providers", label: "Providers", type: "text", placeholder: "wayback,commoncrawl,otx,urlscan" },
+    ],
+  },
   vardrgate_api_test: {
     id: "vardrgate_api_test",
     label: "vardrgate",

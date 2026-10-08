@@ -4,6 +4,7 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 | Version | Date | Summary |
 |---|---|---|
+| [v0.37.0](changelog/v0.37.0.md) | 2026-10-08 | **katana** (crawler) and **gau** (archived URLs) as queueable job types and recon imports, with queue-time config validation; composer and import UI entries. Fix: URL recon imports no longer store duplicates from within one upload |
 | [v0.36.0](changelog/v0.36.0.md) | 2026-10-07 | **Security** — replace `python-jose` (unpatched critical CVE-2026-85394, HS256 forgery) with `PyJWT` for JWT verification; drop the obsolete `ecdsa` audit ignore. No auth-behaviour or token-format change |
 | [v0.35.0](changelog/v0.35.0.md) | 2026-10-07 | Relicensed from MIT to **AGPL-3.0**; README License section; `CONTRIBUTING.md` with a Developer Certificate of Origin sign-off requirement. No code or behavior change |
 | [v0.34.1](changelog/v0.34.1.md) | 2026-08-20 | VardrGate result integrity and validation parity; concurrent-safe Burp ingestion; paginated API Surface; richer Burp source metadata |
