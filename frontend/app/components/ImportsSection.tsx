@@ -37,6 +37,8 @@ export default function ImportsSection({ engagement }: { engagement: Engagement 
               <option value="ffuf">ffuf</option>
               <option value="httpx">httpx</option>
               <option value="nuclei">nuclei</option>
+              <option value="katana">katana</option>
+              <option value="gau">gau</option>
             </select>
           </div>
           <div className="md:col-span-2">

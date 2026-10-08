@@ -56,7 +56,7 @@ class EventCreate(BaseModel):
 # stored test case rather than being resolved from scope or recon.
 _VARDRGATE = "vardrgate_api_test"
 
-_VALID_TOOLS = {"httpx", "nuclei", "subfinder", "nmap", "dnsx", "naabu", _VARDRGATE}
+_VALID_TOOLS = {"httpx", "nuclei", "subfinder", "nmap", "dnsx", "naabu", "katana", "gau", _VARDRGATE}
 _VALID_SOURCES = {"scope", "recon"}
 
 # Per-tool allowed config keys. Keys not in this set are rejected.
@@ -67,11 +67,16 @@ _TOOL_CONFIG_KEYS: dict[str, set[str]] = {
     "nmap":      {"top_ports", "timing"},
     "dnsx":      {"limit", "timeout"},
     "naabu":     {"top_ports", "limit", "timeout"},
+    "katana":    {"limit", "status_code", "depth", "js_crawl", "timeout"},
+    "gau":       {"subs", "providers", "timeout"},
     # Only the reference. The spec is stored in authorization_test_cases and
     # inlined at hand-off, which keeps this config flat like every other tool's.
     _VARDRGATE:  {"test_case_id", "timeout"},
 }
 _NUCLEI_SEVERITIES = {"info", "low", "medium", "high", "critical"}
+_GAU_PROVIDERS = {"wayback", "commoncrawl", "otx", "urlscan"}
+# Boolean config keys. A form posts them as "true"/"false"; JSON callers send booleans.
+_BOOL_CONFIG_KEYS = {("katana", "js_crawl"), ("gau", "subs")}
 
 # Config keys parsed as plain integers, with the bounds VardrRunner enforces.
 # Keeping the bounds here means a bad value is refused at queue time rather than
@@ -82,6 +87,10 @@ _INT_CONFIG_BOUNDS: dict[tuple[str, str], tuple[int, int]] = {
     ("naabu", "top_ports"):  (1, 65_535),
     ("naabu", "limit"):      (1, 1_000_000),
     ("naabu", "timeout"):    (1, 86_400),
+    ("katana", "limit"):     (1, 1_000_000),
+    ("katana", "depth"):     (1, 10),
+    ("katana", "timeout"):   (1, 86_400),
+    ("gau", "timeout"):      (1, 86_400),
 }
 
 
@@ -142,6 +151,22 @@ def _validate_job_config(tool_type: str, config: dict) -> None:
                 raise ValueError
         except (TypeError, ValueError):
             raise HTTPException(status_code=400, detail="nmap config.timing must be 0-4")
+    for tool, key in _BOOL_CONFIG_KEYS:
+        if tool != tool_type or key not in config or config[key] in (None, ""):
+            continue
+        value = config[key]
+        if not (isinstance(value, bool) or str(value).strip().lower() in ("true", "false")):
+            raise HTTPException(status_code=400, detail=f"{tool_type} config.{key} must be true or false")
+    if tool_type == "gau" and config.get("providers"):
+        raw = config["providers"]
+        parts = raw if isinstance(raw, list) else str(raw).split(",")
+        names = [str(p).strip() for p in parts if str(p).strip()]
+        bad = sorted(set(names) - _GAU_PROVIDERS)
+        if bad:
+            raise HTTPException(
+                status_code=400,
+                detail=f"gau providers must be wayback/commoncrawl/otx/urlscan, got: {bad}",
+            )
     for key, (low, high) in (
         (k, bounds) for (t, k), bounds in _INT_CONFIG_BOUNDS.items() if t == tool_type
     ):

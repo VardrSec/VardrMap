@@ -1,5 +1,6 @@
 import json
 from typing import Any
+from urllib.parse import urlsplit
 
 from fastapi import HTTPException
 
@@ -98,5 +99,79 @@ def parse_nuclei(items: list[dict[str, Any]], program_id: str) -> list[ScanItem]
             status="new",
             cwe=strip_html(",".join(classification.get("cwe-id")) if isinstance(classification.get("cwe-id"), list) else str(classification.get("cwe-id") or "")),
             cvss=strip_html(str(classification.get("cvss-score") or "")),
+        ))
+    return out
+
+
+def _web_url(raw: Any) -> tuple[str, str, str] | None:
+    """(url, host, path) for an http(s) URL, or None for anything else.
+
+    Archive and crawler output routinely includes mailto:, javascript:, data: and
+    malformed URLs; none of those are recon targets.
+    """
+    if not isinstance(raw, str) or not raw.strip():
+        return None
+    url = raw.strip()
+    try:
+        parts = urlsplit(url)
+    except ValueError:
+        return None
+    if parts.scheme.lower() not in ("http", "https") or not parts.hostname:
+        return None
+    return url, parts.hostname, parts.path or "/"
+
+
+def _as_int(value: Any) -> int | None:
+    return value if isinstance(value, int) and not isinstance(value, bool) else None
+
+
+def parse_katana(items: list[dict[str, Any]], program_id: str) -> list[ReconItem]:
+    """Crawled endpoints from katana.
+
+    Accepts the compact records VardrRunner uploads (url/status_code/content_length/
+    content_type) and katana's own JSONL (request.endpoint, response.*), so a file
+    exported straight from katana imports too. Response bodies are never read.
+    """
+    out = []
+    for item in items:
+        request = item.get("request") if isinstance(item.get("request"), dict) else {}
+        response = item.get("response") if isinstance(item.get("response"), dict) else {}
+        web = _web_url(item.get("url") or request.get("endpoint"))
+        if web is None:
+            continue
+        url, host, path = web
+        content_type = item.get("content_type")
+        if content_type is None:
+            headers = response.get("headers") if isinstance(response.get("headers"), dict) else {}
+            content_type = next(
+                (v for k, v in headers.items() if str(k).lower() == "content-type"), ""
+            )
+        out.append(ReconItem(
+            program_id=program_id,
+            source="katana",
+            url=strip_html(url),
+            host=strip_html(host),
+            path=strip_html(path),
+            status_code=_as_int(item.get("status_code", response.get("status_code"))),
+            length=_as_int(item.get("content_length", response.get("content_length"))),
+            content_type=strip_html(str(content_type or ""))[:200],
+        ))
+    return out
+
+
+def parse_gau(items: list[dict[str, Any]], program_id: str) -> list[ReconItem]:
+    """Archived URLs from gau (``{"url": ...}`` per line)."""
+    out = []
+    for item in items:
+        web = _web_url(item.get("url"))
+        if web is None:
+            continue
+        url, host, path = web
+        out.append(ReconItem(
+            program_id=program_id,
+            source="gau",
+            url=strip_html(url),
+            host=strip_html(host),
+            path=strip_html(path),
         ))
     return out

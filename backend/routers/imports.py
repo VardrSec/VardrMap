@@ -10,7 +10,15 @@ from db import get_db
 from deps import get_current_user, get_engagement_or_404, log_action, require_member_write
 from models import ImportRecord, Engagement, ReconItem, User
 from notifications import send_webhook, severity_meets_threshold
-from parsers import normalize_to_list, parse_ffuf, parse_httpx, parse_json_or_jsonl, parse_nuclei
+from parsers import (
+    normalize_to_list,
+    parse_ffuf,
+    parse_gau,
+    parse_httpx,
+    parse_json_or_jsonl,
+    parse_katana,
+    parse_nuclei,
+)
 from schemas import ToolType
 from serializers import serialize_import_record, serialize_engagement
 
@@ -99,6 +107,11 @@ def _dedup_recon(
             continue
         if not item.url and item.host and item.host in existing_hosts:
             continue
+        # Also skip repeats within this upload, not only rows already stored.
+        if item.url:
+            existing_urls.add(item.url)
+        elif item.host:
+            existing_hosts.add(item.host)
         item.first_seen_at = now
         new_items.append(item)
 
@@ -205,14 +218,17 @@ async def import_results(
     new_count = 0
     updated_count = 0
 
-    if tool_type == "ffuf":
-        recon_items = parse_ffuf(items, program_id)
-        new_items, new_count = _dedup_recon(db, recon_items, program_id, "ffuf")
+    url_parsers = {"ffuf": parse_ffuf, "katana": parse_katana, "gau": parse_gau}
+    if tool_type in url_parsers:
+        # URL-shaped recon: only rows not already seen for this engagement and
+        # source are stored, so re-importing (or chunked uploads) never duplicates.
+        recon_items = url_parsers[tool_type](items, program_id)
+        new_items, new_count = _dedup_recon(db, recon_items, program_id, tool_type)
         for r in new_items:
             r.job_id = job_id
             db.add(r)
         db.flush()
-        _link_assets(db, program_id, new_items, "ffuf")
+        _link_assets(db, program_id, new_items, tool_type)
         imported_count = len(new_items)
 
     elif tool_type == "httpx":

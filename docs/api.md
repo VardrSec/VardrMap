@@ -549,7 +549,7 @@ Delete a manual test.
 ## Recon
 
 ### `GET /engagements/{program_id}/recon`
-List recon items for a engagement, with optional filters. Items come from ffuf or httpx imports.
+List recon items for a engagement, with optional filters. Items come from ffuf, httpx, katana, and gau imports (and subfinder/dnsx via httpx-format uploads).
 
 **Query parameters**
 | Parameter | Default | Constraints | Description |
@@ -692,7 +692,7 @@ Upload tool output for parsing and storage. Accepts `multipart/form-data`.
 **Form fields**
 | Field | Type | Description |
 |---|---|---|
-| `tool_type` | string | `ffuf`, `httpx`, or `nuclei` |
+| `tool_type` | string | `ffuf`, `httpx`, `nuclei`, `katana`, or `gau` |
 | `file` | file | `.json` or `.jsonl` output file |
 | `job_id` | string (optional) | Scan job that produced this output; stamped onto every new recon/scan item for provenance. VardrRunner passes the id of the job it is executing. |
 
@@ -756,7 +756,7 @@ Queue a new scan job.
   "depends_on": null
 }
 ```
-- `tool_type`: `"httpx"`, `"nuclei"`, `"subfinder"`, `"nmap"`, `"dnsx"`, `"naabu"`, or `"vardrgate_api_test"`
+- `tool_type`: `"httpx"`, `"nuclei"`, `"subfinder"`, `"nmap"`, `"dnsx"`, `"naabu"`, `"katana"`, `"gau"`, or `"vardrgate_api_test"`
 - `target_source`: `"scope"` or `"recon"`
 - `config` (optional): tool-specific options. Unknown keys are rejected.
 
@@ -768,6 +768,8 @@ Queue a new scan job.
   | `nmap` | `top_ports` (1–65535), `timing` (0–4) |
   | `dnsx` | `limit` (1–1000000), `timeout` (1–86400 s) |
   | `naabu` | `top_ports` (1–65535), `limit` (1–1000000), `timeout` (1–86400 s) |
+  | `katana` | `depth` (1–10), `js_crawl` (`true`/`false`), `limit` (1–1000000), `status_code`, `timeout` (1–86400 s) |
+  | `gau` | `subs` (`true`/`false`), `providers` (any of `wayback`, `commoncrawl`, `otx`, `urlscan`; comma string or list), `timeout` (1–86400 s) |
   | `vardrgate_api_test` | `test_case_id` (required), `timeout` |
 
   Integer bounds mirror the ones VardrRunner enforces, so an out-of-range value is refused at queue time rather than failing on the operator's machine after the job is claimed.
@@ -1266,7 +1268,7 @@ Create a recurring scan.
 **Request body**
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `tool_type` | string | yes | `httpx`, `nuclei`, `subfinder`, `nmap`, `dnsx`, `naabu`, or `vardrgate_api_test` |
+| `tool_type` | string | yes | `httpx`, `nuclei`, `subfinder`, `nmap`, `dnsx`, `naabu`, `katana`, `gau`, or `vardrgate_api_test` |
 | `target_source` | string | yes | `scope` or `recon` |
 | `config` | object | no | Tool config, same validation as job creation |
 | `interval` | string | yes | `hourly`, `daily`, or `weekly` |
@@ -1315,7 +1317,7 @@ Create a saved profile. `201` on success.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `name` | string | yes | 1–100 chars |
-| `tool_type` | string | yes | `httpx`, `nuclei`, `subfinder`, `nmap`, `dnsx`, `naabu`, or `vardrgate_api_test` |
+| `tool_type` | string | yes | `httpx`, `nuclei`, `subfinder`, `nmap`, `dnsx`, `naabu`, `katana`, `gau`, or `vardrgate_api_test` |
 | `target_source` | string | yes | `scope` or `recon` |
 | `config` | object | no | Tool config, same validation as job creation |
 
@@ -1501,7 +1503,9 @@ Remove a collaborator. Owner only.
 ## Imports (updated)
 
 ### `POST /engagements/{program_id}/imports`
-The response now includes `new_count` for httpx and ffuf imports — the number of recon items that were not previously seen for this engagement. Re-importing the same file a second time will produce `imported_count: 0, new_count: 0`. A new `first_seen_at` timestamp is set on each unique recon item at discovery time and never overwritten. A webhook fires (if configured) when `new_count > 0` for httpx imports.
+The response now includes `new_count` for httpx, ffuf, katana, and gau imports — the number of recon items that were not previously seen for this engagement. Re-importing the same file a second time will produce `imported_count: 0, new_count: 0`. A new `first_seen_at` timestamp is set on each unique recon item at discovery time and never overwritten. A webhook fires (if configured) when `new_count > 0` for httpx imports.
+
+**katana** imports accept VardrRunner's compact records (`url`, `status_code`, `content_length`, `content_type`) or katana's own JSONL (`request.endpoint`, `response.*`); response bodies are never read or stored. **gau** imports take `{"url": ...}` per line. For both, only `http`/`https` URLs are kept (archives routinely include `mailto:`, `javascript:`, and malformed entries), host and path are derived from the URL, and duplicates are dropped both against stored rows and within the upload.
 
 Updated response shape:
 ```json
