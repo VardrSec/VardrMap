@@ -4,6 +4,7 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 | Version | Date | Summary |
 |---|---|---|
+| [v0.36.0](changelog/v0.36.0.md) | 2026-10-07 | **Security** — replace `python-jose` (unpatched critical CVE-2026-85394, HS256 forgery) with `PyJWT` for JWT verification; drop the obsolete `ecdsa` audit ignore. No auth-behaviour or token-format change |
 | [v0.34.1](changelog/v0.34.1.md) | 2026-08-20 | VardrGate result integrity and validation parity; concurrent-safe Burp ingestion; paginated API Surface; richer Burp source metadata |
 | [v0.34.0](changelog/v0.34.0.md) | 2026-08-18 | Burp-assisted API Surface — explicit request/response promotion, canonical operation inventory, identity/status visualization, and two-stage secret redaction |
 | [v0.33.0](changelog/v0.33.0.md) | 2026-08-17 | **Security** — security headers were absent from CORS preflight responses (middleware ordering); HSTS now production-only. **Breaking** — report statuses become a client-deliverable lifecycle. Pentest-first framing and engagement creation, engagement status panel, constant-query engagement list, corrected API contract drift |
