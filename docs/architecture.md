@@ -162,6 +162,7 @@ scan_items
 import_records
   id (PK), program_id (FK)
   tool_type, filename (always "redacted"), imported_count
+  job_id (FK -> scan_jobs.id, SET NULL, nullable, indexed - the job that produced the import)
   created_at
 
 api_keys
@@ -277,6 +278,36 @@ job_result_receipts
   scan_items_created, evidence_created
   created_at
 
+job_result_links
+  id (PK)
+  job_id (FK -> scan_jobs.id, CASCADE DELETE, indexed)
+  recon_id | scan_id | service_id (each a nullable FK, CASCADE DELETE, indexed;
+    a CHECK constraint requires exactly one to be set)
+  UNIQUE (job_id, recon_id), (job_id, scan_id), (job_id, service_id)
+
+finding_activities
+  id (PK)
+  program_id (FK -> programs.id, CASCADE DELETE, indexed)
+  finding_id (FK -> findings.id, CASCADE DELETE, indexed)
+  kind ("created"|"updated"|"baseline"|"remediation"|"retest"), outcome (nullable)
+  notes (redacted), actor (github_id)
+  snapshot (JSON - the finding as it stood, redacted)
+  evidence (JSON - [{id, title, content_hash}] references)
+  created_at
+
+engagement_deliverables
+  id (PK)
+  program_id (FK -> programs.id, CASCADE DELETE, indexed)
+  title, latest_revision, created_at
+
+deliverable_revisions
+  id (PK)
+  deliverable_id (FK -> engagement_deliverables.id, CASCADE DELETE, indexed)
+  revision, UNIQUE (deliverable_id, revision)
+  status ("draft"|"internal_review"|"final"|"delivered"|"archived") - the only mutable column
+  snapshot (JSON, redacted), markdown, content_hash (SHA-256 of the markdown)
+  actor, created_at
+
 audit_logs
   id (PK)
   github_id (no FK — records survive user deletion)
@@ -302,7 +333,10 @@ audit_logs
 - `users.webhook_url` (stored plaintext — it must be usable, unlike hashed API keys; only ever returned to its owner) and `users.notify_min_severity` drive outbound notifications, sent via FastAPI BackgroundTasks so webhook latency never delays API responses. URLs are validated against an SSRF guard (HTTPS only, no localhost/private/link-local targets).
 - `job_events` are appended by VardrRunner via `POST /jobs/{id}/events` at each lifecycle stage. The frontend Terminal polls `GET /jobs/{id}/events` (3 s interval while job is pending/running, stops on terminal state). Events cascade-delete with their parent job. Rate-limited to 600/min.
 - **Pipelines** (`POST /programs/{id}/pipelines`) create an ordered chain of `scan_jobs` linked by `depends_on`. A dependent stage is withheld from `GET /jobs/pending` until its parent is `done`; the runner's own poll drives the clock (same pattern as scheduled scans). If a parent `failed`, `GET /jobs/pending` auto-fails the dependent stage so it never hangs. The endpoint accepts any valid ordered chain. The UI offers named chains from `PIPELINES` (`frontend/app/components/jobs/mockData.tsx`) — Attack Surface (subfinder → dnsx → httpx → nuclei), Host Enumeration (naabu → nmap → httpx), Content Discovery (subfinder → httpx → katana → gau), and API Assessment — with each stage individually includable, so it may post any ordered subset. `depends_on` is linked sequentially over whatever arrives, so a subset still chains correctly.
-- **Provenance:** `recon_items.job_id` and `scan_items.job_id` record which `scan_job` produced each row (stamped from the optional `job_id` form field on `POST /imports`; null for manual uploads). `GET /programs/{id}/recon?job_id=` and `GET /programs/{id}/scans?job_id=` filter by it, so the Terminal can deep-link from a finished job to exactly the rows it yielded.
+- **Provenance:** `recon_items.job_id` and `scan_items.job_id` record which `scan_job` *created* each row (from the optional `job_id` on `POST /imports`; null for manual uploads). Because deduplication means a later job often re-observes a row an earlier job created, `job_result_links` additionally records every row a job *observed* - recon, scan and service - so "what did this run find" stays answerable after enrichment or de-duplication. The `job_id` is validated against the engagement's own jobs (`404` otherwise): it is a real foreign key, and an unvalidated one could link another engagement's job. `GET /programs/{id}/recon?job_id=`, `.../scans?job_id=` and `.../services?job_id=` filter by it, so the Terminal can deep-link from a finished job to exactly the rows it yielded. VardrRunner passes the job id on every upload.
+- **Finding history:** every finding create and update appends a `finding_activities` snapshot (the first update of a pre-existing finding records a `baseline` of its prior state, under a row lock). Remediation notes and retests are further activity kinds; a retest requires an outcome. Snapshots and notes pass through the secret redactor before storage, and evidence is referenced by title and SHA-256 so its integrity survives later retention. History is deleted with its finding (the audit log retains that it happened).
+- **Deliverables:** `engagement_deliverables` / `deliverable_revisions` are the client-facing report. A revision freezes the scope, authorizations, selected findings and evidence and retest history at save time, with rendered Markdown and its SHA-256; only `status` changes afterwards. Saves use optimistic concurrency (`base_revision`, `409` if stale) and the snapshot is redacted and capped at 4 MiB. Evidence is rendered as indented blocks so target-controlled text cannot escape the report, and the UI renders the Markdown without raw HTML, with images replaced by text and links filtered.
+- **Case authoring:** `POST /test-cases/preview` drafts VardrGate cases from observed API operations or an OpenAPI document and stores nothing; `POST /test-cases/reviewed` saves them only with an explicit `reviewed: true`. Drafts never copy credentials or example values, never fetch `$ref`s, and start with every access decision `skip`, because observed responses do not establish who *should* have access.
 - **AI triage** (`POST /programs/{id}/scans/triage`) sends a batch of un-promoted `scan_items` to Claude (Haiku) and returns a per-item `priority`/`false_positive`/`rationale`. Unlike `findings/{id}/suggest` (which enriches an already-created finding), triage is the first pass over raw tool output. Only ids present in the request are echoed back, so the model cannot smuggle in other rows. Requires `ANTHROPIC_API_KEY`.
 - `scan_profiles` are reusable tool + config presets per program, validated identically to `scan_jobs.config`. They let the Composer queue a frequently-used scan in one click. No FK from jobs to profiles — a profile is a template, copied into a job at queue time.
 - `authorization_test_cases` store VardrGate specs per engagement. Unlike a scan profile, a test case is **referenced** rather than copied: a job carries `config = {"test_case_id": ...}` and the spec is inlined when the job is handed to a runner. That keeps `scan_jobs.config` flat for validation, lets one case back many runs, and means revising a case does not require re-queueing. `spec` is stored verbatim because VardrGate owns that schema and is free to extend it without a migration here. **Credential values are never stored** — identities reference secrets via `value_env` / `value_keychain`, resolved by VardrRunner on the operator's machine; a literal non-empty `value` is rejected on write.

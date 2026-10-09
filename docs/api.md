@@ -428,6 +428,43 @@ Requires `ANTHROPIC_API_KEY` to be set on the server. Returns `503` if the key i
 
 **Rate limit:** shares the global 200/min default.
 
+### Finding history and activity
+
+Every create and update of a finding appends an immutable snapshot, so the finding's history is
+kept even as the live record changes. The first update of a finding that predates this feature
+first records a `baseline` snapshot of its prior state. Snapshots and notes are passed through the
+secret redactor before they are stored. Deleting a finding deletes its history; the audit log keeps
+the record that it happened.
+
+### `GET /engagements/{program_id}/findings/{finding_id}/activity`
+The finding's timeline, newest first. Query: `limit` (1-200, default 50), `offset`.
+
+```json
+{
+  "activities": [
+    { "id": "<uuid>", "kind": "retest", "outcome": "verified_fixed", "notes": "...",
+      "actor": "<github_id>", "created_at": "2026-10-09T01:00:00",
+      "snapshot": { "...": "the finding as it stood" },
+      "evidence": [ { "id": "<uuid>", "title": "Retest output", "content_hash": "<sha256>" } ] }
+  ],
+  "total": 1, "offset": 0, "limit": 50
+}
+```
+`kind` is `created`, `updated`, `baseline`, `remediation`, or `retest`.
+
+### `POST /engagements/{program_id}/findings/{finding_id}/activity`
+Record a remediation note or a completed retest. Members and owners only (viewers get `403`).
+
+| Field | Type | Notes |
+|---|---|---|
+| `kind` | `remediation` or `retest` | required |
+| `notes` | string | required, 1-10000 chars; HTML stripped |
+| `outcome` | `still_open`, `partially_fixed`, `verified_fixed`, `inconclusive` | **required for a retest, rejected for remediation** (`400`) |
+| `evidence_ids` | string[] (max 50) | existing evidence on this finding; each is recorded with its title and SHA-256 so integrity survives later retention |
+
+Returns the new entry (`201`). A verified retest does **not** change the finding's status. `404` for
+an unknown finding or evidence that does not belong to it.
+
 ---
 
 ## Reports
@@ -490,6 +527,51 @@ Delete a report.
 ```json
 { "message": "Report deleted" }
 ```
+
+---
+
+## Engagement Deliverables
+
+Client-facing reports assembled from the engagement's testing record. Each save creates a new
+**immutable revision**: a frozen snapshot of the scope, authorizations, selected findings and
+evidence, and remediation/retest history, plus its rendered Markdown and a SHA-256 of that
+Markdown. Only the workflow `status` of a revision changes after it is created. The whole snapshot
+is passed through the secret redactor and capped at 4 MiB (`413` above that). Evidence is rendered
+as indented blocks so target-controlled text cannot break out of the report.
+
+### `GET /engagements/{program_id}/deliverables`
+List deliverables, newest first. Query: `limit` (1-200, default 50), `offset`.
+`{ "deliverables": [ { "id", "title", "latest_revision", "created_at" } ], "total": 1 }`
+
+### `POST /engagements/{program_id}/deliverables`
+Create a deliverable and its revision 1 (`201`). Members and owners only.
+
+| Field | Type | Notes |
+|---|---|---|
+| `title` | string | required, max 200 |
+| `executive_summary`, `methodology`, `limitations`, `remediation_priorities` | string | each max 20000; HTML stripped |
+| `finding_ids` | string[] or null | `null` (default) includes **all** findings at save time; `[]` includes none |
+| `evidence_ids` | string[] (max 100) | evidence to copy into the revision; must not belong to an omitted finding (`400`) |
+
+`404` if a listed finding or evidence item is not in this engagement.
+
+### `POST /engagements/{program_id}/deliverables/{report_id}/revisions`
+Save a new revision (`201`). Same body as create plus **`base_revision`** (required): the revision
+the edit started from. If it is not the latest, the request fails with `409` and nothing is saved,
+so concurrent edits cannot silently overwrite each other.
+
+### `GET /engagements/{program_id}/deliverables/{report_id}/revisions`
+Revision list without content. Query: `limit`, `offset`.
+
+### `GET /engagements/{program_id}/deliverables/{report_id}/revisions/{revision}`
+One revision with its `snapshot` and `markdown`.
+
+### `GET /engagements/{program_id}/deliverables/{report_id}/revisions/{revision}/markdown`
+The Markdown as a `text/markdown` download.
+
+### `PATCH /engagements/{program_id}/deliverables/{report_id}/revisions/{revision}`
+Set the revision's workflow `status` (`draft`, `internal_review`, `final`, `delivered`, `archived`).
+Content is never edited; to change it, save a new revision.
 
 ---
 
@@ -558,7 +640,8 @@ List recon items for a engagement, with optional filters. Items come from ffuf, 
 | `offset` | 0 | ≥0 | Number of items to skip |
 | `search` | (none) | — | Full-text filter across URL, host, path, title |
 | `status_code` | (none) | — | Filter by HTTP status code (e.g. `200`) |
-| `job_id` | (none) | — | Only items produced by this scan job (provenance link) |
+| `source` | (none) | max 30 chars | Only items from this tool (`httpx`, `katana`, `gau`, `ffuf`); case-insensitive |
+| `job_id` | (none) | — | Items this job **observed**, including rows an earlier job first created (job result links) |
 
 **Response**
 ```json
@@ -694,7 +777,7 @@ Upload tool output for parsing and storage. Accepts `multipart/form-data`.
 |---|---|---|
 | `tool_type` | string | `ffuf`, `httpx`, `nuclei`, `katana`, or `gau` |
 | `file` | file | `.json` or `.jsonl` output file |
-| `job_id` | string (optional) | Scan job that produced this output; stamped onto every new recon/scan item for provenance. VardrRunner passes the id of the job it is executing. |
+| `job_id` | string (optional) | Scan job that produced this output. **Must be a job of this engagement, otherwise `404` and nothing is imported** (a made-up id, or another engagement's job, is refused). Stamped onto new rows, and every row the job observed - including ones that already existed - is linked to it. VardrRunner passes the id of the job it is executing. |
 
 **File constraints**
 - Extension: `.json` or `.jsonl`
@@ -848,12 +931,19 @@ Keepalive (every 20 s when idle):
 - `404` — engagement not found or belongs to another user
 
 ### `GET /engagements/{program_id}/jobs`
-List all jobs for a engagement, newest first.
+List jobs for an engagement, newest first.
+
+| Query | Default | Description |
+|---|---|---|
+| `status` | (all) | `pending`, `running`, `done`, or `failed` |
+| `limit` | (all) | 1-500. **Omitted = every job**, so the job board is unchanged |
+| `offset` | 0 | rows to skip |
 
 **Response**
 ```json
-{ "jobs": [ <job_object>, ... ] }
+{ "jobs": [ <job_object>, ... ], "total": 12, "limit": null, "offset": 0 }
 ```
+`total` counts the jobs matching `status`, regardless of paging.
 
 ### `GET /jobs/pending`
 Return `pending` jobs owned by the authenticated user that are eligible to run now, oldest first. Used by VardrRunner to poll for work. Also materializes any due scheduled scans into pending jobs.
@@ -1068,7 +1158,7 @@ new rows. A different second payload returns `409`. The payload's
 - `413` — result payload exceeds 512 KB
 
 ### `GET /jobs/{job_id}/events`
-Frontend polls this to stream job lifecycle events into the Terminal. Returns all events in chronological order.
+Frontend polls this to stream job lifecycle events into the Terminal. Returns events in chronological order. Optional `limit` (1-500) and `offset` page through them; omitting `limit` returns every event. The response also carries `total`, `limit` and `offset`.
 
 **Path params**
 - `job_id` — UUID of the scan job
@@ -1117,7 +1207,7 @@ A service object looks like:
 ```
 
 ### `GET /engagements/{program_id}/services`
-List all services for a engagement, ordered by host then port.
+List services for a engagement, ordered by host then port. Optional `job_id` returns only the services that job observed.
 
 **Response**
 ```json
@@ -1125,7 +1215,7 @@ List all services for a engagement, ordered by host then port.
 ```
 
 ### `POST /engagements/{program_id}/services`
-Bulk-upsert services. VardrRunner posts nmap results here after a scan job completes. Upserts on `(host, port, protocol)` — updates metadata if the combination already exists.
+Bulk-upsert services. VardrRunner posts nmap results here after a scan job completes. Upserts on `(host, port, protocol)` — updates metadata if the combination already exists. Optional body field `job_id` links every service in the request (new or updated) to the job that observed it; it must be a job of this engagement or the request fails with `404`.
 
 **Request body**
 ```json
@@ -1408,6 +1498,34 @@ Permanently delete a case.
 ```
 
 `test_case_id` is VardrGate's own id from `spec.id`, surfaced so a result can be traced back without opening the blob. It is not unique — a case may be revised.
+
+### Drafting cases
+
+Cases can be **drafted** from observed API operations or an OpenAPI document, then saved only after
+a human reviews them. Drafting never stores or queues anything, never copies credentials, request
+bodies, examples or security values from its input, and never infers who *should* have access: every
+generated access decision is `skip`.
+
+### `POST /engagements/{program_id}/test-cases/preview`
+Generate draft cases. Provide **exactly one** of `endpoint_ids` (API-surface operations of this
+engagement, max 100) or `openapi` (an inline OpenAPI 3.x JSON object, max 2 MiB; `$ref`s are
+rejected, never fetched). Also `base_url` (absolute http/https, no credentials, query or variables;
+required for OpenAPI documents without a `servers` entry), `limit` (1-100, default 50), `offset`.
+
+```json
+{ "drafts": [ { "name": "GET /users/{id}", "description": "...", "spec": { "...": "..." } } ],
+  "total": 12, "offset": 0, "limit": 50, "next_offset": null,
+  "review_notes": ["No cases have been stored or queued.", "..."] }
+```
+Each draft has an `anonymous` and a `member` identity (the member's token is a `value_env`
+reference, never a value). `404` for endpoint ids not in this engagement.
+
+### `POST /engagements/{program_id}/test-cases/reviewed`
+Save drafts after review (`201`). Members and owners only. The body must carry **`"reviewed": true`**
+and 1-100 `cases`. Each case is validated like a normal create, and additionally must have a
+concrete http(s) URL (no credentials, fragments, whitespace or `{variables}`), exactly one access
+decision per identity, and at least one that is `allow` or `deny`. Nothing is queued; run a saved case
+from the job composer.
 
 ### Running a case
 
