@@ -159,8 +159,21 @@ def _validate_ffuf_config(config: dict) -> None:
                     "The runner resolves it against its own wordlists directory."
                 ),
             )
+    # The accepted *types* must match VardrRunner's `configs.FfufConfig` exactly.
+    # A type accepted here and refused there clears queue-time validation and then
+    # fails on the operator's machine after a runner has claimed the job, which is
+    # precisely what validating at queue time is meant to prevent. VardrRunner
+    # carries the same table (`test_accepted_types_match_vardrmaps_validator`).
     raw_ext = config.get("extensions")
     if raw_ext not in (None, ""):
+        if not isinstance(raw_ext, (str, list)):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "ffuf config.extensions must be a string or list, got "
+                    f"{type(raw_ext).__name__}"
+                ),
+            )
         parts = raw_ext if isinstance(raw_ext, list) else str(raw_ext).split(",")
         names = [str(p).strip() for p in parts if str(p).strip()]
         normalized = [n if n.startswith(".") else f".{n}" for n in names]
@@ -172,6 +185,17 @@ def _validate_ffuf_config(config: dict) -> None:
             )
     raw_codes = config.get("match_codes")
     if raw_codes not in (None, ""):
+        # A bare status code is fine (`{"match_codes": 200}` is natural over JSON,
+        # and the runner takes it). `bool` is not: `True` is an `int` in Python,
+        # and a status of 1 is nobody's intent.
+        if isinstance(raw_codes, bool) or not isinstance(raw_codes, (str, list, int)):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "ffuf config.match_codes must be a status code, string or list, got "
+                    f"{type(raw_codes).__name__}"
+                ),
+            )
         parts = raw_codes if isinstance(raw_codes, list) else str(raw_codes).split(",")
         codes = [str(p).strip() for p in parts if str(p).strip()]
         if codes != ["all"]:

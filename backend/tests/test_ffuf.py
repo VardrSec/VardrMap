@@ -150,6 +150,37 @@ def test_ffuf_config_rejected_at_queue_time(client, program_id, auth_headers, co
     assert field in res.json()["detail"]
 
 
+@pytest.mark.parametrize(
+    "config, accepted",
+    [
+        # match_codes takes a bare status code: natural over JSON, and the runner
+        # accepts it too.
+        ({"match_codes": 200}, True),
+        ({"match_codes": [200, 403]}, True),
+        ({"match_codes": "200,403"}, True),
+        ({"match_codes": True}, False),
+        ({"match_codes": 3.5}, False),
+        # An extension is never a number, so there is no scalar form to support.
+        ({"extensions": ".php"}, True),
+        ({"extensions": [".php"]}, True),
+        ({"extensions": 3}, False),
+        ({"extensions": True}, False),
+    ],
+)
+def test_accepted_types_match_the_runners(client, program_id, auth_headers, config, accepted):
+    """This validator and VardrRunner's must agree on which types pass.
+
+    VardrRunner carries the same table in
+    `tests/test_ffuf.py::test_accepted_types_match_vardrmaps_validator`. A type
+    accepted here and refused there queues a job that clears validation and then
+    fails on the operator's machine — the failure mode queue-time validation
+    exists to prevent. `{"extensions": 3}` and `{"match_codes": 200}` were each
+    on the wrong side of that line before this test existed.
+    """
+    res = _create_job(client, program_id, auth_headers, tool_type="ffuf", config=config)
+    assert res.status_code == (200 if accepted else 400), res.json()
+
+
 def test_ffuf_rate_cap_cannot_be_disabled(client, program_id, auth_headers):
     """There is no value meaning "unlimited" — the cap bounds load on a client host."""
     for rate in (0, -1, 1_000_000):

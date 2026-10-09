@@ -860,6 +860,8 @@ Queue a new scan job.
 
   **`ffuf.wordlist` is a name, never a path.** It must match `[a-z0-9][a-z0-9_-]{0,39}` — `common`, `api-paths`. VardrRunner resolves that name against `~/.vardrmap/wordlists` on the machine running the scan. A path, a traversal, or a drive letter returns `400`. This is deliberate: were a path accepted, this API could name any file the runner can read, and ffuf would read it and replay its lines at a target. The runner refuses a path too, so accepting one here would only queue a job that cannot run.
 
+  **`ffuf.limit` counts recon rows, not hosts.** VardrRunner collapses ffuf's targets to site roots *after* the limit is applied, so 100 recon URLs that all live on one host consume the default limit and fuzz a single root. Raise `limit`, or use `target_source: "scope"`, when a recon table is dense on few hosts. For the same reason `POST /jobs/preview` reports the resolved recon targets rather than the roots ffuf will fuzz, so for `ffuf` its `count` is an **upper bound** on the hosts touched, not the exact execution set.
+
   **`ffuf.rate` is a safety control, not a tuning knob.** It bounds the load a job can put on a client's host, so it has a ceiling and no value meaning "unlimited"; omitting it gives VardrRunner's default of 50/s. ffuf additionally always runs with auto-calibration, so a host that answers every path with `200` cannot flood recon with phantom endpoints.
 - `depends_on` (optional): id of another job (same engagement, same owner) that must reach `done` before this job becomes eligible in `GET /jobs/pending`.
 
