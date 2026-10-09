@@ -104,3 +104,8 @@ Clients (`routers/clients.py`) track the organisation being tested — required 
 
 ## Roadmap
 Remaining: DB table rename (`programs` → `engagements`, retire legacy path middleware), RBAC / multi-user support, client-facing deliverable generation
+
+A remote MCP server for claude.ai would need authorization on this backend. It is **designed
+but not built**, and is not to be started without agreement: see
+[ADR 0002](docs/adr/0002-remote-mcp-authorization.md), which proposes VardrMap stay an OAuth
+resource server rather than become an authorization server, and lists the open questions.
