@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from db import get_db
 from deps import get_current_user, get_engagement_or_404
-from models import ReconItem
+from models import JobResultLink, ReconItem
 from serializers import serialize_recon_item
 
 router = APIRouter()
@@ -20,11 +20,14 @@ def get_recon(
     search: Optional[str] = None,
     status_code: Optional[int] = None,
     job_id: Optional[str] = None,
+    source: Optional[str] = Query(default=None, max_length=30),
     current_user: dict[str, str] = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     get_engagement_or_404(program_id, current_user, db)
     query = db.query(ReconItem).filter(ReconItem.program_id == program_id)
+    if source:
+        query = query.filter(ReconItem.source == source.strip().lower())
     if search:
         term = f"%{search}%"
         query = query.filter(or_(
@@ -36,7 +39,9 @@ def get_recon(
     if status_code is not None:
         query = query.filter(ReconItem.status_code == status_code)
     if job_id:
-        query = query.filter(ReconItem.job_id == job_id)
+        query = query.filter(or_(ReconItem.job_id == job_id, ReconItem.id.in_(
+            db.query(JobResultLink.recon_id).filter(JobResultLink.job_id == job_id)
+        )))
     total = query.count()
     # Surface enriched/live rows first: a probed host (has a status_code) outranks a
     # bare discovered host, so the Review page doesn't lead with blank rows.

@@ -1,4 +1,5 @@
 "use client";
+import EngagementDeliverables from "./EngagementDeliverables";
 
 import { useCallback, useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
@@ -235,6 +236,7 @@ export default function ReportsSection({ engagement }: { engagement: Engagement 
   return (
     <div className="space-y-7">
       <SectionHeader title="Reports" description="Draft client-ready reports from validated findings." />
+      <EngagementDeliverables key={engagement.id} engagement={engagement} />
       <div className="grid gap-5 xl:grid-cols-2">
         {!isViewer && (
           <Panel title="Draft Report">

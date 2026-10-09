@@ -6,6 +6,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPExcepti
 from sqlalchemy.orm import Session
 
 import assets as asset_graph
+import provenance
 from db import get_db
 from deps import get_current_user, get_engagement_or_404, log_action, require_member_write
 from models import ImportRecord, Engagement, ReconItem, User
@@ -141,7 +142,7 @@ _HTTPX_ENRICH_FIELDS = ("url", "host", "title", "webserver", "port", "tech", "co
 
 
 def _upsert_recon_httpx(
-    db: Session, incoming: list[ReconItem], program_id: str,
+    db: Session, incoming: list[ReconItem], program_id: str, job_id: str | None = None,
 ) -> tuple[int, int]:
     """Insert genuinely-new httpx hosts and ENRICH existing ones in place — matched
     by normalized host — with live probe data, instead of inserting a duplicate
@@ -180,6 +181,9 @@ def _upsert_recon_httpx(
             if host:
                 by_host[host] = item  # so later rows in this batch enrich, not duplicate
             new_count += 1
+            target = item
+        db.flush()
+        provenance.link_result(db, job_id, "recon", target.id)
 
     db.flush()
     for item in incoming:
@@ -200,6 +204,7 @@ async def import_results(
 ):
     engagement = get_engagement_or_404(program_id, current_user, db)
     require_member_write(engagement, current_user, db)
+    provenance.require_job(db, program_id, job_id)
 
     ext = Path(file.filename or "").suffix.lower()
     if ext not in ALLOWED_EXTENSIONS:
@@ -229,13 +234,21 @@ async def import_results(
             db.add(r)
         db.flush()
         _link_assets(db, program_id, new_items, tool_type)
+        # Deduplication must retain observations from subsequent executions.
+        if job_id:
+            urls = {r.url for r in recon_items if r.url}
+            for row in db.query(ReconItem).filter(
+                ReconItem.program_id == program_id, ReconItem.source == tool_type,
+                ReconItem.url.in_(urls),
+            ).all():
+                provenance.link_result(db, job_id, "recon", row.id)
         imported_count = len(new_items)
 
     elif tool_type == "httpx":
         recon_items = parse_httpx(items, program_id)
         for r in recon_items:
             r.job_id = job_id  # stamped on genuinely-new rows; enriched rows keep their origin
-        new_count, updated_count = _upsert_recon_httpx(db, recon_items, program_id)
+        new_count, updated_count = _upsert_recon_httpx(db, recon_items, program_id, job_id)
         imported_count = new_count + updated_count
 
     elif tool_type == "nuclei":
@@ -245,12 +258,15 @@ async def import_results(
             db.add(s)
         db.flush()
         _link_assets(db, program_id, scan_items, "nuclei")
+        for row in scan_items:
+            provenance.link_result(db, job_id, "scan", row.id)
         imported_count = len(scan_items)
 
     # Store "redacted" instead of the real filename — the original file path
     # often leaks local directory structure and isn't useful after import anyway.
     record = ImportRecord(
         program_id=program_id,
+        job_id=job_id,
         tool_type=tool_type,
         filename="redacted",
         imported_count=imported_count,
