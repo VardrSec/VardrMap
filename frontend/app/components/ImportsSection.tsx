@@ -39,6 +39,7 @@ export default function ImportsSection({ engagement }: { engagement: Engagement 
               <option value="nuclei">nuclei</option>
               <option value="katana">katana</option>
               <option value="gau">gau</option>
+              <option value="dalfox">dalfox</option>
             </select>
           </div>
           <div className="md:col-span-2">
@@ -55,6 +56,7 @@ export default function ImportsSection({ engagement }: { engagement: Engagement 
             <p><span className="font-mono text-[#f59e0b]">ffuf</span> — Recon endpoints and paths</p>
             <p><span className="font-mono text-[#f59e0b]">httpx</span> — Live hosts, titles, technologies</p>
             <p><span className="font-mono text-[#f59e0b]">nuclei</span> — Candidate scan findings</p>
+            <p><span className="font-mono text-[#f59e0b]">dalfox</span> — XSS candidates to verify; re-imports are deduplicated</p>
           </div>
         </div>
       </Panel>

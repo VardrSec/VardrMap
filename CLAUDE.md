@@ -94,6 +94,19 @@ from the request.
 `DashboardSection` and `ReviewSection` are thin tab containers rendering child
 sections with `hideHeader`.
 
+Queueable `tool_type`: `httpx` | `nuclei` | `subfinder` | `nmap` | `dnsx` | `naabu` |
+`katana` | `gau` | `dalfox` | `vardrgate_api_test`. Config keys are allowlisted per tool in
+`routers/jobs.py`, with bounds mirroring VardrRunner's so a bad value is refused at queue
+time rather than failing on the operator's machine.
+
+**Scanner output is a candidate, not a finding.** nuclei and dalfox imports land as
+`scan_items` with `status: "new"`; promoting one is the operator's act. Keep the scanner's
+own signal separate from our severity — dalfox's tier goes in `type`, with
+`detection_method` and `confidence` in their own columns — and never map a tier to a
+confirmed status, however confident the tool is. dalfox imports are deduplicated on the
+query-less URL + `template_id` + tier; never key that on the payload or PoC URL, which
+carry a fresh per-run marker class.
+
 ## Engagement types and statuses
 `engagement_type`: `bug_bounty` | `pentest` | `red_team` | `internal`
 `engagement_status`: `planned` | `active` | `reporting` | `closed`

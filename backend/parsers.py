@@ -31,14 +31,19 @@ def parse_json_or_jsonl(raw: bytes) -> Any:
 
 
 # Different tools wrap their output differently — ffuf wraps results under a
-# "results" key, httpx and nuclei emit a bare array, and sometimes a single-run
-# output is just one object. This flattens all three into the same list shape.
+# "results" key, dalfox puts them under "findings" beside a "meta" envelope,
+# httpx and nuclei emit a bare array, and sometimes a single-run output is just
+# one object. This flattens them all into the same list shape.
+_RESULT_KEYS = ("results", "findings")
+
+
 def normalize_to_list(parsed: Any) -> list[dict[str, Any]]:
     if isinstance(parsed, list):
         return [item for item in parsed if isinstance(item, dict)]
     if isinstance(parsed, dict):
-        if isinstance(parsed.get("results"), list):
-            return [item for item in parsed["results"] if isinstance(item, dict)]
+        for key in _RESULT_KEYS:
+            if isinstance(parsed.get(key), list):
+                return [item for item in parsed[key] if isinstance(item, dict)]
         return [parsed]
     raise HTTPException(status_code=400, detail="Unsupported JSON structure")
 
@@ -99,6 +104,83 @@ def parse_nuclei(items: list[dict[str, Any]], program_id: str) -> list[ScanItem]
             status="new",
             cwe=strip_html(",".join(classification.get("cwe-id")) if isinstance(classification.get("cwe-id"), list) else str(classification.get("cwe-id") or "")),
             cvss=strip_html(str(classification.get("cvss-score") or "")),
+        ))
+    return out
+
+
+# dalfox's tiers, as its own documentation defines them. The tier is the
+# scanner's claim about the match, and it is preserved verbatim in `type` rather
+# than being collapsed into severity: "V" is dalfox asserting exploitability,
+# "R" is a reflection it could not confirm and explicitly asks a human to check.
+_DALFOX_TIERS = {
+    "V": "vulnerable",
+    "R": "reflected",
+    "A": "ast",
+    "I": "informational",
+}
+_DALFOX_DETECTION = {"reflection", "dom-verification", "ast", "oob", "library"}
+_DALFOX_CONFIDENCE = {"high", "low"}
+_SEVERITIES = {"info", "low", "medium", "high", "critical"}
+
+
+def parse_dalfox(items: list[dict[str, Any]], program_id: str) -> list[ScanItem]:
+    """XSS candidates from dalfox (the objects under its ``findings`` key).
+
+    Everything arrives as ``status="new"``. dalfox's own tier is kept in `type`,
+    its detection method and confidence in their own columns. Even its top tier
+    is *dalfox asserting* exploitability, not this platform confirming it, so no
+    tier maps to a confirmed status — promoting a finding stays an operator's
+    act. Response bodies are never stored: `request`/`response` (present with
+    ``--include-all``) are ignored, and the evidence line is bounded.
+    """
+    out = []
+    for item in items:
+        url = item.get("data") or ""
+        tier = _DALFOX_TIERS.get(str(item.get("type") or "").strip().upper(), "")
+        param = strip_html(str(item.get("param") or ""))
+        inject = strip_html(str(item.get("inject_type") or ""))
+        severity = str(item.get("severity") or "").strip().lower()
+        detection = str(item.get("detection_method") or "").strip().lower()
+        confidence = str(item.get("confidence") or "").strip().lower()
+        title = f"XSS in parameter '{param}'" if param else "XSS candidate"
+        if inject:
+            title = f"{title} ({inject})"
+        # dalfox's message_str explains the match; evidence is the reflected
+        # snippet, which comes from the target, so both are sanitized and capped.
+        detail = " ".join(
+            part
+            for part in (
+                strip_html(str(item.get("type_description") or "")),
+                strip_html(str(item.get("message_str") or "")),
+                strip_html(str(item.get("confidence_reason") or "")),
+            )
+            if part
+        )
+        evidence = strip_html(str(item.get("evidence") or ""))[:500]
+        payload = strip_html(str(item.get("payload") or ""))[:500]
+        out.append(ScanItem(
+            program_id=program_id,
+            source="dalfox",
+            # dalfox has no template id. The injection context plus the affected
+            # parameter is the stable identity of a match: it survives a re-run,
+            # unlike the payload and the PoC URL, which carry a per-run marker.
+            # The importer dedupes on it.
+            template_id=":".join(part for part in (inject, param) if part)[:200],
+            title=strip_html(title)[:200],
+            severity=severity if severity in _SEVERITIES else "info",
+            asset=strip_html(url),
+            matched_at=strip_html(url),
+            type=tier,
+            description=" | ".join(
+                part
+                for part in (detail, f"payload: {payload}" if payload else "",
+                             f"evidence: {evidence}" if evidence else "")
+                if part
+            ),
+            status="new",
+            cwe=strip_html(str(item.get("cwe") or "")),
+            detection_method=detection if detection in _DALFOX_DETECTION else "",
+            confidence=confidence if confidence in _DALFOX_CONFIDENCE else "",
         ))
     return out
 

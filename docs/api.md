@@ -680,7 +680,7 @@ Delete all recon items for a engagement. This is a bulk clear operation.
 ## Scans
 
 ### `GET /engagements/{program_id}/scans`
-List scan items with pagination and optional status filter. Items come from nuclei imports.
+List scan items with pagination and optional status filter. Items come from nuclei and dalfox imports.
 
 **Query parameters**
 | Parameter | Default | Constraints | Description |
@@ -688,7 +688,14 @@ List scan items with pagination and optional status filter. Items come from nucl
 | `limit` | 100 | 1–500 | Max items to return |
 | `offset` | 0 | ≥0 | Number of items to skip |
 | `status` | (none) | — | Filter by status value |
-| `job_id` | (none) | — | Only items produced by this scan job (provenance link) |
+| `job_id` | (none) | — | Only items this scan job saw: the ones it first produced **plus** ones an earlier job had already stored that this run observed again. Matches `/recon` and `/services`. **Changed in v0.41.0** — it previously returned only items the job produced, so a deduplicated re-scan appeared to have found nothing |
+
+Each item carries the scanner's own verification signal alongside severity: `type` (the
+scanner's classification of the match — for dalfox its tier: `vulnerable`, `reflected`,
+`ast`, `informational`), `detection_method` (dalfox: `reflection`, `dom-verification`,
+`ast`, `oob`, `library`) and `confidence` (`high`/`low`). These are independent of severity
+and of each other, and none of them is a confirmation: imported matches are always
+`status: "new"`, and promoting one is an operator's act.
 
 **Response**
 ```json
@@ -707,6 +714,8 @@ List scan items with pagination and optional status filter. Items come from nucl
       "status": "new",
       "cwe": "CWE-22",
       "cvss": "9.8",
+      "detection_method": "",
+      "confidence": "",
       "job_id": "<uuid | null>"
     }
   ],
@@ -716,6 +725,24 @@ List scan items with pagination and optional status filter. Items come from nucl
 }
 ```
 `job_id` is the scan job that produced the item (null for manual file imports), enabling a job → its-results provenance link.
+
+`detection_method` and `confidence` are empty for sources that report neither (nuclei today). A dalfox item looks like:
+
+```json
+{
+  "source": "dalfox",
+  "template_id": "inHTML:q",
+  "title": "XSS in parameter 'q' (inHTML)",
+  "severity": "high",
+  "type": "vulnerable",
+  "detection_method": "dom-verification",
+  "confidence": "high",
+  "cwe": "CWE-79",
+  "status": "new"
+}
+```
+
+`template_id` is the injection context and parameter — dalfox has no template id, and this pair is what identifies the same issue across runs, so the importer dedupes on it.
 
 ### `POST /engagements/{program_id}/scans/triage`
 AI triage over **raw** scan items (before promotion to findings). Sends a batch to Claude and returns a prioritized, false-positive-flagged list — turning the nuclei firehose into a ranked queue. Requires `ANTHROPIC_API_KEY` on the server.
@@ -775,7 +802,7 @@ Upload tool output for parsing and storage. Accepts `multipart/form-data`.
 **Form fields**
 | Field | Type | Description |
 |---|---|---|
-| `tool_type` | string | `ffuf`, `httpx`, `nuclei`, `katana`, or `gau` |
+| `tool_type` | string | `ffuf`, `httpx`, `nuclei`, `katana`, `gau`, or `dalfox` |
 | `file` | file | `.json` or `.jsonl` output file |
 | `job_id` | string (optional) | Scan job that produced this output. **Must be a job of this engagement, otherwise `404` and nothing is imported** (a made-up id, or another engagement's job, is refused). Stamped onto new rows, and every row the job observed - including ones that already existed - is linked to it. VardrRunner passes the id of the job it is executing. |
 
@@ -839,7 +866,7 @@ Queue a new scan job.
   "depends_on": null
 }
 ```
-- `tool_type`: `"httpx"`, `"nuclei"`, `"subfinder"`, `"nmap"`, `"dnsx"`, `"naabu"`, `"katana"`, `"gau"`, or `"vardrgate_api_test"`
+- `tool_type`: `"httpx"`, `"nuclei"`, `"subfinder"`, `"nmap"`, `"dnsx"`, `"naabu"`, `"katana"`, `"gau"`, `"dalfox"`, or `"vardrgate_api_test"`
 - `target_source`: `"scope"` or `"recon"`
 - `config` (optional): tool-specific options. Unknown keys are rejected.
 
@@ -853,6 +880,7 @@ Queue a new scan job.
   | `naabu` | `top_ports` (1–65535), `limit` (1–1000000), `timeout` (1–86400 s) |
   | `katana` | `depth` (1–10), `js_crawl` (`true`/`false`), `limit` (1–1000000), `status_code`, `timeout` (1–86400 s) |
   | `gau` | `subs` (`true`/`false`), `providers` (any of `wayback`, `commoncrawl`, `otx`, `urlscan`; comma string or list), `timeout` (1–86400 s) |
+  | `dalfox` | `limit` (1–1000000), `status_code`, `worker` (1–100, concurrency), `delay` (0–10000 ms between requests), `mining` (`true`/`false`, discover parameters), `timeout` (1–86400 s) |
   | `vardrgate_api_test` | `test_case_id` (required), `timeout` |
 
   Integer bounds mirror the ones VardrRunner enforces, so an out-of-range value is refused at queue time rather than failing on the operator's machine after the job is claimed.
@@ -1624,6 +1652,10 @@ Remove a collaborator. Owner only.
 The response now includes `new_count` for httpx, ffuf, katana, and gau imports — the number of recon items that were not previously seen for this engagement. Re-importing the same file a second time will produce `imported_count: 0, new_count: 0`. A new `first_seen_at` timestamp is set on each unique recon item at discovery time and never overwritten. A webhook fires (if configured) when `new_count > 0` for httpx imports.
 
 **katana** imports accept VardrRunner's compact records (`url`, `status_code`, `content_length`, `content_type`) or katana's own JSONL (`request.endpoint`, `response.*`); response bodies are never read or stored. **gau** imports take `{"url": ...}` per line. For both, only `http`/`https` URLs are kept (archives routinely include `mailto:`, `javascript:`, and malformed entries), host and path are derived from the URL, and duplicates are dropped both against stored rows and within the upload.
+
+**dalfox** imports accept its `-f json` document (findings under `findings`, beside a `meta` envelope) or those objects as JSONL, and land as **scan items with `status: "new"`** — candidates, not findings. The scanner's own signal is preserved: its tier in `type` (`vulnerable`/`reflected`/`ast`/`informational`), plus `detection_method` and `confidence`. Even its top tier means *dalfox* asserts exploitability, so nothing here is imported as confirmed; promoting a candidate stays an operator's act, and a value dalfox does not define is dropped rather than stored. `request`/`response` (present with `--include-all`) are ignored, so response bodies are never stored, and the payload and evidence strings are sanitized and capped.
+
+Unlike nuclei, dalfox imports are **deduplicated** — a re-scan re-reports every match it still finds, which would otherwise inflate the engagement's count on every run. The key is the URL without its query values, the injection context and parameter (`template_id`), and the tier; it deliberately excludes the payload and the PoC URL, because dalfox mints a fresh marker class per payload and both carry it. A tier change (reflected → vulnerable) is new information and is stored as its own row. Deduplicated matches still get a provenance link, so `GET /scans?job_id=` shows that the later job observed them.
 
 Updated response shape:
 ```json

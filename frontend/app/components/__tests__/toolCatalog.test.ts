@@ -21,6 +21,22 @@ describe("tool catalog", () => {
     expect(gau.config.find((c) => c.key === "subs")).toMatchObject({ type: "toggle", default: true });
   });
 
+  it("offers dalfox as a scan tool with parameter mining on by default", () => {
+    const dalfox = TOOLS.dalfox;
+    expect(dalfox.sources).toEqual(["recon", "scope"]);
+    // Scan items, not recon: dalfox produces candidates to verify.
+    expect(dalfox.yieldsTo).toBe("scan");
+    expect(dalfox.config.map((c) => c.key)).toEqual(["limit", "worker", "delay", "mining"]);
+    expect(dalfox.config.find((c) => c.key === "mining")).toMatchObject({ type: "toggle", default: true });
+  });
+
+  it("describes dalfox output as candidates rather than findings", () => {
+    // Even dalfox's top tier is the scanner asserting exploitability, not a
+    // confirmed finding, and the composer copy should not imply otherwise.
+    expect(TOOLS.dalfox.yields).toBe("XSS candidates");
+    expect(TOOLS.dalfox.blurb).toMatch(/candidate/i);
+  });
+
   it("keys every tool by its own id", () => {
     for (const [key, tool] of Object.entries(TOOLS)) {
       expect(tool.id).toBe(key);
