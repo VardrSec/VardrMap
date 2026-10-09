@@ -839,7 +839,7 @@ Queue a new scan job.
   "depends_on": null
 }
 ```
-- `tool_type`: `"httpx"`, `"nuclei"`, `"subfinder"`, `"nmap"`, `"dnsx"`, `"naabu"`, `"katana"`, `"gau"`, or `"vardrgate_api_test"`
+- `tool_type`: `"httpx"`, `"nuclei"`, `"subfinder"`, `"nmap"`, `"dnsx"`, `"naabu"`, `"katana"`, `"gau"`, `"ffuf"`, or `"vardrgate_api_test"`
 - `target_source`: `"scope"` or `"recon"`
 - `config` (optional): tool-specific options. Unknown keys are rejected.
 
@@ -853,9 +853,14 @@ Queue a new scan job.
   | `naabu` | `top_ports` (1–65535), `limit` (1–1000000), `timeout` (1–86400 s) |
   | `katana` | `depth` (1–10), `js_crawl` (`true`/`false`), `limit` (1–1000000), `status_code`, `timeout` (1–86400 s) |
   | `gau` | `subs` (`true`/`false`), `providers` (any of `wayback`, `commoncrawl`, `otx`, `urlscan`; comma string or list), `timeout` (1–86400 s) |
+  | `ffuf` | `wordlist` (a **name**, see below), `extensions` (`.php,.bak`; comma string or list, a bare `php` gains its dot), `match_codes` (three-digit statuses, or `all`), `rate` (1–1000, requests/sec **per target**), `limit` (1–1000000), `timeout` (1–86400 s) |
   | `vardrgate_api_test` | `test_case_id` (required), `timeout` |
 
   Integer bounds mirror the ones VardrRunner enforces, so an out-of-range value is refused at queue time rather than failing on the operator's machine after the job is claimed.
+
+  **`ffuf.wordlist` is a name, never a path.** It must match `[a-z0-9][a-z0-9_-]{0,39}` — `common`, `api-paths`. VardrRunner resolves that name against `~/.vardrmap/wordlists` on the machine running the scan. A path, a traversal, or a drive letter returns `400`. This is deliberate: were a path accepted, this API could name any file the runner can read, and ffuf would read it and replay its lines at a target. The runner refuses a path too, so accepting one here would only queue a job that cannot run.
+
+  **`ffuf.rate` is a safety control, not a tuning knob.** It bounds the load a job can put on a client's host, so it has a ceiling and no value meaning "unlimited"; omitting it gives VardrRunner's default of 50/s. ffuf additionally always runs with auto-calibration, so a host that answers every path with `200` cannot flood recon with phantom endpoints.
 - `depends_on` (optional): id of another job (same engagement, same owner) that must reach `done` before this job becomes eligible in `GET /jobs/pending`.
 
 **Response:** job object with `status: "pending"`.

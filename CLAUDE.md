@@ -95,6 +95,13 @@ from the request.
 sections with `hideHeader`.
 
 ## Engagement types and statuses
+Queueable `tool_type`: `httpx` | `nuclei` | `subfinder` | `nmap` | `dnsx` | `naabu` |
+`katana` | `gau` | `ffuf` | `vardrgate_api_test`. A tool's config keys are allowlisted in
+`routers/jobs.py` and its bounds mirror VardrRunner's, so a bad value is refused at queue
+time rather than failing on the operator's machine after a runner claims the job.
+**`ffuf.wordlist` is a name, never a path** — a path would let the API name any file the
+runner can read for ffuf to read and replay at a target.
+
 `engagement_type`: `bug_bounty` | `pentest` | `red_team` | `internal`
 `engagement_status`: `planned` | `active` | `reporting` | `closed`
 
@@ -103,4 +110,10 @@ Authorization records (`routers/authorizations.py`) track the permission-to-test
 Clients (`routers/clients.py`) track the organisation being tested — required for pentest/internal; not applicable for bug bounty.
 
 ## Roadmap
-Remaining: DB table rename (`programs` → `engagements`, retire legacy path middleware), RBAC / multi-user support, client-facing deliverable generation
+Remaining: DB table rename (`programs` → `engagements`, retire legacy path middleware), RBAC / multi-user support.
+
+Client-facing deliverable generation shipped in v0.39.0 (immutable client report revisions).
+
+Agent-facing work lives in VardrRunner's MCP server, not here: case-drafting and
+report-drafting tools, methodology checklists, and a remote MCP for claude.ai — the last of
+which is the only one needing a VardrMap change (backend OAuth).
