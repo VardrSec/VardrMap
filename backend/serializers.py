@@ -100,6 +100,7 @@ def serialize_scan_item(item: ScanItem) -> dict:
 def serialize_import_record(r: ImportRecord) -> dict:
     return {
         "id": r.id,
+        "job_id": r.job_id,
         "tool_type": r.tool_type or "",
         "filename": r.filename or "redacted",
         "imported_count": r.imported_count or 0,

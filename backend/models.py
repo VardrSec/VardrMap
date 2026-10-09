@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import JSON, Boolean, CheckConstraint, Column, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from db import Base
@@ -212,6 +212,7 @@ class Engagement(Base):
     scan_profiles = relationship("ScanProfile", back_populates="engagement", cascade="all, delete-orphan")
     test_cases = relationship("AuthorizationTestCase", back_populates="engagement", cascade="all, delete-orphan")
     api_endpoints = relationship("ApiEndpoint", back_populates="engagement", cascade="all, delete-orphan")
+    deliverables = relationship("EngagementDeliverable", cascade="all, delete-orphan")
 
 
 class Authorization(Base):
@@ -297,6 +298,7 @@ class Finding(Base):
     created_at = Column(DateTime, nullable=True, default=lambda: datetime.now(timezone.utc))
 
     engagement = relationship("Engagement", back_populates="findings")
+    activities = relationship("FindingActivity", cascade="all, delete-orphan")
 
 
 class Report(Base):
@@ -377,6 +379,7 @@ class ImportRecord(Base):
     tool_type = Column(String(20), default="")
     filename = Column(String(200), default="redacted")
     imported_count = Column(Integer, default=0)
+    job_id = Column(String, ForeignKey("scan_jobs.id", ondelete="SET NULL"), nullable=True, index=True)
     created_at = Column(DateTime, nullable=True, default=lambda: datetime.now(timezone.utc))
 
     engagement = relationship("Engagement", back_populates="import_records")
@@ -510,6 +513,7 @@ class ScanJob(Base):
 
     engagement = relationship("Engagement", back_populates="scan_jobs")
     events = relationship("JobEvent", back_populates="job", cascade="all, delete-orphan", order_by="JobEvent.created_at")
+    result_links = relationship("JobResultLink", cascade="all, delete-orphan")
 
 
 class JobResultReceipt(Base):
@@ -694,3 +698,64 @@ class AuthorizationTestCase(Base):
     updated_at = Column(DateTime, nullable=True)
 
     engagement = relationship("Engagement", back_populates="test_cases")
+
+
+class JobResultLink(Base):
+    """An observation by a job; preserves earlier origins when inventory is enriched."""
+    __tablename__ = "job_result_links"
+    __table_args__ = (
+        UniqueConstraint("job_id", "recon_id", name="uq_job_recon"),
+        UniqueConstraint("job_id", "scan_id", name="uq_job_scan"),
+        UniqueConstraint("job_id", "service_id", name="uq_job_service"),
+        CheckConstraint(
+            "(CASE WHEN recon_id IS NULL THEN 0 ELSE 1 END + "
+            "CASE WHEN scan_id IS NULL THEN 0 ELSE 1 END + "
+            "CASE WHEN service_id IS NULL THEN 0 ELSE 1 END) = 1",
+            name="ck_job_result_one_target",
+        ),
+    )
+    id = Column(String, primary_key=True, default=new_uuid)
+    job_id = Column(String, ForeignKey("scan_jobs.id", ondelete="CASCADE"), nullable=False, index=True)
+    recon_id = Column(String, ForeignKey("recon_items.id", ondelete="CASCADE"), nullable=True, index=True)
+    scan_id = Column(String, ForeignKey("scan_items.id", ondelete="CASCADE"), nullable=True, index=True)
+    service_id = Column(String, ForeignKey("services.id", ondelete="CASCADE"), nullable=True, index=True)
+
+
+class FindingActivity(Base):
+    """Append-only revisions, remediation updates, and completed retest attempts."""
+    __tablename__ = "finding_activities"
+    id = Column(String, primary_key=True, default=new_uuid)
+    program_id = Column(String, ForeignKey("programs.id", ondelete="CASCADE"), nullable=False, index=True)
+    finding_id = Column(String, ForeignKey("findings.id", ondelete="CASCADE"), nullable=False, index=True)
+    kind = Column(String(30), nullable=False)
+    outcome = Column(String(30), nullable=True)
+    notes = Column(Text, nullable=False, default="")
+    actor = Column(String(100), nullable=False)
+    snapshot = Column(JSON, nullable=False, default=dict)
+    evidence = Column(JSON, nullable=False, default=list)
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+
+
+class EngagementDeliverable(Base):
+    __tablename__ = "engagement_deliverables"
+    id = Column(String, primary_key=True, default=new_uuid)
+    program_id = Column(String, ForeignKey("programs.id", ondelete="CASCADE"), nullable=False, index=True)
+    title = Column(String(200), nullable=False)
+    latest_revision = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    revisions = relationship("DeliverableRevision", cascade="all, delete-orphan")
+
+
+class DeliverableRevision(Base):
+    """Immutable client-facing content; workflow status is separate metadata."""
+    __tablename__ = "deliverable_revisions"
+    __table_args__ = (UniqueConstraint("deliverable_id", "revision", name="uq_deliverable_revision"),)
+    id = Column(String, primary_key=True, default=new_uuid)
+    deliverable_id = Column(String, ForeignKey("engagement_deliverables.id", ondelete="CASCADE"), nullable=False, index=True)
+    revision = Column(Integer, nullable=False)
+    status = Column(String(20), nullable=False, default="draft")
+    snapshot = Column(JSON, nullable=False)
+    markdown = Column(Text, nullable=False)
+    content_hash = Column(String(64), nullable=False)
+    actor = Column(String(100), nullable=False)
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))

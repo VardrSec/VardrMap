@@ -6,9 +6,10 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 import assets as asset_graph
+import provenance
 from db import get_db
 from deps import get_current_user, get_engagement_or_404, log_action, require_full_scope, require_member_write
-from models import Service
+from models import JobResultLink, Service
 
 router = APIRouter(tags=["services"])
 
@@ -26,6 +27,7 @@ class ServiceIn(BaseModel):
 
 class ServicesBulkCreate(BaseModel):
     services: list[ServiceIn] = Field(max_length=5000)
+    job_id: str | None = Field(default=None, max_length=100)
 
 
 def serialize_service(s: Service) -> dict:
@@ -48,16 +50,15 @@ def serialize_service(s: Service) -> dict:
 @router.get("/engagements/{program_id}/services")
 def list_services(
     program_id: str,
+    job_id: str | None = None,
     current_user: dict = Depends(require_full_scope),
     db: Session = Depends(get_db),
 ):
     get_engagement_or_404(program_id, current_user, db)
-    rows = (
-        db.query(Service)
-        .filter(Service.program_id == program_id)
-        .order_by(Service.host, Service.port)
-        .all()
-    )
+    query = db.query(Service).filter(Service.program_id == program_id)
+    if job_id:
+        query = query.filter(Service.id.in_(db.query(JobResultLink.service_id).filter(JobResultLink.job_id == job_id)))
+    rows = query.order_by(Service.host, Service.port).all()
     return {"services": [serialize_service(s) for s in rows], "total": len(rows)}
 
 
@@ -72,6 +73,7 @@ def bulk_create_services(
     service metadata if the combination already exists rather than creating duplicates."""
     engagement = get_engagement_or_404(program_id, current_user, db)
     require_member_write(engagement, current_user, db)
+    provenance.require_job(db, program_id, body.job_id)
 
     now = datetime.now(timezone.utc)
     created = 0
@@ -114,7 +116,7 @@ def bulk_create_services(
                     db, program_id, host_node, service_node,
                     asset_graph.EXPOSES, source=svc.source or "nmap",
                 )
-            db.add(Service(
+            existing = Service(
                 asset_id=service_node.id if service_node is not None else None,
                 program_id=program_id,
                 owner_github_id=current_user["github_id"],
@@ -127,8 +129,11 @@ def bulk_create_services(
                 state=svc.state or "open",
                 source=svc.source or "nmap",
                 last_scanned_at=now,
-            ))
+            )
+            db.add(existing)
             created += 1
+        db.flush()
+        provenance.link_result(db, body.job_id, "service", existing.id)
 
     # One audit entry per bulk upsert (not per service) to record who changed the
     # engagement's service inventory, without flooding the log.

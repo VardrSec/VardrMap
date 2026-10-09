@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 import assets as asset_graph
+import finding_history
 from db import get_db
 from deps import get_current_user, get_engagement_or_404, log_action, require_member_write
 from models import Finding
@@ -73,6 +74,7 @@ def add_finding(
     db.add(finding)
     db.flush()
     _link_asset(db, program_id, finding)
+    finding_history.record(db, finding, current_user["github_id"], "created")
     log_action(db, current_user["github_id"], "create", "finding", finding.id, program_id)
     db.commit()
     db.refresh(finding)
@@ -92,9 +94,10 @@ def update_finding(
     finding = db.query(Finding).filter(
         Finding.id == finding_id,
         Finding.program_id == program_id,
-    ).first()
+    ).with_for_update().first()
     if not finding:
         raise HTTPException(status_code=404, detail="Finding not found")
+    finding_history.capture_baseline(db, finding, current_user["github_id"])
     fields = payload.model_dump(exclude_unset=True)
     for key, value in fields.items():
         setattr(finding, key, value)
@@ -103,6 +106,7 @@ def update_finding(
         # pointing at the previous one.
         finding.asset_id = None
         _link_asset(db, program_id, finding)
+    finding_history.record(db, finding, current_user["github_id"], "updated")
     log_action(db, current_user["github_id"], "update", "finding", finding_id, program_id)
     db.commit()
     db.refresh(finding)

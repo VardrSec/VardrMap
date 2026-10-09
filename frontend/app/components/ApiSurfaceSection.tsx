@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ApiEndpoint } from "../types";
 import { useAppContext } from "../context/AppContext";
 import { Panel } from "./ui";
+import AuthorizationCaseBuilder from "./AuthorizationCaseBuilder";
 
 const methodColor: Record<string, string> = {
   GET: "#4ade80", POST: "#89b4fa", PUT: "#f59e0b", PATCH: "#c084fc", DELETE: "#f87171",
@@ -21,6 +22,7 @@ export default function ApiSurfaceSection({ engagementId }: { engagementId: stri
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
   const [exchangeOffset, setExchangeOffset] = useState(0);
+  const [draftIds, setDraftIds] = useState<string[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -56,6 +58,7 @@ export default function ApiSurfaceSection({ engagementId }: { engagementId: stri
   }), [endpoints]);
 
   return <div className="space-y-5">
+    <AuthorizationCaseBuilder key={engagementId} engagementId={engagementId} endpointIds={draftIds} />
     <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
       {[["Operations", total], ["Visible exchanges", stats.exchanges], ["Visible hosts", stats.hosts], ["Visible identities", stats.identities]].map(([label, value]) =>
         <div key={label} className="rounded-lg border border-[#2e2e2e] bg-[#171717] p-4">
@@ -80,8 +83,9 @@ export default function ApiSurfaceSection({ engagementId }: { engagementId: stri
         <p className="mt-1 text-xs text-[#52525b]">In Burp, select a request or response and choose “Send to VardrMap”. Automatic capture stays off.</p>
       </div>}
       {!loading && endpoints.length > 0 && <div className="overflow-x-auto"><table className="w-full text-left text-xs">
-        <thead><tr className="border-b border-[#2e2e2e]">{["Method", "Operation", "Responses", "Identities", "Seen", ""].map((h) => <th key={h} className="pb-2 pr-4 font-semibold uppercase tracking-widest text-[#52525b]">{h}</th>)}</tr></thead>
+        <thead><tr className="border-b border-[#2e2e2e]">{["Draft", "Method", "Operation", "Responses", "Identities", "Seen", ""].map((h) => <th key={h} className="pb-2 pr-4 font-semibold uppercase tracking-widest text-[#52525b]">{h}</th>)}</tr></thead>
         <tbody>{endpoints.map((item) => <tr key={item.id} className="border-b border-[#1e1e1e] hover:bg-[#161616]">
+          <td className="pr-4"><input aria-label={`Draft ${item.method} ${item.host}${item.path_template}`} type="checkbox" checked={draftIds.includes(item.id)} disabled={draftIds.length >= 100 && !draftIds.includes(item.id)} onChange={e => setDraftIds(ids => e.target.checked ? [...ids, item.id] : ids.filter(id => id !== item.id))} /></td>
           <td className="py-2.5 pr-4 font-mono font-bold" style={{ color: methodColor[item.method] ?? "#94a3b8" }}>{item.method}</td>
           <td className="py-2.5 pr-4"><div className="font-mono text-[#f1f5f9]">{item.path_template}</div><div className="mt-0.5 text-[10px] text-[#52525b]">{item.host}</div></td>
           <td className="py-2.5 pr-4 font-mono text-[#94a3b8]">{item.statuses.join(" · ") || "—"}</td>

@@ -14,6 +14,7 @@ from deps import get_current_user, require_full_scope
 from limiter import limiter
 from logging_config import configure_logging
 from routers import api_surface, apikeys, assets, authorizations, clients, engagements, evidence, findings, imports, jobs, manual_tests, members, radar, recon, reports, runner, scan_profiles, scans, schedules, scope, services, settings, test_cases
+from routers import case_authoring, deliverables, finding_activity
 
 ENV = os.getenv("ENV") or os.getenv("RAILWAY_ENVIRONMENT_NAME", "development")
 
@@ -195,7 +196,10 @@ app.include_router(services.router)
 app.include_router(radar.router,        dependencies=_full)
 app.include_router(schedules.router,    dependencies=_full)
 app.include_router(scan_profiles.router, dependencies=_full)
+app.include_router(case_authoring.router, dependencies=_full)
 app.include_router(test_cases.router,    dependencies=_full)
+app.include_router(deliverables.router, dependencies=_full)
+app.include_router(finding_activity.router, dependencies=_full)
 app.include_router(settings.router,     dependencies=_full)
 app.include_router(clients.router,        dependencies=_full)
 app.include_router(authorizations.router, dependencies=_full)

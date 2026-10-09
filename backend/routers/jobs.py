@@ -3,7 +3,7 @@ import json
 from datetime import datetime, timedelta, timezone
 from typing import Any, Literal, Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -432,17 +432,20 @@ def preview_job(
 @router.get("/engagements/{program_id}/jobs")
 def list_jobs(
     program_id: str,
+    status: Optional[Literal["pending", "running", "done", "failed"]] = None,
+    limit: Optional[int] = Query(default=None, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     get_engagement_or_404(program_id, current_user, db)
-    jobs = (
-        db.query(ScanJob)
-        .filter(ScanJob.program_id == program_id)
-        .order_by(ScanJob.created_at.desc())
-        .all()
-    )
-    return {"jobs": [serialize_job(j) for j in jobs]}
+    query = db.query(ScanJob).filter(ScanJob.program_id == program_id)
+    if status:
+        query = query.filter(ScanJob.status == status)
+    total = query.count()
+    # Omitting limit preserves the existing job board's complete list.
+    jobs = query.order_by(ScanJob.created_at.desc(), ScanJob.id).offset(offset).limit(limit).all()
+    return {"jobs": [serialize_job(j) for j in jobs], "total": total, "limit": limit, "offset": offset}
 
 
 def _materialize_due_schedules(db: Session, github_id: str) -> None:
@@ -822,6 +825,8 @@ def delete_job(
 @router.get("/jobs/{job_id}/events")
 def get_job_events(
     job_id: str,
+    limit: Optional[int] = Query(default=None, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -837,13 +842,10 @@ def get_job_events(
     if not job:
         raise HTTPException(status_code=404)
 
-    events = (
-        db.query(JobEvent)
-        .filter(JobEvent.job_id == job_id)
-        .order_by(JobEvent.created_at.asc())
-        .all()
-    )
-    return {"events": [serialize_event(e) for e in events]}
+    query = db.query(JobEvent).filter(JobEvent.job_id == job_id)
+    total = query.count()
+    events = query.order_by(JobEvent.created_at.asc(), JobEvent.id).offset(offset).limit(limit).all()
+    return {"events": [serialize_event(e) for e in events], "total": total, "limit": limit, "offset": offset}
 
 
 # -----------------------------------------------------------------------------

@@ -1,4 +1,5 @@
 "use client";
+import FindingActivityPanel from "./FindingActivityPanel";
 
 import { useCallback, useEffect, useState } from "react";
 import { Engagement, Finding, FindingFormState } from "../types";
@@ -263,6 +264,7 @@ export default function FindingsSection({ engagement }: { engagement: Engagement
                       </div>
                     </div>
                     {finding.summary && <p className="mt-3 text-sm text-[#6b7280]">{finding.summary}</p>}
+                    <FindingActivityPanel key={`${engagement.id}:${finding.id}`} engagementId={engagement.id} findingId={finding.id} readOnly={isViewer} />
                   </div>
                 )
               )}
