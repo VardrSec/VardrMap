@@ -49,6 +49,28 @@ def normalize_to_list(parsed: Any) -> list[dict[str, Any]]:
     raise HTTPException(status_code=400, detail="Unsupported JSON structure")
 
 
+_URL_FIELD_MAX = 8192
+
+
+def _url_field(value: Any) -> str:
+    """A URL, host or path kept exactly as the tool reported it.
+
+    Not ``strip_html``: that is a sanitiser for prose, and it HTML-encodes ``&``, so a
+    recon URL ``?q=1&page=2`` was stored as ``?q=1&amp;page=2``. Recon URLs are read back
+    as scan targets, so a runner then fetched a URL whose second parameter was literally
+    named ``amp;page`` -- dalfox tested the wrong parameters, and every URL-keyed dedup
+    and lookup was keyed on a string that was never the URL. Data, not markup: control
+    characters are removed and the length bounded. Titles and other descriptive text
+    still go through ``strip_html``.
+
+    One deliberate change: ``<`` and ``>`` are percent-encoded (``%3C``, ``%3E``), which
+    keeps the guarantee that a URL can never be stored as markup without deleting part of
+    it. A literal ``<`` is not valid in a URL and every HTTP client sends it encoded
+    anyway, so the target still means the same thing.
+    """
+    return _plain(value, _URL_FIELD_MAX).strip().replace("<", "%3C").replace(">", "%3E")
+
+
 def parse_ffuf(items: list[dict[str, Any]], program_id: str) -> list[ReconItem]:
     out = []
     for item in items:
@@ -56,8 +78,8 @@ def parse_ffuf(items: list[dict[str, Any]], program_id: str) -> list[ReconItem]:
         out.append(ReconItem(
             program_id=program_id,
             source="ffuf",
-            url=strip_html(url),
-            path=strip_html(str(item.get("input", {}).get("FUZZ", ""))),
+            url=_url_field(url),
+            path=_url_field(item.get("input", {}).get("FUZZ", "")),
             status_code=item.get("status"),
             length=item.get("length"),
             words=item.get("words"),
@@ -75,8 +97,8 @@ def parse_httpx(items: list[dict[str, Any]], program_id: str) -> list[ReconItem]
         out.append(ReconItem(
             program_id=program_id,
             source="httpx",
-            url=strip_html(item.get("url") or ""),
-            host=strip_html(item.get("host") or ""),
+            url=_url_field(item.get("url")),
+            host=_url_field(item.get("host")),
             title=strip_html(item.get("title") or ""),
             status_code=item.get("status-code") or item.get("status_code"),
             webserver=strip_html(item.get("webserver") or ""),
@@ -98,8 +120,8 @@ def parse_nuclei(items: list[dict[str, Any]], program_id: str) -> list[ScanItem]
             template_id=strip_html(item.get("template-id") or item.get("templateID") or ""),
             title=strip_html(info.get("name") or item.get("matcher-name") or "Untitled Finding"),
             severity=strip_html(info.get("severity") or "info"),
-            asset=strip_html(item.get("matched-at") or item.get("host") or ""),
-            matched_at=strip_html(item.get("matched-at") or ""),
+            asset=_url_field(item.get("matched-at") or item.get("host")),
+            matched_at=_url_field(item.get("matched-at")),
             type=strip_html(item.get("type") or ""),
             description=strip_html(info.get("description") or ""),
             status="new",
@@ -272,9 +294,9 @@ def parse_katana(items: list[dict[str, Any]], program_id: str) -> list[ReconItem
         out.append(ReconItem(
             program_id=program_id,
             source="katana",
-            url=strip_html(url),
-            host=strip_html(host),
-            path=strip_html(path),
+            url=_url_field(url),
+            host=_url_field(host),
+            path=_url_field(path),
             status_code=_as_int(item.get("status_code", response.get("status_code"))),
             length=_as_int(item.get("content_length", response.get("content_length"))),
             content_type=strip_html(str(content_type or ""))[:200],
@@ -293,8 +315,8 @@ def parse_gau(items: list[dict[str, Any]], program_id: str) -> list[ReconItem]:
         out.append(ReconItem(
             program_id=program_id,
             source="gau",
-            url=strip_html(url),
-            host=strip_html(host),
-            path=strip_html(path),
+            url=_url_field(url),
+            host=_url_field(host),
+            path=_url_field(path),
         ))
     return out
