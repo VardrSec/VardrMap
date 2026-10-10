@@ -95,9 +95,19 @@ from the request.
 sections with `hideHeader`.
 
 Queueable `tool_type`: `httpx` | `nuclei` | `subfinder` | `nmap` | `dnsx` | `naabu` |
-`katana` | `gau` | `dalfox` | `vardrgate_api_test`. Config keys are allowlisted per tool in
-`routers/jobs.py`, with bounds mirroring VardrRunner's so a bad value is refused at queue
-time rather than failing on the operator's machine.
+`katana` | `gau` | `ffuf` | `dalfox` | `vardrgate_api_test`. Config keys are allowlisted per
+tool in `routers/jobs.py`, with bounds mirroring VardrRunner's so a bad value is refused at
+queue time rather than failing on the operator's machine after a runner claims the job.
+**`ffuf.wordlist` is a name, never a path** — a path would let the API name any file the
+runner can read for ffuf to read and replay at a target.
+
+**Schedules can recur active tools.** They validate `tool_type` and config exactly as jobs do,
+so ffuf and dalfox are schedulable. Rate/worker caps are **per execution, not per engagement**;
+policy (warnings) and stop-work are evaluated at **claim**, not at schedule creation; and
+stop-work refuses the claim but does **not** pause materialization, so a backlog builds (pinned
+by `test_stop_work_does_not_pause_a_schedule_so_a_backlog_builds`). That is existing,
+documented behaviour — change it deliberately, with the test and `docs/api.md` § Scheduling
+active tools.
 
 **Scanner output is a candidate, not a finding.** nuclei and dalfox imports land as
 `scan_items` with `status: "new"`; promoting one is the operator's act. Keep the scanner's
@@ -120,4 +130,10 @@ Authorization records (`routers/authorizations.py`) track the permission-to-test
 Clients (`routers/clients.py`) track the organisation being tested — required for pentest/internal; not applicable for bug bounty.
 
 ## Roadmap
-Remaining: DB table rename (`programs` → `engagements`, retire legacy path middleware), RBAC / multi-user support, client-facing deliverable generation
+Remaining: DB table rename (`programs` → `engagements`, retire legacy path middleware), RBAC / multi-user support.
+
+Client-facing deliverable generation shipped in v0.39.0 (immutable client report revisions).
+
+Agent-facing work lives in VardrRunner's MCP server, not here: case-drafting and
+report-drafting tools, methodology checklists, and a remote MCP for claude.ai — the last of
+which is the only one needing a VardrMap change (backend OAuth).

@@ -403,7 +403,7 @@ The sidebar exposes **7 top-level sections** mapped to the engagement workflow:
 
 1. **Bridge** (`jobs/Bridge.tsx`) — animated link visualization showing VardrMap ↔ VardrRunner connection; runner node shows real hostname, OS, version, and per-tool availability chips from the latest heartbeat; collapses to a slim strip. Collapse state persists to `localStorage`.
 2. **Telemetry** (`jobs/Telemetry.tsx`) — four stat tiles: running, completed, results yielded, avg runtime.
-3. **Composer** (`jobs/Composer.tsx`) — a single selection across the named pipelines and the nine tools (subfinder/httpx/nuclei/nmap/dnsx/naabu/katana/gau/dalfox). Picking a pipeline clears the tool highlight and vice versa, so only one thing is ever chosen; the tool's config is preserved across the toggle. Nothing is queued until **Queue**, and a pipeline confirms first since it queues several jobs at once.
+3. **Composer** (`jobs/Composer.tsx`) — a single selection across the named pipelines and the ten tools (subfinder/httpx/nuclei/nmap/dnsx/naabu/katana/gau/ffuf/dalfox). Picking a pipeline clears the tool highlight and vice versa, so only one thing is ever chosen; the tool's config is preserved across the toggle. Nothing is queued until **Queue**, and a pipeline confirms first since it queues several jobs at once.
 
    Two pipelines ship in `PIPELINES` (`jobs/mockData.tsx`):
 
@@ -436,7 +436,7 @@ Validation order:
 2. Content-Type must be `application/json`, `application/x-ndjson`, `application/octet-stream`, or `text/plain`
 3. File size must not exceed `MAX_UPLOAD_BYTES` (default 2 MB)
 4. Content is parsed as JSON array or JSONL (one object per line)
-5. Items are passed to the tool-specific parser (`parse_ffuf`, `parse_httpx`, `parse_nuclei`, `parse_katana`, `parse_gau`, `parse_dalfox`). URL-shaped recon (ffuf, katana, gau) is deduplicated per engagement and source, against stored rows and within the upload. **dalfox scan items are deduplicated too** — on the query-less URL, the injection context and parameter (`template_id`), and the tier — because a re-scan re-reports every match it still finds; the payload and PoC URL are excluded from the key since both carry a per-run marker class. Deduplicated matches still get a `job_result_links` row, so a re-scan's observations remain visible. nuclei is **not** deduplicated, which is pre-existing behaviour
+5. Items are passed to the tool-specific parser (`parse_ffuf`, `parse_httpx`, `parse_nuclei`, `parse_katana`, `parse_gau`, `parse_dalfox`). URL-shaped recon (ffuf, katana, gau) is deduplicated per engagement and source, against stored rows and within the upload. **dalfox scan items are deduplicated too** — on the query-less URL, the injection context and parameter (`template_id`), and the tier — because a re-scan re-reports every match it still finds; the payload and PoC URL are excluded from the key since both carry a per-run marker class. Deduplicated matches still get a `job_result_links` row, so a re-scan's observations remain visible. nuclei is **not** deduplicated, which is pre-existing behaviour. `parse_ffuf` reads ffuf's own keys (`url`, `input.FUZZ`, `status`, `content-type`), so both a raw `ffuf -of json` report and the JSONL VardrRunner uploads import identically
 6. An `ImportRecord` is written with `filename = "redacted"` — original filenames often leak local paths and have no value post-import
 
 ---
