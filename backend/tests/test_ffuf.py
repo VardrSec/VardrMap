@@ -247,7 +247,7 @@ def test_ffuf_import_drops_duplicates_within_one_upload(client, program_id, auth
 #
 # A schedule queues an ordinary job, so ffuf can recur. These pin what is
 # PRESERVED for the scheduled path (limits, warnings, stop-work) and document the
-# one consequence worth knowing: stop-work does not pause a schedule.
+# one consequence worth knowing: stop-work pauses a schedule.
 
 from datetime import datetime, timedelta, timezone  # noqa: E402
 
@@ -336,27 +336,51 @@ def test_stop_work_refuses_the_claim_of_a_scheduled_job(client, program_id, auth
     assert "stop_work_active" in claim.text
 
 
-def test_stop_work_does_not_pause_a_schedule_so_a_backlog_builds(client, program_id, auth_headers):
-    """DOCUMENTED CURRENT BEHAVIOUR, pre-existing for every tool and pinned deliberately.
+@pytest.mark.parametrize("tool, config", [("ffuf", {"rate": 25}), ("httpx", {"limit": 5})])
+def test_stop_work_pauses_a_schedule_so_no_backlog_builds(client, program_id, auth_headers, tool, config):
+    """Stop-work stops the schedule, not just the claim.
 
-    Stop-work blocks execution, but `_materialize_due_schedules` keeps queueing one job
-    per interval while it is engaged. Each is refused at claim, and all of them become
-    claimable the moment stop-work is released. For an active tool like ffuf that means a
-    burst of repeated traffic on release. Changing this is a decision, not a drive-by; if
-    you do, update this test and docs/api.md together.
+    Refusing the claim alone left materialization queueing a job per interval behind
+    it, all claimable on release -- a burst of repeated active scans the moment work
+    resumed. Tool-agnostic: it applies to every scheduled tool.
+    """
+    _schedule(client, program_id, auth_headers, tool_type=tool, config=config)
+    client.post(f"/programs/{program_id}/stop-work", json={"reason": "incident"}, headers=auth_headers)
+    for _ in range(4):
+        _make_due(program_id)
+        _pending(client, auth_headers, program_id)  # the runner's poll
+    assert _pending(client, auth_headers, program_id) == []
+
+
+def test_a_paused_schedule_is_untouched_and_fires_once_on_release(client, program_id, auth_headers):
+    """next_run_at is not advanced while stopped, so release yields ONE catch-up job.
+
+    The same rule as after a runner outage: one catch-up job, not one per missed interval.
     """
     _schedule(client, program_id, auth_headers, config={"rate": 25})
     client.post(f"/programs/{program_id}/stop-work", json={"reason": "incident"}, headers=auth_headers)
-    intervals = 4
-    for _ in range(intervals):
+    for _ in range(4):
         _make_due(program_id)
-        _pending(client, auth_headers, program_id)  # the runner's poll
-    backlog = _pending(client, auth_headers, program_id)
-    assert len(backlog) == intervals
-    assert all(
-        client.post(f"/jobs/{j['id']}/claim", headers=auth_headers).status_code == 403
-        for j in backlog
-    )
+        _pending(client, auth_headers, program_id)
+    schedule = client.get(f"/programs/{program_id}/schedules", headers=auth_headers).json()["schedules"][0]
+    assert schedule["enabled"] is True and schedule["last_run_at"] is None
+
     client.delete(f"/programs/{program_id}/stop-work", headers=auth_headers)
-    first = client.post(f"/jobs/{backlog[0]['id']}/claim", headers=auth_headers)
-    assert first.status_code == 200, "after release the backlog is claimable"
+    (job,) = _pending(client, auth_headers, program_id)
+    assert job["tool_type"] == "ffuf"
+    assert len(_pending(client, auth_headers, program_id)) == 1, "no second job within the interval"
+    assert client.post(f"/jobs/{job['id']}/claim", headers=auth_headers).status_code == 200
+
+
+def test_stop_work_on_one_engagement_leaves_other_schedules_running(client, program_id, auth_headers):
+    other = client.post("/programs", json={"name": "Other"}, headers=auth_headers).json()["id"]
+    try:
+        _schedule(client, program_id, auth_headers, config={"rate": 25})
+        _schedule(client, other, auth_headers, config={"rate": 25})
+        client.post(f"/programs/{program_id}/stop-work", json={"reason": "incident"}, headers=auth_headers)
+        _make_due(program_id)
+        _make_due(other)
+        assert _pending(client, auth_headers, program_id) == []
+        assert len(_pending(client, auth_headers, other)) == 1
+    finally:
+        client.delete(f"/programs/{other}", headers=auth_headers)

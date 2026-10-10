@@ -268,7 +268,7 @@ def test_import_with_another_engagements_job_is_refused(client, program_id, auth
 #
 # A schedule queues an ordinary job, so dalfox can recur. These pin what is
 # PRESERVED for the scheduled path: execution limits, claim-time warnings and
-# stop-work. (That stop-work does not pause a schedule is pinned once, tool-
+# stop-work. (That stop-work pauses a schedule is pinned once, tool-
 # agnostically, in the ffuf tests.)
 
 from datetime import datetime, timedelta, timezone  # noqa: E402

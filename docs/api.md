@@ -1387,13 +1387,14 @@ VardrRunner's MCP server exposes no tool that creates or edits one.
   findings come back in the claim response's `warnings` array and the job still runs, because
   scope, window and authorization are advisory (ADR 0001). A schedule therefore **keeps
   running after the authorization window closes**; each run carries the warning.
-- **Stop-work refuses the claim — but does not pause the schedule.** While stop-work is
-  engaged a claim returns `403 stop_work_active`, yet due schedules keep queueing one
-  pending job per interval. Those jobs become claimable as soon as stop-work is released, so
-  releasing after a long stop hands the runner a backlog of repeated active scans. Disable
-  (`PATCH ... {"enabled": false}`) or delete active-tool schedules when you engage stop-work
-  for anything longer than an incident. This is existing behaviour for every tool; it is
-  worth knowing precisely because ffuf makes the consequence louder.
+- **Stop-work pauses the schedule as well as refusing the claim.** While stop-work is engaged
+  a claim returns `403 stop_work_active`, and due schedules for that engagement are **skipped**:
+  no job is queued, and `next_run_at` is left untouched. On release each schedule fires
+  **one** catch-up job on the next runner poll, the same rule as after a runner outage,
+  rather than a backlog of one job per missed interval. (Before this was fixed, jobs kept
+  queueing behind the refusal and all became claimable on release, a burst of repeated active
+  scans the moment work resumed.) Other engagements' schedules are unaffected. If you would
+  rather nothing fire on release, disable the schedule (`PATCH ... {"enabled": false}`).
 - **Scheduled dalfox results are deduplicated like any other**, so a recurring scan does not
   inflate the engagement's candidate count; each run still records that it observed a known
   candidate (`GET /scans?job_id=`).

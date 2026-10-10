@@ -22,6 +22,7 @@ from deps import (
 from limiter import limiter
 from models import (
     AuthorizationTestCase,
+    Engagement,
     Evidence,
     JobEvent,
     JobResultReceipt,
@@ -552,10 +553,18 @@ def _materialize_due_schedules(db: Session, github_id: str) -> None:
     that was offline for a week creates one catch-up job, not seven.
     """
     now = datetime.now(timezone.utc)
+    # Stop-work is the operator's halt switch, and it must stop a schedule too. Refusing the
+    # claim is not enough on its own: materialization would keep queueing a job per interval
+    # behind the refusal, and all of them would become claimable on release -- a burst of
+    # repeated active scans the moment work resumes. So a stopped engagement's schedules are
+    # skipped AND left untouched: next_run_at is not advanced, so on release each schedule
+    # fires exactly one catch-up job, the same as after a runner outage.
+    stopped = db.query(Engagement.id).filter(Engagement.stop_work_at.isnot(None))
     due = (
         db.query(ScheduledScan)
         .filter(
             ScheduledScan.program_id.in_(accessible_engagement_ids(github_id, db)),
+            ScheduledScan.program_id.notin_(stopped),
             ScheduledScan.enabled == True,  # noqa: E712 — SQLAlchemy needs the comparison
             ScheduledScan.next_run_at <= now,
         )
