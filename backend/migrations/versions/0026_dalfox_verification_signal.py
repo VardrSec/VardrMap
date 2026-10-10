@@ -16,8 +16,8 @@ confidence", even where both arrive with the same severity.
 Packing them into the existing free-text description would have made them
 unqueryable, which defeats the point of keeping them.
 
-Upgrade is additive. Downgrade drops both columns and therefore loses that
-signal for every row; export before rolling back.
+Upgrade is additive. Downgrade drops all four columns and therefore loses that
+signal and evidence for every row; export before rolling back.
 """
 from alembic import op
 import sqlalchemy as sa
@@ -32,10 +32,14 @@ def upgrade():
     with op.batch_alter_table("scan_items") as batch:
         batch.add_column(sa.Column("detection_method", sa.String(40), server_default=""))
         batch.add_column(sa.Column("confidence", sa.String(20), server_default=""))
+        batch.add_column(sa.Column("payload", sa.Text(), server_default=""))
+        batch.add_column(sa.Column("match_evidence", sa.Text(), server_default=""))
 
 
 def downgrade():
     # Data loss: the scanner's detection method and confidence are not recoverable.
     with op.batch_alter_table("scan_items") as batch:
+        batch.drop_column("match_evidence")
+        batch.drop_column("payload")
         batch.drop_column("confidence")
         batch.drop_column("detection_method")

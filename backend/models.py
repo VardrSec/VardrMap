@@ -369,6 +369,10 @@ class ScanItem(Base):
     # How the scanner detected it and how sure it was — three independent facts
     # with `type`, and all three matter when triaging. Never folded into severity.
     detection_method = Column(String(40), default="")
+    # The scanner's payload and evidence, stored exactly as reported (never HTML-sanitised:
+    # the dangerous input IS the evidence). Untrusted text: render only as text.
+    payload = Column(Text, default="")
+    match_evidence = Column(Text, default="")
     confidence = Column(String(20), default="")
     asset_id = Column(String, ForeignKey("assets.id", ondelete="SET NULL"), nullable=True, index=True)
     job_id = Column(String, nullable=True)  # scan_job that produced this item, if any

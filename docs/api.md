@@ -693,7 +693,7 @@ List scan items with pagination and optional status filter. Items come from nucl
 Each item carries the scanner's own verification signal alongside severity: `type` (the
 scanner's classification of the match — for dalfox its tier: `vulnerable`, `reflected`,
 `ast`, `informational`), `detection_method` (dalfox: `reflection`, `dom-verification`,
-`ast`, `oob`, `library`) and `confidence` (`high`/`low`). These are independent of severity
+`ast`, `oob`, `library`) and `confidence` (`high`/`low`), plus the scanner's `payload` and `match_evidence` exactly as reported (untrusted text; render only as text). These are independent of severity
 and of each other, and none of them is a confirmation: imported matches are always
 `status: "new"`, and promoting one is an operator's act.
 
@@ -716,6 +716,8 @@ and of each other, and none of them is a confirmation: imported matches are alwa
       "cvss": "9.8",
       "detection_method": "",
       "confidence": "",
+      "payload": "",
+      "match_evidence": "",
       "job_id": "<uuid | null>"
     }
   ],
@@ -1683,7 +1685,7 @@ The response now includes `new_count` for httpx, ffuf, katana, and gau imports �
 
 **katana** imports accept VardrRunner's compact records (`url`, `status_code`, `content_length`, `content_type`) or katana's own JSONL (`request.endpoint`, `response.*`); response bodies are never read or stored. **gau** imports take `{"url": ...}` per line. For both, only `http`/`https` URLs are kept (archives routinely include `mailto:`, `javascript:`, and malformed entries), host and path are derived from the URL, and duplicates are dropped both against stored rows and within the upload.
 
-**dalfox** imports accept its `-f json` document (findings under `findings`, beside a `meta` envelope) or those objects as JSONL, and land as **scan items with `status: "new"`** — candidates, not findings. The scanner's own signal is preserved: its tier in `type` (`vulnerable`/`reflected`/`ast`/`informational`), plus `detection_method` and `confidence`. Even its top tier means *dalfox* asserts exploitability, so nothing here is imported as confirmed; promoting a candidate stays an operator's act, and a value dalfox does not define is dropped rather than stored. `request`/`response` (present with `--include-all`) are ignored, so response bodies are never stored, and the payload and evidence strings are sanitized and capped.
+**dalfox** imports accept its `-f json` document (findings under `findings`, beside a `meta` envelope) or those objects as JSONL, and land as **scan items with `status: "new"`** — candidates, not findings. The scanner's own signal is preserved: its tier in `type` (`vulnerable`/`reflected`/`ast`/`informational`), plus `detection_method` and `confidence`. Even its top tier means *dalfox* asserts exploitability, so nothing here is imported as confirmed; promoting a candidate stays an operator's act, and a value dalfox does not define is dropped rather than stored. `request`/`response` (present with `--include-all`) are ignored, so response bodies are never stored. The **payload, the evidence and the PoC URL are stored exactly as dalfox reported them** (control characters removed, 2000-character cap), in the `payload`, `match_evidence`, `asset` and `matched_at` fields. They are deliberately *not* HTML-sanitised: the sanitiser deletes anything tag-shaped and HTML-encodes `&`, which turned `<svg onload=alert(1)>` into nothing and `?a=1&q=x` into `?a=1&amp;q=x`, destroying the one thing a tester needs to reproduce the issue. They are **untrusted text and must only ever be rendered as text**. Only the human-readable `description` goes through the sanitiser; it points at the payload column rather than quoting it. A PoC URL that is not `http(s)` is dropped.
 
 Unlike nuclei, dalfox imports are **deduplicated** — a re-scan re-reports every match it still finds, which would otherwise inflate the engagement's count on every run. The key is the URL without its query values, the injection context and parameter (`template_id`), and the tier; it deliberately excludes the payload and the PoC URL, because dalfox mints a fresh marker class per payload and both carry it. A tier change (reflected → vulnerable) is new information and is stored as its own row. Deduplicated matches still get a provenance link, so `GET /scans?job_id=` shows that the later job observed them.
 

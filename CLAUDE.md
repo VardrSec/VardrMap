@@ -106,6 +106,10 @@ own signal separate from our severity — dalfox's tier goes in `type`, with
 confirmed status, however confident the tool is. dalfox imports are deduplicated on the
 query-less URL + `template_id` + tier; never key that on the payload or PoC URL, which
 carry a fresh per-run marker class.
+**Scanner payload, evidence and PoC URL are stored exactly as reported** (`payload`,
+`match_evidence`, `asset`): never run them through `strip_html`, which deletes anything
+tag-shaped and encodes `&` — for an XSS scanner that deletes the evidence. Sanitise prose,
+not data. They are untrusted text: render only as text.
 
 ## Engagement types and statuses
 `engagement_type`: `bug_bounty` | `pentest` | `red_team` | `internal`

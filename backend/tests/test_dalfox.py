@@ -349,3 +349,134 @@ def test_stop_work_refuses_the_claim_of_a_scheduled_dalfox_job(client, program_i
     claim = client.post(f"/jobs/{job['id']}/claim", headers=auth_headers)
     assert claim.status_code == 403
     assert "stop_work_active" in claim.text
+
+# ── payload and evidence are not lost ───────────────────────────────────────
+#
+# Regression for a data-loss bug. The importer ran everything through strip_html,
+# which deletes anything tag-shaped and HTML-encodes "&". For an XSS scanner that
+# destroys the evidence: the payload `<svg onload=alert(1)>` was stored as nothing,
+# and a PoC URL `?a=1&q=x` as `?a=1&amp;q=x`. The prose may be sanitised; the
+# payload, evidence and PoC URL must come back exactly as dalfox reported them.
+
+# Verbatim from `dalfox scan -f json` (3.2.4) against a local reflecting fixture.
+REAL_FINDING = {
+    "confidence": "high",
+    "confidence_reason": "payload reached an executable position in the parsed response",
+    "cwe": "CWE-79",
+    "data": "http://127.0.0.1:42901/?q=%3Csvg%20onload%3Dalert%281%29%20class%3Ddlx939ec0c3%3E",
+    "detection_method": "reflection",
+    "evidence": "DOM verification successful for param q (DOM marker)",
+    "inject_type": "inHTML",
+    "location": "Query",
+    "message_id": 606,
+    "message_str": "Triggered XSS Payload (DOM marker): q=<svg onload=alert(1) class=dlx939ec0c3>",
+    "method": "GET",
+    "param": "q",
+    "payload": "<svg onload=alert(1) class=dlx939ec0c3>",
+    "severity": "High",
+    "type": "V",
+    "type_description": "Vulnerable - dalfox asserts this input is exploitable; act on it",
+}
+
+
+def _import_one(client, program_id, headers, **overrides):
+    res = _upload(client, headers, program_id, _document({**REAL_FINDING, **overrides}))
+    assert res.status_code == 200, res.text
+    return _scans(client, headers, program_id)
+
+
+def test_the_real_payload_survives_import_exactly(client, program_id, auth_headers):
+    (row,) = _import_one(client, program_id, auth_headers)
+    assert row["payload"] == "<svg onload=alert(1) class=dlx939ec0c3>"
+    assert row["payload"] == REAL_FINDING["payload"]  # not "", which is what strip_html left
+
+
+def test_the_real_evidence_survives_import_exactly(client, program_id, auth_headers):
+    (row,) = _import_one(client, program_id, auth_headers)
+    assert row["match_evidence"] == "DOM verification successful for param q (DOM marker)"
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        '"><img src=x onerror=alert(1)>',
+        "<script>alert(1)</script>",
+        "javascript:alert(1)//",
+        "'-alert(1)-'",
+        "a&b<c>\"d'",
+        "&lt;already-escaped&gt;",  # must not be decoded or double-encoded
+        "<svg/onload=alert`1`>",
+    ],
+)
+def test_hostile_looking_payloads_are_stored_exactly_as_text(client, program_id, auth_headers, payload):
+    (row,) = _import_one(client, program_id, auth_headers, payload=payload, evidence=payload)
+    assert row["payload"] == payload
+    assert row["match_evidence"] == payload
+
+
+def test_a_poc_url_keeps_its_ampersands(client, program_id, auth_headers):
+    """`&` became `&amp;`, so the stored PoC URL was no longer the URL that triggered it."""
+    url = "http://127.0.0.1:42901/?a=1&q=%3Csvg%3E&b=2"
+    (row,) = _import_one(client, program_id, auth_headers, data=url)
+    assert row["asset"] == url and row["matched_at"] == url
+    assert "&amp;" not in row["asset"]
+
+
+@pytest.mark.parametrize("url", ["javascript:alert(1)", "data:text/html,<script>1</script>", "not a url", ""])
+def test_a_poc_url_that_is_not_http_is_dropped(client, program_id, auth_headers, url):
+    (row,) = _import_one(client, program_id, auth_headers, data=url)
+    assert row["asset"] == "" and row["matched_at"] == ""
+
+
+def test_the_description_stays_sanitised_and_does_not_carry_a_mangled_payload(
+    client, program_id, auth_headers
+):
+    """Prose still goes through strip_html. It points at the payload column instead of
+    carrying a copy that the sanitiser would turn into a dangling `q=`."""
+    (row,) = _import_one(client, program_id, auth_headers)
+    assert "<" not in row["description"] and ">" not in row["description"]
+    assert "q=[payload]" in row["description"]
+    assert "q= " not in row["description"] and not row["description"].endswith("q=")
+
+
+def test_control_characters_are_removed_and_length_is_bounded(client, program_id, auth_headers):
+    (row,) = _import_one(
+        client, program_id, auth_headers,
+        payload="a\x00b\x07c\x1bd\ne\tf" + "x" * 5000,
+        evidence="ok\x00" + "y" * 5000,
+    )
+    assert row["payload"].startswith("abcd\ne\tf")
+    assert not any(c in row["payload"] for c in "\x00\x07\x1b")
+    assert len(row["payload"]) <= 2000 and len(row["match_evidence"]) <= 2000
+
+
+def test_parameter_names_shaped_like_tags_stay_distinct_for_dedup(client, program_id, auth_headers):
+    """strip_html would have turned both into "", merging two different parameters."""
+    res = _upload(
+        client, auth_headers, program_id,
+        _document({**REAL_FINDING, "param": "<a>"}, {**REAL_FINDING, "param": "<b>"}),
+    )
+    assert res.json()["imported_count"] == 2
+    assert {r["template_id"] for r in _scans(client, auth_headers, program_id)} == {
+        "inHTML:<a>",
+        "inHTML:<b>",
+    }
+
+
+def test_two_real_runs_still_dedupe_with_lossless_fields(client, program_id, auth_headers):
+    """Preserving the payload must not break dedup: the per-run marker is in the payload."""
+    second = {
+        **REAL_FINDING,
+        "payload": "<svg onload=alert(1) class=dlxd722db8d>",
+        "data": REAL_FINDING["data"].replace("dlx939ec0c3", "dlxd722db8d"),
+    }
+    assert _upload(client, auth_headers, program_id, _document(REAL_FINDING)).json()["imported_count"] == 1
+    assert _upload(client, auth_headers, program_id, _document(second)).json()["imported_count"] == 0
+    (row,) = _scans(client, auth_headers, program_id)
+    assert row["payload"] == REAL_FINDING["payload"], "the first-seen evidence is kept, untouched"
+
+
+def test_payload_and_evidence_are_returned_by_the_scans_api(client, program_id, auth_headers):
+    _import_one(client, program_id, auth_headers)
+    body = client.get(f"/programs/{program_id}/scans", headers=auth_headers).json()["scans"][0]
+    assert {"payload", "match_evidence"} <= set(body)

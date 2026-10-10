@@ -158,6 +158,8 @@ scan_items
   type, description, status, cwe, cvss
   detection_method, confidence   (the scanner's own verification signal, never
                                   folded into severity; empty when unreported)
+  payload, match_evidence        (the scanner's payload and evidence EXACTLY as reported,
+                                  never HTML-sanitised; untrusted text, render as text)
   job_id (nullable — scan_job that produced this item; null for manual imports)
   created_at
 

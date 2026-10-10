@@ -1,4 +1,5 @@
 import json
+import re
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -123,6 +124,40 @@ _DALFOX_CONFIDENCE = {"high", "low"}
 _SEVERITIES = {"info", "low", "medium", "high", "critical"}
 
 
+_CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+_PAYLOAD_MAX = 2000
+_EVIDENCE_MAX = 2000
+_URL_MAX = 2000
+
+
+def _plain(value: Any, limit: int) -> str:
+    """Scanner evidence kept exactly as reported: control characters out, length capped.
+
+    Deliberately NOT ``strip_html``. That is the right defence for prose, but it is
+    lossy by design: ``nh3`` deletes anything shaped like a tag and HTML-encodes
+    ``&``, so an XSS payload such as ``<svg onload=alert(1)>`` is destroyed (leaving
+    nothing to reproduce the issue with) and a PoC URL ``?a=1&q=x`` is stored as
+    ``?a=1&amp;q=x``. For a tool whose entire output is "this input is dangerous",
+    the dangerous input *is* the evidence.
+
+    Safe to store raw because it is data, never markup: the API returns it as a JSON
+    string, nothing in the frontend renders HTML, and the field is documented as
+    untrusted text that must only ever be rendered as text.
+    """
+    text = "" if value is None else str(value)
+    return _CONTROL.sub("", text)[:limit]
+
+
+def _http_url(value: Any) -> str:
+    """An http(s) URL kept exactly, or "" for anything else (javascript:, data:, junk)."""
+    text = _plain(value, _URL_MAX).strip()
+    try:
+        parts = urlsplit(text)
+    except ValueError:
+        return ""
+    return text if parts.scheme.lower() in ("http", "https") and parts.hostname else ""
+
+
 def parse_dalfox(items: list[dict[str, Any]], program_id: str) -> list[ScanItem]:
     """XSS candidates from dalfox (the objects under its ``findings`` key).
 
@@ -131,33 +166,43 @@ def parse_dalfox(items: list[dict[str, Any]], program_id: str) -> list[ScanItem]
     is *dalfox asserting* exploitability, not this platform confirming it, so no
     tier maps to a confirmed status — promoting a finding stays an operator's
     act. Response bodies are never stored: `request`/`response` (present with
-    ``--include-all``) are ignored, and the evidence line is bounded.
+    ``--include-all``) are ignored.
+
+    The payload, the evidence and the PoC URL are stored **losslessly** (see
+    ``_plain``) in their own columns; only the human-readable description goes
+    through ``strip_html``.
     """
     out = []
     for item in items:
-        url = item.get("data") or ""
+        url = _http_url(item.get("data"))
         tier = _DALFOX_TIERS.get(str(item.get("type") or "").strip().upper(), "")
-        param = strip_html(str(item.get("param") or ""))
-        inject = strip_html(str(item.get("inject_type") or ""))
+        # Identity must not be sanitised: stripping a parameter name shaped like a tag
+        # would collapse distinct parameters into one dedup key.
+        param = _plain(item.get("param"), 200)
+        inject = _plain(item.get("inject_type"), 100)
         severity = str(item.get("severity") or "").strip().lower()
         detection = str(item.get("detection_method") or "").strip().lower()
         confidence = str(item.get("confidence") or "").strip().lower()
+        payload = _plain(item.get("payload"), _PAYLOAD_MAX)
+        evidence = _plain(item.get("evidence"), _EVIDENCE_MAX)
         title = f"XSS in parameter '{param}'" if param else "XSS candidate"
         if inject:
             title = f"{title} ({inject})"
-        # dalfox's message_str explains the match; evidence is the reflected
-        # snippet, which comes from the target, so both are sanitized and capped.
-        detail = " ".join(
+        # dalfox's message_str quotes the payload inline. The payload has its own
+        # column, and strip_html would turn that quotation into a dangling "q=", so
+        # the prose points at the column instead of carrying a mangled copy.
+        message = str(item.get("message_str") or "")
+        if payload:
+            message = message.replace(str(item.get("payload")), "[payload]")
+        description = " ".join(
             part
             for part in (
                 strip_html(str(item.get("type_description") or "")),
-                strip_html(str(item.get("message_str") or "")),
+                strip_html(message),
                 strip_html(str(item.get("confidence_reason") or "")),
             )
             if part
         )
-        evidence = strip_html(str(item.get("evidence") or ""))[:500]
-        payload = strip_html(str(item.get("payload") or ""))[:500]
         out.append(ScanItem(
             program_id=program_id,
             source="dalfox",
@@ -168,22 +213,18 @@ def parse_dalfox(items: list[dict[str, Any]], program_id: str) -> list[ScanItem]
             template_id=":".join(part for part in (inject, param) if part)[:200],
             title=strip_html(title)[:200],
             severity=severity if severity in _SEVERITIES else "info",
-            asset=strip_html(url),
-            matched_at=strip_html(url),
+            asset=url,
+            matched_at=url,
             type=tier,
-            description=" | ".join(
-                part
-                for part in (detail, f"payload: {payload}" if payload else "",
-                             f"evidence: {evidence}" if evidence else "")
-                if part
-            ),
+            description=description,
+            payload=payload,
+            match_evidence=evidence,
             status="new",
             cwe=strip_html(str(item.get("cwe") or "")),
             detection_method=detection if detection in _DALFOX_DETECTION else "",
             confidence=confidence if confidence in _DALFOX_CONFIDENCE else "",
         ))
     return out
-
 
 def _web_url(raw: Any) -> tuple[str, str, str] | None:
     """(url, host, path) for an http(s) URL, or None for anything else.
