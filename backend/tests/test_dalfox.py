@@ -262,3 +262,90 @@ def test_import_with_another_engagements_job_is_refused(client, program_id, auth
     res = _upload(client, auth_headers, program_id, _document(_finding()), job_id="made-up")
     assert res.status_code == 404
     assert _scans(client, auth_headers, program_id) == []
+
+
+# ── scheduled runs ──────────────────────────────────────────────────────────
+#
+# A schedule queues an ordinary job, so dalfox can recur. These pin what is
+# PRESERVED for the scheduled path: execution limits, claim-time warnings and
+# stop-work. (That stop-work does not pause a schedule is pinned once, tool-
+# agnostically, in the ffuf tests.)
+
+from datetime import datetime, timedelta, timezone  # noqa: E402
+
+from db import get_db  # noqa: E402
+from main import app  # noqa: E402
+from models import ScheduledScan  # noqa: E402
+
+
+def _schedule(client, program_id, headers, **body):
+    return client.post(
+        f"/programs/{program_id}/schedules",
+        json={"tool_type": "dalfox", "target_source": "recon", "interval": "hourly", **body},
+        headers=headers,
+    )
+
+
+def _make_due(program_id):
+    db = next(app.dependency_overrides[get_db]())
+    try:
+        for s in db.query(ScheduledScan).filter(ScheduledScan.program_id == program_id):
+            s.next_run_at = datetime.now(timezone.utc) - timedelta(minutes=1)
+        db.commit()
+    finally:
+        db.close()
+
+
+def _pending(client, headers, program_id):
+    jobs = client.get("/jobs/pending", headers=headers).json()["jobs"]
+    return [j for j in jobs if j["program_id"] == program_id]
+
+
+def test_dalfox_can_be_scheduled(client, program_id, auth_headers):
+    res = _schedule(client, program_id, auth_headers, config={"worker": 5, "delay": 100})
+    assert res.status_code in (200, 201), res.text
+    assert res.json()["tool_type"] == "dalfox"
+
+
+@pytest.mark.parametrize(
+    "config",
+    [
+        {"worker": 0},  # concurrency cannot be removed
+        {"worker": 101},
+        {"delay": -1},
+        {"delay": 10_001},
+        {"mining": "maybe"},
+        {"payload": "<script>"},
+    ],
+)
+def test_a_dalfox_schedule_cannot_carry_what_a_job_could_not(client, program_id, auth_headers, config):
+    """Load limits are validated when the schedule is created, exactly as for a job."""
+    assert _schedule(client, program_id, auth_headers, config=config).status_code == 400
+
+
+def test_a_scheduled_dalfox_job_carries_the_schedules_config_unchanged(client, program_id, auth_headers):
+    config = {"worker": 5, "delay": 100, "mining": False}
+    _schedule(client, program_id, auth_headers, config=config)
+    _make_due(program_id)
+    (job,) = _pending(client, auth_headers, program_id)
+    assert job["tool_type"] == "dalfox" and job["config"] == config
+
+
+def test_claiming_a_scheduled_dalfox_job_returns_policy_warnings(client, program_id, auth_headers):
+    """Policy is met at claim, not when the schedule is created or the job materialized."""
+    _schedule(client, program_id, auth_headers, config={"worker": 5})
+    _make_due(program_id)
+    (job,) = _pending(client, auth_headers, program_id)
+    claim = client.post(f"/jobs/{job['id']}/claim", headers=auth_headers)
+    assert claim.status_code == 200, claim.text
+    assert isinstance(claim.json()["warnings"], list)
+
+
+def test_stop_work_refuses_the_claim_of_a_scheduled_dalfox_job(client, program_id, auth_headers):
+    _schedule(client, program_id, auth_headers, config={"worker": 5})
+    _make_due(program_id)
+    (job,) = _pending(client, auth_headers, program_id)
+    client.post(f"/programs/{program_id}/stop-work", json={"reason": "incident"}, headers=auth_headers)
+    claim = client.post(f"/jobs/{job['id']}/claim", headers=auth_headers)
+    assert claim.status_code == 403
+    assert "stop_work_active" in claim.text
