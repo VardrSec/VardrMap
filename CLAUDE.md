@@ -94,21 +94,34 @@ from the request.
 `DashboardSection` and `ReviewSection` are thin tab containers rendering child
 sections with `hideHeader`.
 
-## Engagement types and statuses
 Queueable `tool_type`: `httpx` | `nuclei` | `subfinder` | `nmap` | `dnsx` | `naabu` |
-`katana` | `gau` | `ffuf` | `vardrgate_api_test`. A tool's config keys are allowlisted in
-`routers/jobs.py` and its bounds mirror VardrRunner's, so a bad value is refused at queue
-time rather than failing on the operator's machine after a runner claims the job.
+`katana` | `gau` | `ffuf` | `dalfox` | `vardrgate_api_test`. Config keys are allowlisted per
+tool in `routers/jobs.py`, with bounds mirroring VardrRunner's so a bad value is refused at
+queue time rather than failing on the operator's machine after a runner claims the job.
 **`ffuf.wordlist` is a name, never a path** — a path would let the API name any file the
 runner can read for ffuf to read and replay at a target.
 
 **Schedules can recur active tools.** They validate `tool_type` and config exactly as jobs do,
-so ffuf is schedulable. Rate/worker caps are **per execution, not per engagement**; policy
-(warnings) and stop-work are evaluated at **claim**, not at schedule creation; and stop-work
-refuses the claim but does **not** pause materialization, so a backlog builds (pinned by
-`test_stop_work_does_not_pause_a_schedule_so_a_backlog_builds`). That is existing, documented
-behaviour — change it deliberately, with the test and `docs/api.md` § Scheduling active tools.
+so ffuf and dalfox are schedulable. Rate/worker caps are **per execution, not per engagement**;
+policy (warnings) and stop-work are evaluated at **claim**, not at schedule creation; and
+stop-work refuses the claim but does **not** pause materialization, so a backlog builds (pinned
+by `test_stop_work_does_not_pause_a_schedule_so_a_backlog_builds`). That is existing,
+documented behaviour — change it deliberately, with the test and `docs/api.md` § Scheduling
+active tools.
 
+**Scanner output is a candidate, not a finding.** nuclei and dalfox imports land as
+`scan_items` with `status: "new"`; promoting one is the operator's act. Keep the scanner's
+own signal separate from our severity — dalfox's tier goes in `type`, with
+`detection_method` and `confidence` in their own columns — and never map a tier to a
+confirmed status, however confident the tool is. dalfox imports are deduplicated on the
+query-less URL + `template_id` + tier; never key that on the payload or PoC URL, which
+carry a fresh per-run marker class.
+**Scanner payload, evidence and PoC URL are stored exactly as reported** (`payload`,
+`match_evidence`, `asset`): never run them through `strip_html`, which deletes anything
+tag-shaped and encodes `&` — for an XSS scanner that deletes the evidence. Sanitise prose,
+not data. They are untrusted text: render only as text.
+
+## Engagement types and statuses
 `engagement_type`: `bug_bounty` | `pentest` | `red_team` | `internal`
 `engagement_status`: `planned` | `active` | `reporting` | `closed`
 

@@ -74,6 +74,7 @@ const TOOL_TO_REVIEW_TAB: Record<string, string> = {
   ffuf:      "recon",
   httpx:     "recon",
   nuclei:    "scans",
+  dalfox:    "scans",
   nmap:      "services",
 };
 

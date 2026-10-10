@@ -122,6 +122,24 @@ export const TOOLS: Record<string, ToolDef> = {
       { key: "rate", label: "Requests/sec", type: "number", placeholder: "50" },
     ],
   },
+  dalfox: {
+    id: "dalfox",
+    label: "dalfox",
+    glyph: "◭",
+    blurb: "XSS candidates needing verification (active)",
+    // Scan items, not findings: dalfox reports what to verify, and even its
+    // top tier is the scanner asserting exploitability rather than us
+    // confirming it. Promoting one to a finding stays an operator's act.
+    yields: "XSS candidates",
+    yieldsTo: "scan",
+    sources: ["recon", "scope"],
+    config: [
+      { key: "limit", label: "Limit", type: "number", placeholder: "100" },
+      { key: "worker", label: "Workers", type: "number", placeholder: "10" },
+      { key: "delay", label: "Delay (ms)", type: "number", placeholder: "0" },
+      { key: "mining", label: "Mine parameters", type: "toggle", default: true },
+    ],
+  },
   vardrgate_api_test: {
     id: "vardrgate_api_test",
     label: "vardrgate",

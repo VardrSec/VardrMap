@@ -1,6 +1,7 @@
 import os
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session
@@ -9,10 +10,11 @@ import assets as asset_graph
 import provenance
 from db import get_db
 from deps import get_current_user, get_engagement_or_404, log_action, require_member_write
-from models import ImportRecord, Engagement, ReconItem, User
+from models import ImportRecord, Engagement, ReconItem, ScanItem, User
 from notifications import send_webhook, severity_meets_threshold
 from parsers import (
     normalize_to_list,
+    parse_dalfox,
     parse_ffuf,
     parse_gau,
     parse_httpx,
@@ -58,6 +60,63 @@ def _link_assets(db, program_id: str, rows, source: str) -> None:
         asset = asset_graph.upsert(db, program_id, observed, source=source, host_level=True)
         if asset is not None:
             row.asset_id = asset.id
+
+
+def _dalfox_key(item: ScanItem) -> tuple[str, ...]:
+    """A dedup key for a dalfox match that survives a re-run.
+
+    Deliberately excludes the payload and the full URL. dalfox mints a fresh
+    marker class per payload (``class=dlx1ec4110f``) and that marker lands in
+    both, so keying on either would make every re-scan look like new findings
+    and inflate an engagement's count on every run.
+
+    What identifies the same issue across runs is where it is and how it
+    injects: the URL without its query values, the injection context and
+    parameter (which the parser stores together in ``template_id``), and
+    dalfox's own tier — a parameter that moves from reflected to vulnerable is a
+    genuinely different fact, so it is stored as its own row rather than
+    silently merged into the old one.
+    """
+    base = ""
+    if item.matched_at:
+        try:
+            parts = urlsplit(item.matched_at)
+            base = f"{parts.scheme}://{parts.netloc}{parts.path}"
+        except ValueError:
+            base = item.matched_at
+    return (base, item.template_id or "", item.type or "")
+
+
+def _dedup_scan_items(
+    db: Session,
+    incoming: list[ScanItem],
+    program_id: str,
+    source: str,
+) -> tuple[list[ScanItem], list[ScanItem]]:
+    """Split incoming scan items into (new, already-stored-equivalent).
+
+    Both halves are returned because the already-stored half still needs its
+    provenance recorded: a later job that observes the same issue did observe
+    it, and dropping that would misreport which run saw what.
+    """
+    if not incoming:
+        return [], []
+    stored = db.query(ScanItem).filter(
+        ScanItem.program_id == program_id,
+        ScanItem.source == source,
+    ).all()
+    seen = {_dalfox_key(row): row for row in stored}
+    new_items: list[ScanItem] = []
+    duplicates: list[ScanItem] = []
+    for item in incoming:
+        key = _dalfox_key(item)
+        existing = seen.get(key)
+        if existing is None:
+            seen[key] = item
+            new_items.append(item)
+        else:
+            duplicates.append(existing)
+    return new_items, duplicates
 
 
 def _dedup_recon(
@@ -251,6 +310,23 @@ async def import_results(
         new_count, updated_count = _upsert_recon_httpx(db, recon_items, program_id, job_id)
         imported_count = new_count + updated_count
 
+    elif tool_type == "dalfox":
+        # Unlike nuclei, dalfox is deduped: a re-scan re-reports every match it
+        # still finds, so storing them again would inflate the engagement's
+        # count on every run. Duplicates still get their provenance linked —
+        # this job did observe them.
+        scan_items = parse_dalfox(items, program_id)
+        new_items, duplicates = _dedup_scan_items(db, scan_items, program_id, "dalfox")
+        for s in new_items:
+            s.job_id = job_id
+            db.add(s)
+        db.flush()
+        _link_assets(db, program_id, new_items, "dalfox")
+        for row in new_items + duplicates:
+            provenance.link_result(db, job_id, "scan", row.id)
+        new_count = len(new_items)
+        imported_count = new_count
+
     elif tool_type == "nuclei":
         scan_items = parse_nuclei(items, program_id)
         for s in scan_items:
@@ -287,14 +363,21 @@ async def import_results(
         )
         background_tasks.add_task(send_webhook, user.webhook_url, message)
 
-    # Webhook: notable nuclei findings at/above the user's severity threshold
-    if tool_type == "nuclei" and imported_count and user and user.webhook_url:
+    # Webhook: notable scanner matches at/above the user's severity threshold.
+    # For dalfox only genuinely-new matches are notified — a re-scan re-reporting
+    # a known issue is not news, and alerting on it every run trains the operator
+    # to ignore the webhook.
+    if tool_type in ("nuclei", "dalfox") and imported_count and user and user.webhook_url:
         threshold = user.notify_min_severity or "high"
-        notable = [s for s in scan_items if severity_meets_threshold(s.severity, threshold)]
+        candidates = new_items if tool_type == "dalfox" else scan_items
+        notable = [s for s in candidates if severity_meets_threshold(s.severity, threshold)]
         if notable:
             top = max(notable, key=lambda s: ["info", "low", "medium", "high", "critical"].index(s.severity))
+            # dalfox reports candidates for a human to verify, so the alert says
+            # so rather than calling an unverified match a finding.
+            noun = "candidate(s)" if tool_type == "dalfox" else "finding(s)"
             message = (
-                f"🚨 VardrMap: {len(notable)} {threshold}+ finding(s) imported for "
+                f"🚨 VardrMap: {len(notable)} {threshold}+ {noun} imported for "
                 f"{engagement.name if engagement else program_id} — top: [{top.severity}] {top.title or top.template_id}"
             )
             background_tasks.add_task(send_webhook, user.webhook_url, message)

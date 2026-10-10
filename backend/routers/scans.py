@@ -4,11 +4,12 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from db import get_db
 from deps import get_current_user, get_engagement_or_404, log_action, require_member_write
-from models import ScanItem
+from models import JobResultLink, ScanItem
 from schemas import BulkScanStatusUpdate, ScanStatusUpdate
 from serializers import serialize_scan_item
 
@@ -47,7 +48,17 @@ def get_scans(
     if status:
         query = query.filter(ScanItem.status == status)
     if job_id:
-        query = query.filter(ScanItem.job_id == job_id)
+        # "What did this job see", matching /recon and /services: the rows it
+        # first produced, plus rows an earlier job had already stored that this
+        # run observed again. Without the second half a deduplicated re-scan
+        # would look like it found nothing, because its links are the only
+        # record that it saw the issue at all.
+        query = query.filter(or_(
+            ScanItem.job_id == job_id,
+            ScanItem.id.in_(
+                db.query(JobResultLink.scan_id).filter(JobResultLink.job_id == job_id)
+            ),
+        ))
     total = query.count()
     items = query.order_by(ScanItem.id).offset(offset).limit(limit).all()
     return {"scans": [serialize_scan_item(s) for s in items], "total": total, "offset": offset, "limit": limit}
