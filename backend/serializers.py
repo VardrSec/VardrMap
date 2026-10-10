@@ -93,6 +93,13 @@ def serialize_scan_item(item: ScanItem) -> dict:
         "status": item.status or "new",
         "cwe": item.cwe or "",
         "cvss": item.cvss or "",
+        # The scanner's own verification signal, kept separate from severity so a
+        # match can be triaged on how it was found and how sure the tool was.
+        "detection_method": item.detection_method or "",
+        "confidence": item.confidence or "",
+        # Exactly as the scanner reported them. Untrusted text: render only as text.
+        "payload": item.payload or "",
+        "match_evidence": item.match_evidence or "",
         "job_id": item.job_id,
     }
 

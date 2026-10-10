@@ -58,7 +58,7 @@ class EventCreate(BaseModel):
 # stored test case rather than being resolved from scope or recon.
 _VARDRGATE = "vardrgate_api_test"
 
-_VALID_TOOLS = {"httpx", "nuclei", "subfinder", "nmap", "dnsx", "naabu", "katana", "gau", "ffuf", _VARDRGATE}
+_VALID_TOOLS = {"httpx", "nuclei", "subfinder", "nmap", "dnsx", "naabu", "katana", "gau", "ffuf", "dalfox", _VARDRGATE}
 _VALID_SOURCES = {"scope", "recon"}
 
 # Per-tool allowed config keys. Keys not in this set are rejected.
@@ -71,6 +71,7 @@ _TOOL_CONFIG_KEYS: dict[str, set[str]] = {
     "naabu":     {"top_ports", "limit", "timeout"},
     "katana":    {"limit", "status_code", "depth", "js_crawl", "timeout"},
     "gau":       {"subs", "providers", "timeout"},
+    "dalfox":    {"limit", "status_code", "delay", "worker", "mining", "timeout"},
     "ffuf":      {"wordlist", "extensions", "match_codes", "rate", "limit", "timeout"},
     # Only the reference. The spec is stored in authorization_test_cases and
     # inlined at hand-off, which keeps this config flat like every other tool's.
@@ -88,7 +89,7 @@ _FFUF_WORDLIST = re.compile(r"^[a-z0-9][a-z0-9_-]{0,39}$")
 _FFUF_EXTENSION = re.compile(r"^\.[A-Za-z0-9]{1,10}$")
 _FFUF_STATUS = re.compile(r"^\d{3}$")
 # Boolean config keys. A form posts them as "true"/"false"; JSON callers send booleans.
-_BOOL_CONFIG_KEYS = {("katana", "js_crawl"), ("gau", "subs")}
+_BOOL_CONFIG_KEYS = {("katana", "js_crawl"), ("gau", "subs"), ("dalfox", "mining")}
 
 # Config keys parsed as plain integers, with the bounds VardrRunner enforces.
 # Keeping the bounds here means a bad value is refused at queue time rather than
@@ -103,6 +104,13 @@ _INT_CONFIG_BOUNDS: dict[tuple[str, str], tuple[int, int]] = {
     ("katana", "depth"):     (1, 10),
     ("katana", "timeout"):   (1, 86_400),
     ("gau", "timeout"):      (1, 86_400),
+    # dalfox sends payloads at every parameter it finds, so like any active tool
+    # its load is bounded at queue time: `worker` caps concurrency and `delay`
+    # (milliseconds) spaces requests out.
+    ("dalfox", "limit"):     (1, 1_000_000),
+    ("dalfox", "worker"):    (1, 100),
+    ("dalfox", "delay"):     (0, 10_000),
+    ("dalfox", "timeout"):   (1, 86_400),
     # ffuf's rate cap is a safety control, not a tuning knob: it bounds the load a
     # job can put on a client's host. There is deliberately no value meaning
     # "unlimited", and the ceiling matches VardrRunner's FFUF_MAX_RATE.

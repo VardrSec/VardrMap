@@ -247,7 +247,7 @@ def test_ffuf_import_drops_duplicates_within_one_upload(client, program_id, auth
 #
 # A schedule queues an ordinary job, so ffuf can recur. These pin what is
 # PRESERVED for the scheduled path (limits, warnings, stop-work) and document the
-# one consequence worth knowing: stop-work does not pause a schedule.
+# one consequence worth knowing: stop-work pauses a schedule.
 
 from datetime import datetime, timedelta, timezone  # noqa: E402
 
