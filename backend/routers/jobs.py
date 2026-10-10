@@ -1,5 +1,6 @@
 import hashlib
 import json
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Any, Literal, Optional
 
@@ -21,6 +22,7 @@ from deps import (
 from limiter import limiter
 from models import (
     AuthorizationTestCase,
+    Engagement,
     Evidence,
     JobEvent,
     JobResultReceipt,
@@ -56,7 +58,7 @@ class EventCreate(BaseModel):
 # stored test case rather than being resolved from scope or recon.
 _VARDRGATE = "vardrgate_api_test"
 
-_VALID_TOOLS = {"httpx", "nuclei", "subfinder", "nmap", "dnsx", "naabu", "katana", "gau", "dalfox", _VARDRGATE}
+_VALID_TOOLS = {"httpx", "nuclei", "subfinder", "nmap", "dnsx", "naabu", "katana", "gau", "ffuf", "dalfox", _VARDRGATE}
 _VALID_SOURCES = {"scope", "recon"}
 
 # Per-tool allowed config keys. Keys not in this set are rejected.
@@ -70,12 +72,22 @@ _TOOL_CONFIG_KEYS: dict[str, set[str]] = {
     "katana":    {"limit", "status_code", "depth", "js_crawl", "timeout"},
     "gau":       {"subs", "providers", "timeout"},
     "dalfox":    {"limit", "status_code", "delay", "worker", "mining", "timeout"},
+    "ffuf":      {"wordlist", "extensions", "match_codes", "rate", "limit", "timeout"},
     # Only the reference. The spec is stored in authorization_test_cases and
     # inlined at hand-off, which keeps this config flat like every other tool's.
     _VARDRGATE:  {"test_case_id", "timeout"},
 }
 _NUCLEI_SEVERITIES = {"info", "low", "medium", "high", "critical"}
 _GAU_PROVIDERS = {"wayback", "commoncrawl", "otx", "urlscan"}
+# A ffuf wordlist is a *name*, resolved by VardrRunner against its own
+# ~/.vardrmap/wordlists on the machine that runs the scan. It is never a path:
+# a job that could supply one would let this API name any file the runner can
+# read for ffuf to read and replay at a target. This pattern mirrors
+# VardrRunner's `configs.WORDLIST_NAME` exactly — the runner refuses anything
+# else anyway, so accepting it here would only queue a job that cannot run.
+_FFUF_WORDLIST = re.compile(r"^[a-z0-9][a-z0-9_-]{0,39}$")
+_FFUF_EXTENSION = re.compile(r"^\.[A-Za-z0-9]{1,10}$")
+_FFUF_STATUS = re.compile(r"^\d{3}$")
 # Boolean config keys. A form posts them as "true"/"false"; JSON callers send booleans.
 _BOOL_CONFIG_KEYS = {("katana", "js_crawl"), ("gau", "subs"), ("dalfox", "mining")}
 
@@ -99,6 +111,12 @@ _INT_CONFIG_BOUNDS: dict[tuple[str, str], tuple[int, int]] = {
     ("dalfox", "worker"):    (1, 100),
     ("dalfox", "delay"):     (0, 10_000),
     ("dalfox", "timeout"):   (1, 86_400),
+    # ffuf's rate cap is a safety control, not a tuning knob: it bounds the load a
+    # job can put on a client's host. There is deliberately no value meaning
+    # "unlimited", and the ceiling matches VardrRunner's FFUF_MAX_RATE.
+    ("ffuf", "rate"):        (1, 1_000),
+    ("ffuf", "limit"):       (1, 1_000_000),
+    ("ffuf", "timeout"):     (1, 86_400),
 }
 
 
@@ -129,6 +147,76 @@ def _validate_test_case_ref(program_id: str, config: dict, db: Session) -> None:
             status_code=404,
             detail="Test case not found",
         )
+
+
+def _validate_ffuf_config(config: dict) -> None:
+    """Check ffuf's wordlist name, extensions and status filter.
+
+    Refusing a path-shaped wordlist here is the important part: see
+    ``_FFUF_WORDLIST``. The rest is ordinary shape validation, kept at queue time
+    so a bad value is refused while the operator is still looking at it rather
+    than failing on their machine after a runner has claimed the job.
+    """
+    wordlist = config.get("wordlist")
+    if wordlist not in (None, ""):
+        if not isinstance(wordlist, str) or not _FFUF_WORDLIST.match(wordlist.strip()):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "ffuf config.wordlist must be a wordlist name like 'common' or "
+                    "'api-paths' (lowercase letters, digits, '-' and '_'), not a path. "
+                    "The runner resolves it against its own wordlists directory."
+                ),
+            )
+    # The accepted *types* must match VardrRunner's `configs.FfufConfig` exactly.
+    # A type accepted here and refused there clears queue-time validation and then
+    # fails on the operator's machine after a runner has claimed the job, which is
+    # precisely what validating at queue time is meant to prevent. VardrRunner
+    # carries the same table (`test_accepted_types_match_vardrmaps_validator`).
+    raw_ext = config.get("extensions")
+    if raw_ext not in (None, ""):
+        if not isinstance(raw_ext, (str, list)):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "ffuf config.extensions must be a string or list, got "
+                    f"{type(raw_ext).__name__}"
+                ),
+            )
+        parts = raw_ext if isinstance(raw_ext, list) else str(raw_ext).split(",")
+        names = [str(p).strip() for p in parts if str(p).strip()]
+        normalized = [n if n.startswith(".") else f".{n}" for n in names]
+        bad = [n for n in normalized if not _FFUF_EXTENSION.match(n)]
+        if bad:
+            raise HTTPException(
+                status_code=400,
+                detail=f"ffuf config.extensions must look like '.php' or '.bak', got: {bad}",
+            )
+    raw_codes = config.get("match_codes")
+    if raw_codes not in (None, ""):
+        # A bare status code is fine (`{"match_codes": 200}` is natural over JSON,
+        # and the runner takes it). `bool` is not: `True` is an `int` in Python,
+        # and a status of 1 is nobody's intent.
+        if isinstance(raw_codes, bool) or not isinstance(raw_codes, (str, list, int)):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "ffuf config.match_codes must be a status code, string or list, got "
+                    f"{type(raw_codes).__name__}"
+                ),
+            )
+        parts = raw_codes if isinstance(raw_codes, list) else str(raw_codes).split(",")
+        codes = [str(p).strip() for p in parts if str(p).strip()]
+        if codes != ["all"]:
+            bad = [c for c in codes if not _FFUF_STATUS.match(c)]
+            if bad:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "ffuf config.match_codes must be three-digit statuses like "
+                        f"'200,301,403', or 'all', got: {bad}"
+                    ),
+                )
 
 
 def _validate_job_config(tool_type: str, config: dict) -> None:
@@ -175,6 +263,8 @@ def _validate_job_config(tool_type: str, config: dict) -> None:
                 status_code=400,
                 detail=f"gau providers must be wayback/commoncrawl/otx/urlscan, got: {bad}",
             )
+    if tool_type == "ffuf":
+        _validate_ffuf_config(config)
     for key, (low, high) in (
         (k, bounds) for (t, k), bounds in _INT_CONFIG_BOUNDS.items() if t == tool_type
     ):
@@ -463,10 +553,18 @@ def _materialize_due_schedules(db: Session, github_id: str) -> None:
     that was offline for a week creates one catch-up job, not seven.
     """
     now = datetime.now(timezone.utc)
+    # Stop-work is the operator's halt switch, and it must stop a schedule too. Refusing the
+    # claim is not enough on its own: materialization would keep queueing a job per interval
+    # behind the refusal, and all of them would become claimable on release -- a burst of
+    # repeated active scans the moment work resumes. So a stopped engagement's schedules are
+    # skipped AND left untouched: next_run_at is not advanced, so on release each schedule
+    # fires exactly one catch-up job, the same as after a runner outage.
+    stopped = db.query(Engagement.id).filter(Engagement.stop_work_at.isnot(None))
     due = (
         db.query(ScheduledScan)
         .filter(
             ScheduledScan.program_id.in_(accessible_engagement_ids(github_id, db)),
+            ScheduledScan.program_id.notin_(stopped),
             ScheduledScan.enabled == True,  # noqa: E712 — SQLAlchemy needs the comparison
             ScheduledScan.next_run_at <= now,
         )

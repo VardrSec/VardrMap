@@ -95,9 +95,18 @@ from the request.
 sections with `hideHeader`.
 
 Queueable `tool_type`: `httpx` | `nuclei` | `subfinder` | `nmap` | `dnsx` | `naabu` |
-`katana` | `gau` | `dalfox` | `vardrgate_api_test`. Config keys are allowlisted per tool in
-`routers/jobs.py`, with bounds mirroring VardrRunner's so a bad value is refused at queue
-time rather than failing on the operator's machine.
+`katana` | `gau` | `ffuf` | `dalfox` | `vardrgate_api_test`. Config keys are allowlisted per
+tool in `routers/jobs.py`, with bounds mirroring VardrRunner's so a bad value is refused at
+queue time rather than failing on the operator's machine after a runner claims the job.
+**`ffuf.wordlist` is a name, never a path** — a path would let the API name any file the
+runner can read for ffuf to read and replay at a target.
+
+**Schedules can recur active tools.** They validate `tool_type` and config exactly as jobs do,
+so ffuf and dalfox are schedulable. Rate/worker caps are **per execution, not per engagement**,
+and policy (warnings) is evaluated at **claim**, not at schedule creation. **Stop-work pauses a
+stopped engagement's schedules** (skipped, `next_run_at` untouched, so release yields one
+catch-up job rather than a backlog), pinned by `test_stop_work_pauses_a_schedule_so_no_backlog_builds`.
+Change it deliberately, with the tests and `docs/api.md` § Scheduling active tools.
 
 **Scanner output is a candidate, not a finding.** nuclei and dalfox imports land as
 `scan_items` with `status: "new"`; promoting one is the operator's act. Keep the scanner's
@@ -114,6 +123,7 @@ not data. They are untrusted text: render only as text. **The same goes for reco
 and recon URLs are read back as scan targets. Existing rows were not rewritten — read
 `docs/recon-url-recovery-plan.md` before touching them; a blind decode is wrong.
 
+## Engagement types and statuses
 `engagement_type`: `bug_bounty` | `pentest` | `red_team` | `internal`
 `engagement_status`: `planned` | `active` | `reporting` | `closed`
 
@@ -122,4 +132,10 @@ Authorization records (`routers/authorizations.py`) track the permission-to-test
 Clients (`routers/clients.py`) track the organisation being tested — required for pentest/internal; not applicable for bug bounty.
 
 ## Roadmap
-Remaining: DB table rename (`programs` → `engagements`, retire legacy path middleware), RBAC / multi-user support, client-facing deliverable generation
+Remaining: DB table rename (`programs` → `engagements`, retire legacy path middleware), RBAC / multi-user support.
+
+Client-facing deliverable generation shipped in v0.39.0 (immutable client report revisions).
+
+Agent-facing work lives in VardrRunner's MCP server, not here: case-drafting and
+report-drafting tools, methodology checklists, and a remote MCP for claude.ai — the last of
+which is the only one needing a VardrMap change (backend OAuth).
