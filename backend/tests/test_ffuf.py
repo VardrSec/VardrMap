@@ -241,3 +241,122 @@ def test_ffuf_import_drops_duplicates_within_one_upload(client, program_id, auth
     res = _upload_bytes(client, auth_headers, program_id, _jsonl(rows))
     assert res.status_code == 200
     assert len(_recon(client, auth_headers, program_id)) == 2
+
+
+# ── scheduled runs ──────────────────────────────────────────────────────────
+#
+# A schedule queues an ordinary job, so ffuf can recur. These pin what is
+# PRESERVED for the scheduled path (limits, warnings, stop-work) and document the
+# one consequence worth knowing: stop-work does not pause a schedule.
+
+from datetime import datetime, timedelta, timezone  # noqa: E402
+
+from db import get_db  # noqa: E402
+from main import app  # noqa: E402
+from models import ScheduledScan  # noqa: E402
+
+
+def _schedule(client, program_id, headers, **body):
+    return client.post(
+        f"/programs/{program_id}/schedules",
+        json={"tool_type": "ffuf", "target_source": "recon", "interval": "hourly", **body},
+        headers=headers,
+    )
+
+
+def _make_due(program_id):
+    """Pretend one interval has elapsed, so the next runner poll materializes the job."""
+    db = next(app.dependency_overrides[get_db]())
+    try:
+        for s in db.query(ScheduledScan).filter(ScheduledScan.program_id == program_id):
+            s.next_run_at = datetime.now(timezone.utc) - timedelta(minutes=1)
+        db.commit()
+    finally:
+        db.close()
+
+
+def _pending(client, headers, program_id):
+    jobs = client.get("/jobs/pending", headers=headers).json()["jobs"]
+    return [j for j in jobs if j["program_id"] == program_id]
+
+
+def test_ffuf_can_be_scheduled(client, program_id, auth_headers):
+    res = _schedule(client, program_id, auth_headers, config={"wordlist": "common", "rate": 25})
+    assert res.status_code in (200, 201), res.text
+    assert res.json()["tool_type"] == "ffuf"
+
+
+@pytest.mark.parametrize(
+    "config",
+    [
+        {"wordlist": "/etc/passwd"},  # a path, not a name
+        {"wordlist": "../../x"},
+        {"rate": 0},  # the cap cannot be switched off
+        {"rate": 1001},
+        {"nope": 1},
+    ],
+)
+def test_a_schedule_cannot_carry_what_a_job_could_not(client, program_id, auth_headers, config):
+    """Execution limits are validated when the schedule is created, exactly as for a job.
+
+    Otherwise a schedule would be a way round the wordlist-name rule and the rate cap.
+    """
+    assert _schedule(client, program_id, auth_headers, config=config).status_code == 400
+
+
+def test_a_scheduled_job_carries_the_schedules_config_unchanged(client, program_id, auth_headers):
+    config = {"wordlist": "api-paths", "rate": 25}
+    _schedule(client, program_id, auth_headers, config=config)
+    _make_due(program_id)
+    (job,) = _pending(client, auth_headers, program_id)
+    assert job["tool_type"] == "ffuf" and job["config"] == config
+
+
+def test_claiming_a_scheduled_job_returns_policy_warnings(client, program_id, auth_headers):
+    """Authorization, window and scope findings ride back at claim, as for any job.
+
+    Nothing is evaluated when the schedule is created or the job materialized, so the
+    claim is the only place a scheduled job meets policy.
+    """
+    _schedule(client, program_id, auth_headers, config={"rate": 25})
+    _make_due(program_id)
+    (job,) = _pending(client, auth_headers, program_id)
+    claim = client.post(f"/jobs/{job['id']}/claim", headers=auth_headers)
+    assert claim.status_code == 200, claim.text
+    assert isinstance(claim.json()["warnings"], list)
+
+
+def test_stop_work_refuses_the_claim_of_a_scheduled_job(client, program_id, auth_headers):
+    _schedule(client, program_id, auth_headers, config={"rate": 25})
+    _make_due(program_id)
+    (job,) = _pending(client, auth_headers, program_id)
+    client.post(f"/programs/{program_id}/stop-work", json={"reason": "incident"}, headers=auth_headers)
+    claim = client.post(f"/jobs/{job['id']}/claim", headers=auth_headers)
+    assert claim.status_code == 403
+    assert "stop_work_active" in claim.text
+
+
+def test_stop_work_does_not_pause_a_schedule_so_a_backlog_builds(client, program_id, auth_headers):
+    """DOCUMENTED CURRENT BEHAVIOUR, pre-existing for every tool and pinned deliberately.
+
+    Stop-work blocks execution, but `_materialize_due_schedules` keeps queueing one job
+    per interval while it is engaged. Each is refused at claim, and all of them become
+    claimable the moment stop-work is released. For an active tool like ffuf that means a
+    burst of repeated traffic on release. Changing this is a decision, not a drive-by; if
+    you do, update this test and docs/api.md together.
+    """
+    _schedule(client, program_id, auth_headers, config={"rate": 25})
+    client.post(f"/programs/{program_id}/stop-work", json={"reason": "incident"}, headers=auth_headers)
+    intervals = 4
+    for _ in range(intervals):
+        _make_due(program_id)
+        _pending(client, auth_headers, program_id)  # the runner's poll
+    backlog = _pending(client, auth_headers, program_id)
+    assert len(backlog) == intervals
+    assert all(
+        client.post(f"/jobs/{j['id']}/claim", headers=auth_headers).status_code == 403
+        for j in backlog
+    )
+    client.delete(f"/programs/{program_id}/stop-work", headers=auth_headers)
+    first = client.post(f"/jobs/{backlog[0]['id']}/claim", headers=auth_headers)
+    assert first.status_code == 200, "after release the backlog is claimable"

@@ -1335,6 +1335,34 @@ Permanently delete a job and all its events. Intended for removing stuck jobs th
 
 Recurring scan definitions. There is no backend cron: due schedules are materialized into pending `scan_jobs` whenever VardrRunner polls `GET /jobs/pending`, so schedules only fire while a runner is connected. New schedules are due immediately — the first job is created on the runner's next poll. After a runner outage, one catch-up job is created (not one per missed interval).
 
+### Scheduling active tools (ffuf)
+
+Any `tool_type` a job accepts, a schedule accepts — including `ffuf`, which sends sustained
+traffic at the target. Creating a schedule needs write access to the engagement (a `full`
+API key included). VardrRunner's MCP server exposes no tool that creates or edits one.
+
+- **Repeated schedules mean repeated active traffic.** The shortest interval is `hourly`, so
+  an `ffuf` schedule fuzzes the target every hour for as long as it exists. **`config.rate` is
+  a limit on one execution, not on the engagement:** each run is a fresh process with its own
+  full allowance, and nothing aggregates traffic across runs, across schedules, or across
+  jobs that overlap. The cap bounds how hard one run pushes, not how often runs happen.
+- **Execution limits are validated at creation**, by the same validator a job uses, so a
+  schedule cannot carry a wordlist path or switch the rate cap off. Those limits then travel
+  with every job it materializes, unchanged.
+- **Policy is evaluated when a runner claims the job, not when the schedule is created.**
+  Creating a schedule and materializing its job perform no authorization, testing-window or
+  scope check. At claim (and on the transition to `running`) the engagement is evaluated:
+  findings come back in the claim response's `warnings` array and the job still runs, because
+  scope, window and authorization are advisory (ADR 0001). A schedule therefore **keeps
+  running after the authorization window closes**; each run carries the warning.
+- **Stop-work refuses the claim — but does not pause the schedule.** While stop-work is
+  engaged a claim returns `403 stop_work_active`, yet due schedules keep queueing one
+  pending job per interval. Those jobs become claimable as soon as stop-work is released, so
+  releasing after a long stop hands the runner a backlog of repeated active scans. Disable
+  (`PATCH ... {"enabled": false}`) or delete active-tool schedules when you engage stop-work
+  for anything longer than an incident. This is existing behaviour for every tool; it is
+  worth knowing precisely because ffuf makes the consequence louder.
+
 **Schedule object shape**
 ```json
 {

@@ -102,6 +102,13 @@ time rather than failing on the operator's machine after a runner claims the job
 **`ffuf.wordlist` is a name, never a path** — a path would let the API name any file the
 runner can read for ffuf to read and replay at a target.
 
+**Schedules can recur active tools.** They validate `tool_type` and config exactly as jobs do,
+so ffuf is schedulable. Rate/worker caps are **per execution, not per engagement**; policy
+(warnings) and stop-work are evaluated at **claim**, not at schedule creation; and stop-work
+refuses the claim but does **not** pause materialization, so a backlog builds (pinned by
+`test_stop_work_does_not_pause_a_schedule_so_a_backlog_builds`). That is existing, documented
+behaviour — change it deliberately, with the test and `docs/api.md` § Scheduling active tools.
+
 `engagement_type`: `bug_bounty` | `pentest` | `red_team` | `internal`
 `engagement_status`: `planned` | `active` | `reporting` | `closed`
 
