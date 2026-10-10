@@ -118,7 +118,10 @@ carry a fresh per-run marker class.
 **Scanner payload, evidence and PoC URL are stored exactly as reported** (`payload`,
 `match_evidence`, `asset`): never run them through `strip_html`, which deletes anything
 tag-shaped and encodes `&` — for an XSS scanner that deletes the evidence. Sanitise prose,
-not data. They are untrusted text: render only as text.
+not data. They are untrusted text: render only as text. **The same goes for recon URLs**
+(`url`/`host`/`path` via `_url_field`): `strip_html` turned `?a=1&b=2` into `?a=1&amp;b=2`,
+and recon URLs are read back as scan targets. Existing rows were not rewritten — read
+`docs/recon-url-recovery-plan.md` before touching them; a blind decode is wrong.
 
 ## Engagement types and statuses
 `engagement_type`: `bug_bounty` | `pentest` | `red_team` | `internal`
