@@ -839,7 +839,7 @@ Queue a new scan job.
   "depends_on": null
 }
 ```
-- `tool_type`: `"httpx"`, `"nuclei"`, `"subfinder"`, `"nmap"`, `"dnsx"`, `"naabu"`, `"katana"`, `"gau"`, or `"vardrgate_api_test"`
+- `tool_type`: `"httpx"`, `"nuclei"`, `"subfinder"`, `"nmap"`, `"dnsx"`, `"naabu"`, `"katana"`, `"gau"`, `"ffuf"`, or `"vardrgate_api_test"`
 - `target_source`: `"scope"` or `"recon"`
 - `config` (optional): tool-specific options. Unknown keys are rejected.
 
@@ -853,9 +853,16 @@ Queue a new scan job.
   | `naabu` | `top_ports` (1–65535), `limit` (1–1000000), `timeout` (1–86400 s) |
   | `katana` | `depth` (1–10), `js_crawl` (`true`/`false`), `limit` (1–1000000), `status_code`, `timeout` (1–86400 s) |
   | `gau` | `subs` (`true`/`false`), `providers` (any of `wayback`, `commoncrawl`, `otx`, `urlscan`; comma string or list), `timeout` (1–86400 s) |
+  | `ffuf` | `wordlist` (a **name**, see below), `extensions` (`.php,.bak`; comma string or list, a bare `php` gains its dot), `match_codes` (three-digit statuses, or `all`), `rate` (1–1000, requests/sec **per target**), `limit` (1–1000000), `timeout` (1–86400 s) |
   | `vardrgate_api_test` | `test_case_id` (required), `timeout` |
 
   Integer bounds mirror the ones VardrRunner enforces, so an out-of-range value is refused at queue time rather than failing on the operator's machine after the job is claimed.
+
+  **`ffuf.wordlist` is a name, never a path.** It must match `[a-z0-9][a-z0-9_-]{0,39}` — `common`, `api-paths`. VardrRunner resolves that name against `~/.vardrmap/wordlists` on the machine running the scan. A path, a traversal, or a drive letter returns `400`. This is deliberate: were a path accepted, this API could name any file the runner can read, and ffuf would read it and replay its lines at a target. The runner refuses a path too, so accepting one here would only queue a job that cannot run.
+
+  **`ffuf.limit` counts recon rows, not hosts.** VardrRunner collapses ffuf's targets to site roots *after* the limit is applied, so 100 recon URLs that all live on one host consume the default limit and fuzz a single root. Raise `limit`, or use `target_source: "scope"`, when a recon table is dense on few hosts. For the same reason `POST /jobs/preview` reports the resolved recon targets rather than the roots ffuf will fuzz, so for `ffuf` its `count` is an **upper bound** on the hosts touched, not the exact execution set.
+
+  **`ffuf.rate` is a safety control, not a tuning knob.** It bounds the load a job can put on a client's host, so it has a ceiling and no value meaning "unlimited"; omitting it gives VardrRunner's default of 50/s. ffuf additionally always runs with auto-calibration, so a host that answers every path with `200` cannot flood recon with phantom endpoints.
 - `depends_on` (optional): id of another job (same engagement, same owner) that must reach `done` before this job becomes eligible in `GET /jobs/pending`.
 
 **Response:** job object with `status: "pending"`.
@@ -1327,6 +1334,34 @@ Permanently delete a job and all its events. Intended for removing stuck jobs th
 ## Scheduled Scans
 
 Recurring scan definitions. There is no backend cron: due schedules are materialized into pending `scan_jobs` whenever VardrRunner polls `GET /jobs/pending`, so schedules only fire while a runner is connected. New schedules are due immediately — the first job is created on the runner's next poll. After a runner outage, one catch-up job is created (not one per missed interval).
+
+### Scheduling active tools (ffuf)
+
+Any `tool_type` a job accepts, a schedule accepts — including `ffuf`, which sends sustained
+traffic at the target. Creating a schedule needs write access to the engagement (a `full`
+API key included). VardrRunner's MCP server exposes no tool that creates or edits one.
+
+- **Repeated schedules mean repeated active traffic.** The shortest interval is `hourly`, so
+  an `ffuf` schedule fuzzes the target every hour for as long as it exists. **`config.rate` is
+  a limit on one execution, not on the engagement:** each run is a fresh process with its own
+  full allowance, and nothing aggregates traffic across runs, across schedules, or across
+  jobs that overlap. The cap bounds how hard one run pushes, not how often runs happen.
+- **Execution limits are validated at creation**, by the same validator a job uses, so a
+  schedule cannot carry a wordlist path or switch the rate cap off. Those limits then travel
+  with every job it materializes, unchanged.
+- **Policy is evaluated when a runner claims the job, not when the schedule is created.**
+  Creating a schedule and materializing its job perform no authorization, testing-window or
+  scope check. At claim (and on the transition to `running`) the engagement is evaluated:
+  findings come back in the claim response's `warnings` array and the job still runs, because
+  scope, window and authorization are advisory (ADR 0001). A schedule therefore **keeps
+  running after the authorization window closes**; each run carries the warning.
+- **Stop-work refuses the claim — but does not pause the schedule.** While stop-work is
+  engaged a claim returns `403 stop_work_active`, yet due schedules keep queueing one
+  pending job per interval. Those jobs become claimable as soon as stop-work is released, so
+  releasing after a long stop hands the runner a backlog of repeated active scans. Disable
+  (`PATCH ... {"enabled": false}`) or delete active-tool schedules when you engage stop-work
+  for anything longer than an incident. This is existing behaviour for every tool; it is
+  worth knowing precisely because ffuf makes the consequence louder.
 
 **Schedule object shape**
 ```json
