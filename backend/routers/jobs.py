@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Literal, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 import enforcement
@@ -46,7 +46,7 @@ SCHEDULE_INTERVALS: dict[str, timedelta] = {
 }
 
 
-EventKind = Literal["started", "targets_resolved", "running", "uploaded", "done", "failed", "log"]
+EventKind = Literal["started", "targets_resolved", "target_stats", "target_warning", "blocked", "running", "uploaded", "done", "failed", "log"]
 
 
 class EventCreate(BaseModel):
@@ -220,6 +220,10 @@ def _validate_ffuf_config(config: dict) -> None:
 
 
 def _validate_job_config(tool_type: str, config: dict) -> None:
+    if tool_type == _VARDRGATE and "timeout" in config:
+        value = config["timeout"]
+        if type(value) is not int or not 1 <= value <= 86_400:
+            raise HTTPException(status_code=400, detail="vardrgate_api_test config.timeout must be an integer between 1 and 86400")
     allowed = _TOOL_CONFIG_KEYS.get(tool_type, set())
     unknown = set(config.keys()) - allowed
     if unknown:
@@ -976,6 +980,13 @@ class VardrGateUpload(BaseModel):
     test_case_id: str = Field(default="", max_length=200)
     executions: list[dict] = Field(default_factory=list, max_length=100)
     findings: list[dict] = Field(default_factory=list, max_length=500)
+
+    @field_validator("findings", mode="before")
+    @classmethod
+    def legacy_empty_findings(cls, value):
+        # Older Gate binaries encode a nil slice as null. Other malformed
+        # shapes still fail validation; execution errors remain in executions.
+        return [] if value is None else value
 
 
 def _finding_description(finding: dict) -> str:

@@ -611,3 +611,11 @@ The largest remaining structural gap. Today a host exists as five unrelated
 free-text columns with no foreign keys between them, and identity resolution is
 string comparison. Nothing can be correlated, aggregated by asset, or diffed
 over time. The relational edge-table design is specified in `domain-model.md`.
+# Evidence association
+
+Evidence retains its existing nullable `finding_id` relationship. A reviewed
+link operation can associate engagement-level scan evidence with a finding in
+the same engagement. It preserves the row ID, body hash and execution provenance;
+it does not create a copy. Evidence already linked to another finding cannot be
+reassigned, preserving finding history. New links require member-level write
+access and produce an audit entry. No schema migration is needed.
