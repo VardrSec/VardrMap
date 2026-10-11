@@ -181,6 +181,10 @@ def run_worker(label, allow=False):
     )
     (root / (label + ".log")).write_text(p.stdout + p.stderr, encoding="utf-8")
     check(label + " worker exited normally", p.returncode == 0)
+    if p.returncode:
+        from redaction import redact_text
+        print(redact_text(p.stderr[-4000:]), flush=True)
+        raise RuntimeError(f"{label} worker failed; see its retained log")
 
 
 def queue(caseid):
