@@ -4,6 +4,12 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Add real browser acceptance against a disposable backend and run it in CI;
+  expand Map → Runner → Gate fixtures for denial conventions, stale sessions,
+  pagination, parameter integrity and inconclusive HTTP outcomes.
+- Record the current ars0n/Vardr lineup comparison and original starter API
+  playbooks, with priorities for guidance, assessment outcomes and provenance.
+
 - Preserve Unix virtualenv interpreter paths in the integration launcher instead
   of resolving them to the base Python, and report redacted worker startup errors.
 

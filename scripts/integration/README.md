@@ -42,8 +42,17 @@ companion repository commits pinned in `.github/workflows/ci.yml`. Update those
 pins deliberately when validating a newer combined stack. Local runs continue
 to snapshot the supplied checkouts, including uncommitted changes.
 
-This supplements the repositories' normal suites and does not test browser UI
-or GitHub OAuth.
+Additional controlled cases cover HTTP 200 body denials, declared hidden-object
+404 denials, fixed privileged functions, expired target credentials, two reviewed
+collection pages, literal parameter transport, 429/503 responses and redirects.
+The target serves only loopback and the run asserts a 100-request ceiling. The
+parameter injection canary is a transport check, not an injection detection claim.
+Ambiguous HTTP outcomes retain evidence even when the command job completes;
+`done` and zero findings are not proof of a clean authorization assessment.
+
+This supplements the repositories' normal suites. The separate
+[browser suite](../../docs/development.md#browser-acceptance) exercises real UI
+and API persistence; neither suite tests real GitHub OAuth.
 
 ## Hosted staging boundary
 

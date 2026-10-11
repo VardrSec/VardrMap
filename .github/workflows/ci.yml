@@ -113,6 +113,50 @@ jobs:
           --runner .integration/runner --gate .integration/gate
           --runner-python .integration/runner-venv/bin/python
           --output "${{ runner.temp }}"
+      - name: Retain integration verdict and source manifest
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: api-integration-verdict
+          path: |
+            ${{ runner.temp }}/vardr-integration-*/acceptance-results.json
+            ${{ runner.temp }}/vardr-integration-*/sources.json
+          if-no-files-found: ignore
+          retention-days: 7
+
+  browser:
+    name: Browser acceptance
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install isolated test dependencies
+        run: |
+          pip install -r backend/requirements.txt -r backend/requirements-dev.txt
+          npm ci --prefix frontend
+      - name: Install browser
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+      - name: Exercise real UI against disposable backend
+        working-directory: frontend
+        run: npm run test:e2e
+      - name: Retain failure traces
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: browser-acceptance-failure
+          path: |
+            frontend/playwright-report
+            frontend/test-results
+          retention-days: 7
 
   frontend:
     name: Frontend lint + build

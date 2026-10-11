@@ -307,3 +307,27 @@ Run `python -m pip check`, audit the installed Python dependency closure and run
 is Sentry's transitive HTTP transport. Use compatible updates and rerun frontend
 lint, typecheck, tests and build; do not blindly apply `npm audit fix --force`.
 See [the code audit](code-audit-2026-10-11.md) for remaining development-tool advisories.
+
+## Browser acceptance
+
+From `frontend`, install the locked packages with `npm ci`, install Chromium with
+`npx playwright install chromium`, then run `npm run test:e2e`. Linux CI uses
+`npx playwright install --with-deps chromium`. Set `E2E_PYTHON` to a backend Python
+interpreter if it is not `../backend/venv/Scripts/python.exe` on Windows or
+`python` on Unix. It needs the backend requirements installed.
+
+The suite owns ports 3006 and 8765 and refuses to reuse an existing server. It
+starts Next in development mode and a real loopback FastAPI backend with a fresh
+temporary SQLite database and fixture signing key. The backend ignores any
+inherited database URL and removes the AI provider key. All application API calls
+are real; only `/api/auth/session` is intercepted in the test browser with fixture
+identities. No test-login provider or auth bypass is added to the application.
+Real GitHub OAuth and deployed configuration still need hosted staging checks.
+
+Four browser journeys cover login presentation, pentest/client creation, job
+preview/queueing, synthetic candidate import/promotion, immutable report creation
+and Markdown download, viewer access/revocation, and expired backend identities.
+Browser queueing does not execute a scanner; the separate
+[integration harness](../scripts/integration/README.md) runs the actual Runner
+and Gate. Never point these fixtures at production. Playwright traces/screenshots
+and reports are ignored by Git; CI retains failed browser artifacts for seven days.
