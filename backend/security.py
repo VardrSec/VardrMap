@@ -44,7 +44,7 @@ def sanitize_identifier(value: str | None) -> str:
     """Strict sanitizer for short identifier fields: name, title, asset.
 
     Detection runs on RAW input FIRST — before any stripping — to catch
-    obfuscated payloads like <scr<script>ipt>. After detection, bleach strips
+    obfuscated payloads like <scr<script>ipt>. After detection, nh3 strips
     any remaining tags.
     """
     if not value:

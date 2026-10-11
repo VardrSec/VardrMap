@@ -4,6 +4,22 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Require expiry and identity claims in backend JWTs; deny shared client writes by organization viewers.
+- Pin webhook connections to validated public IPs while preserving TLS identity;
+  reject malformed URLs and avoid logging webhook secrets.
+- Bound import reads before size rejection; redact AI inputs and hide provider exception details.
+- Reconcile frontend request flow, tenancy, domain model and roadmap documentation with implemented features.
+- Update compatible frontend transitive packages, removing the critical Handlebars
+  advisory; pin urllib3 2.8.0 to protect Sentry's transitive HTTP dependency.
+
+- Fresh PostgreSQL installs now create the frozen historical baseline before
+  applying incremental migrations. Already-versioned databases keep their normal
+  upgrade path; nonempty unstamped databases require explicit schema inspection.
+- PostgreSQL application and migration connections use UTC, preventing date
+  shifts and false offline runner status on databases with non-UTC defaults.
+  TLS remains required unless `sslmode` is explicitly supplied in the URL.
+- Add PostgreSQL migration, backend and three-product integration checks to CI;
+  make the read-only audit assertion portable across SQLite and PostgreSQL.
 - Accept legacy VardrGate `findings: null` as an empty list; other malformed
   shapes remain errors. Validate Gate job timeouts at queue time.
 - Persist runner `target_stats`, `target_warning`, and `blocked` events.

@@ -7,14 +7,33 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlsplit
 
 root = Path(sys.argv[1]).resolve()
-os.environ["DATABASE_URL"] = "sqlite:///" + str(
-    root / ("acceptance-" + str(time.time_ns()) + ".db")
-)
-os.environ["ENV"] = "test"
+postgres = os.getenv("INTEGRATION_POSTGRES") == "1"
+if postgres:
+    from sqlalchemy.engine import make_url
+    database_url = os.environ["INTEGRATION_DATABASE_URL"]
+    parsed = make_url(database_url)
+    if parsed.get_backend_name() != "postgresql" or not (parsed.database or "").startswith("vardrmap_test"):
+        raise ValueError("Integration requires an empty disposable vardrmap_test* PostgreSQL database")
+    os.environ["DATABASE_URL"] = database_url
+else:
+    os.environ["DATABASE_URL"] = "sqlite:///" + str(
+        root / ("acceptance-" + str(time.time_ns()) + ".db")
+    )
+os.environ["ENV"] = "staging" if postgres else "test"
 os.environ["BACKEND_JWT_SECRET"] = "local-acceptance-fixture-signing-key-32-characters"
 os.environ["ALLOWED_ORIGINS"] = "http://localhost:3000"
 os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
 sys.path.insert(0, str(root / "map/backend"))
+if postgres:
+    from db import engine
+    from sqlalchemy import inspect
+    if inspect(engine).get_table_names():
+        raise ValueError("Integration PostgreSQL database must be empty")
+    engine.dispose()
+    subprocess.run(
+        [sys.executable, "-m", "alembic", "upgrade", "head"],
+        cwd=root / "map/backend", check=True, timeout=90,
+    )
 import jwt, requests, uvicorn
 from main import app
 from db import SessionLocal
@@ -23,7 +42,7 @@ from models import ScanJob
 results = {
     "checks": [],
     "observations": [],
-    "scope": "Loopback HTTP, isolated SQLite, source snapshots; no browser or production deployment.",
+    "scope": f"Loopback HTTP, isolated {'PostgreSQL' if postgres else 'SQLite'}, source snapshots; no browser or production deployment.",
 }
 
 
@@ -198,6 +217,7 @@ try:
             break
         time.sleep(0.05)
     assert server.started, "backend did not start"
+    req("POST", "/auth/sync")
     client_id = req(
         "POST", "/clients", {"name": "Local Fixture Client"}, expected=(200, 201)
     )["id"]

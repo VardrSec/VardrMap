@@ -44,7 +44,7 @@ Bug bounty work is one `engagement_type` among four (`bug_bounty`, `pentest`, `r
 **Scan Jobs orchestration console** — full job management UI in the browser:
 - Bridge zone — animated link visualization showing live VardrMap ↔ VardrRunner connection status; shows real hostname, OS, version, and per-tool availability from the latest heartbeat
 - Telemetry zone — running/completed/results-yielded/avg-runtime stat tiles
-- Composer zone — pick one of seven tools (subfinder, httpx, nuclei, nmap, dnsx, naabu, vardrgate) with per-tool config, or a named pipeline: **Attack Surface** (subfinder → dnsx → httpx → nuclei) for a surface you have to discover, **Host Enumeration** (naabu → nmap → httpx) for a scope you were given, **API Assessment** (httpx → vardrgate) for API authorization testing. Selecting a pipeline expands a stage editor so you can include or exclude each stage
+- Composer zone — pick one of eleven tools (subfinder, httpx, nuclei, nmap, dnsx, naabu, katana, gau, ffuf, dalfox, vardrgate) with per-tool config, or a named pipeline: **Attack Surface** (subfinder → dnsx → httpx → nuclei) for a surface you have to discover, **Host Enumeration** (naabu → nmap → httpx) for a scope you were given, **Content Discovery** (subfinder → httpx → katana → gau) for endpoint discovery, **API Assessment** (httpx → vardrgate) for API authorization testing. Selecting a pipeline expands a stage editor so you can include or exclude each stage
 - Job Board + Terminal — three board views (Stream, Pipeline, Table); selecting a job opens a terminal that polls live lifecycle events (started → running → done/failed) every 3 s
 
 **VardrRunner** — local CLI companion ([VardrSec/VardrRunner](https://github.com/VardrSec/VardrRunner), its own repo):
@@ -64,7 +64,7 @@ VardrMap evaluates every job against the engagement's authorization, testing win
 
 Staying inside scope is the operator's responsibility, the same as it is with every other tool in the kit — Burp proxies any host you point it at, and nmap scans any range you hand it. A platform that blocks on its own reading of a scope rule interrupts legitimate work, and scope in the field is messier than any rule set.
 
-The one exception is **stop-work**, which returns `403` and halts everything. That is not the platform second-guessing the operator: it is the operator's own emergency brake, and a brake that can be ignored is not a brake.
+The one exception is **stop-work**, which returns `403` to prevent new execution and skips schedule materialization; it does not cancel already running local processes. That is not the platform second-guessing the operator: it is the operator's own emergency brake, and a brake that can be ignored is not a brake.
 
 Rationale in [docs/adr/0001-central-policy-engine.md](docs/adr/0001-central-policy-engine.md) § Amendment.
 
@@ -76,7 +76,7 @@ Rationale in [docs/adr/0001-central-policy-engine.md](docs/adr/0001-central-poli
 - Personal API key authentication — opaque token, SHA-256 hash stored only
 - BOLA enforcement — all queries scoped to the authenticated user at the database level; cross-tenant access returns `404`, never `403`
 - Secret redaction — auth headers, cookies, tokens, and URL credentials stripped from evidence on write
-- Input sanitization — injection detection on identifier fields; `bleach` strip on long-form fields
+- Input sanitization — injection detection on identifier fields; `nh3` strip on long-form fields
 - Rate limiting — 200 requests/minute per IP (slowapi)
 - Security headers — CSP, HSTS (production only), X-Frame-Options, Referrer-Policy, Permissions-Policy
 - File upload validation — extension allowlist (`.json`, `.jsonl`), content-type check, 2 MB limit

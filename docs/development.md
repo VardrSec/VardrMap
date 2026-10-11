@@ -9,7 +9,8 @@
 
 For the isolated three-product API engagement test, see
 [`scripts/integration/README.md`](../scripts/integration/README.md). It uses real
-Runner and Gate execution with a loopback fixture and disposable SQLite database.
+Runner and Gate execution with a loopback fixture and disposable SQLite or
+PostgreSQL database.
 
 ---
 
@@ -70,7 +71,7 @@ The app is now at `http://localhost:3000`.
 | `ALLOWED_ORIGINS` | Yes | Comma-separated list of allowed CORS origins. Local: `http://localhost:3000` |
 | `ENV` | No | Environment name. Set to `development` locally. Railway sets `RAILWAY_ENVIRONMENT_NAME` automatically. HSTS is sent only when this resolves to exactly `production` — any other value, including a typo, fails to the safe side and sends no HSTS. |
 | `MAX_UPLOAD_BYTES` | No | Max file size for tool imports in bytes. Default: `2097152` (2 MB). |
-| `ANTHROPIC_API_KEY` | No | Anthropic API key. Required for `POST /programs/{id}/findings/{id}/suggest` (AI triage). If absent, the endpoint returns `503`. Obtain at [console.anthropic.com](https://console.anthropic.com). |
+| `ANTHROPIC_API_KEY` | No | Anthropic API key for finding suggestions and scanner triage (`POST /engagements/{id}/findings/{id}/suggest` and `POST /engagements/{id}/scans/triage`). Nonempty requests without a key return `503`; empty triage returns an empty list. Inputs are heuristically redacted; do not send restricted client evidence to the provider. Obtain at [console.anthropic.com](https://console.anthropic.com). |
 | `LOG_LEVEL` | No | Logging verbosity — `DEBUG`/`INFO`/`WARNING`/`ERROR`. Default: `INFO`. Logs are written to stdout (Railway captures stdout as the service log). An unrecognized value falls back to `INFO`. |
 | `SENTRY_DSN` | No | If set, unhandled errors are reported to Sentry for aggregation and alerting. Unset disables Sentry (stdout logging still applies). `sentry-sdk` ships in `requirements.txt`; it is only imported when this is set. |
 | `SENTRY_TRACES_SAMPLE_RATE` | No | Sentry performance-tracing sample rate, `0.0`–`1.0`. Default: `0.0` (error reporting only, no tracing). Only used when `SENTRY_DSN` is set. |
@@ -96,7 +97,10 @@ The app is now at `http://localhost:3000`.
 
 ## Running Tests
 
-Tests use SQLite (in-memory via `test_vardrmap.db`), not PostgreSQL. The test database is rebuilt from scratch on each run — `conftest.py` calls `drop_all()` then `create_all()` to ensure the current schema is always used.
+Tests default to file-backed SQLite (`test_vardrmap.db`). Set `TEST_DATABASE_URL`
+to run them against a disposable PostgreSQL database named `vardrmap_test*`.
+The backend suite drops and recreates its tables on each run; never point it at
+valuable data. Test users go through `/auth/sync` before creating owned resources.
 
 ```bash
 cd backend
@@ -177,10 +181,19 @@ Review the generated file in `migrations/versions/` before applying — autogene
 alembic upgrade head
 ```
 
-**Stamp an existing database without running migrations** (use this when setting up Alembic on a database that already has the schema):
+**Fresh database:** run `alembic upgrade head`. The baseline creates the frozen
+historical schema and subsequent revisions bring it current. No `create_all` or
+manual stamping is needed. Repeated upgrades are safe.
+
+**Existing unstamped database:** inspect its schema and identify its actual
+revision before stamping. For example, only a database matching the pre-Alembic
+baseline should use:
 ```bash
-alembic stamp head
+alembic stamp 0001baseline
+alembic upgrade head
 ```
+Do not stamp `head` to bypass missing tables or migrations. Nonempty unstamped
+databases are refused by the baseline. Its downgrade retains historical tables.
 
 **Check current revision:**
 ```bash
@@ -189,7 +202,26 @@ alembic current
 
 ### Test database
 
-Tests use SQLite and rebuild the schema from scratch on every run via `drop_all() + create_all()` in `conftest.py`. Alembic migrations do not run in tests — the SQLite schema always reflects the current model definitions.
+The backend suite rebuilds the current ORM schema. The separate PostgreSQL
+migration tests instead create disposable schemas, run Alembic from empty and
+historical baselines, verify retained data, and start the app without `create_all`.
+
+From `backend/`, with an existing disposable PostgreSQL database:
+
+```powershell
+$env:TEST_DATABASE_URL = 'postgresql://user:password@127.0.0.1:5432/vardrmap_test_local'
+.\venv\Scripts\python.exe -m pytest postgres_tests -v
+.\venv\Scripts\python.exe -m pytest tests -v
+```
+
+Application and migration connections enforce UTC regardless of the server's
+default timezone. TLS remains required by default; an explicit `sslmode` URL
+parameter is honored (for example `?sslmode=disable` on a disposable local/CI
+instance without TLS). No existing timestamp values are rewritten.
+
+CI sets its database default to `America/Chicago`, runs these checks and the
+backend suite, then executes the [three-product acceptance check](../scripts/integration/README.md)
+against a second empty PostgreSQL database.
 
 ---
 
@@ -265,3 +297,13 @@ held in memory only. Use the request context menu to promote selected traffic;
 automatic capture is intentionally unavailable. Select the originating Burp
 tool in the suite tab so API Surface provenance is useful; multi-selected
 messages are promoted individually.
+
+## Dependency hygiene
+
+Install from the repository requirements and lockfile before interpreting test
+results; an old virtual environment can differ from the deployed versions.
+Run `python -m pip check`, audit the installed Python dependency closure and run
+`npm audit` after updating dependencies. urllib3 is explicitly pinned because it
+is Sentry's transitive HTTP transport. Use compatible updates and rerun frontend
+lint, typecheck, tests and build; do not blindly apply `npm audit fix --force`.
+See [the code audit](code-audit-2026-10-11.md) for remaining development-tool advisories.

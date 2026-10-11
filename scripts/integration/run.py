@@ -47,9 +47,15 @@ def main() -> int:
     parser.add_argument("--runner-python", required=True, type=Path)
     parser.add_argument("--go", default="go")
     parser.add_argument(
+        "--postgres", action="store_true",
+        help="Use INTEGRATION_DATABASE_URL (an empty disposable vardrmap_test* database)",
+    )
+    parser.add_argument(
         "--output", type=Path, help="Parent for a fresh isolated run directory"
     )
     args = parser.parse_args()
+    if args.postgres and not os.getenv("INTEGRATION_DATABASE_URL"):
+        parser.error("--postgres requires INTEGRATION_DATABASE_URL")
     scripts = Path(__file__).resolve().parent
     root = Path(tempfile.mkdtemp(prefix="vardr-integration-", dir=args.output))
     print(f"Artifacts: {root}", flush=True)
@@ -74,6 +80,7 @@ def main() -> int:
         "RUNNER_PYTHON": str(args.runner_python.resolve()),
         "PYTHONIOENCODING": "utf-8",
         "PYTHONDONTWRITEBYTECODE": "1",
+        "INTEGRATION_POSTGRES": "1" if args.postgres else "0",
     }
     return subprocess.run(
         [sys.executable, "-B", str(root / "acceptance.py"), str(root)],

@@ -16,12 +16,12 @@ if config.config_file_name is not None:
 # Import all models so their tables are registered in metadata
 import models  # noqa: F401 — side-effect import
 from db import Base
+from database_options import connection_args, normalize_url
 
 # Override sqlalchemy.url from environment, applying the psycopg3 driver fix
 DATABASE_URL = os.getenv("DATABASE_URL", "")
-DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg://", 1)
-DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+psycopg://", 1)
-config.set_main_option("sqlalchemy.url", DATABASE_URL)
+DATABASE_URL = normalize_url(DATABASE_URL)
+config.set_main_option("sqlalchemy.url", DATABASE_URL.replace("%", "%%"))
 
 target_metadata = Base.metadata
 
@@ -39,12 +39,11 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
-    _is_pg = DATABASE_URL.startswith(("postgresql", "postgres"))
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
-        connect_args={"sslmode": "require"} if _is_pg else {},
+        connect_args=connection_args(DATABASE_URL),
     )
     with connectable.connect() as connection:
         context.configure(connection=connection, target_metadata=target_metadata)

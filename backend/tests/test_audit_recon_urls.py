@@ -2,7 +2,7 @@
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import DBAPIError
 
 import audit_recon_urls as audit_mod
 from db import get_db
@@ -100,14 +100,23 @@ def test_the_audit_changes_nothing_and_cannot_write(db, program_id):
     assert before == after
 
     # While in read-only mode a write must fail rather than succeed.
-    audit_mod.make_read_only(db)
-    try:
-        db.add(ReconItem(program_id=program_id, source="gau", url="https://t.test/nope"))
-        with pytest.raises(OperationalError):
-            db.flush()
-    finally:
-        db.rollback()
-        audit_mod.restore_writes(db)
+    # A failed flush rolls back and releases a Session's pooled connection.
+    # Hold a dedicated connection so SQLite's connection-local pragma can
+    # be reset on the same connection, rather than whichever the pool gives next.
+    from sqlalchemy.orm import Session
+    with db.get_bind().connect() as connection, Session(bind=connection) as isolated:
+        audit_mod.make_read_only(isolated)
+        try:
+            isolated.add(ReconItem(program_id=program_id, source="gau", url="https://t.test/nope"))
+            with pytest.raises(DBAPIError) as error:
+                isolated.flush()
+            if connection.dialect.name == "postgresql":
+                assert error.value.orig.sqlstate == "25006"
+            else:
+                assert "readonly" in str(error.value).lower()
+        finally:
+            isolated.rollback()
+            audit_mod.restore_writes(isolated)
 
 
 def test_the_audit_leaves_the_connection_writable_afterwards(db, program_id):

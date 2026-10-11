@@ -29,5 +29,18 @@ reviewed evidence linking, immutable deliverable revisions, stop-work/release,
 unreachable targets, empty-result uploads and persisted worker telemetry.
 Any failed assertion or harness error returns a nonzero exit code.
 
-This is an opt-in integration check. It does not exercise the browser UI or
-PostgreSQL behavior, and should supplement the repositories' normal test suites.
+For PostgreSQL, set `INTEGRATION_DATABASE_URL` to an **empty disposable database**
+whose name starts with `vardrmap_test`, then add `--postgres`. The harness refuses
+a nonempty database, runs the complete Alembic chain, and starts the backend with
+`ENV=staging` so `create_all` cannot hide migration defects. Both modes initialize
+the fixture user through `/auth/sync`, matching the normal browser bootstrap.
+PostgreSQL connections use UTC and require TLS by default; `?sslmode=disable` is
+available for a local disposable instance without TLS.
+
+CI runs PostgreSQL backend/migration checks and this three-product check using
+companion repository commits pinned in `.github/workflows/ci.yml`. Update those
+pins deliberately when validating a newer combined stack. Local runs continue
+to snapshot the supplied checkouts, including uncommitted changes.
+
+This supplements the repositories' normal suites and does not test browser UI
+or GitHub OAuth.

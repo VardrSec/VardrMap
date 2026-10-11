@@ -11,11 +11,11 @@ VardrMap started as a bug bounty dashboard and is now a professional pentest eng
 ## Where things live
 - `backend/` — FastAPI app, SQLAlchemy models, Alembic migrations, tests
 - `backend/routers/` — one file per resource (engagements, findings, reports, etc.)
-- `backend/tests/` — pytest suite (700+ tests, uses SQLite)
+- `backend/tests/` — pytest suite (SQLite by default; optional PostgreSQL verification)
 - `frontend/app/` — Next.js App Router pages and components
 - `frontend/app/components/` — one component per section (FindingsSection, ReportsSection, JobsSection, etc.)
 - `frontend/app/context/` — AppContext.tsx + appReducer.ts (global state)
-- `frontend/test-utils/` — `renderWithApp` harness (75+ frontend tests)
+- `frontend/test-utils/` — `renderWithApp` harness (frontend test harness)
 - `docs/` — architecture, API reference, development setup, security testing record
 - `CHANGELOG.md` — version history
 - VardrRunner lives in its own repo; integrates over HTTP API with a `vmap_` key — no code here.
@@ -103,4 +103,4 @@ Authorization records (`routers/authorizations.py`) track the permission-to-test
 Clients (`routers/clients.py`) track the organisation being tested — required for pentest/internal; not applicable for bug bounty.
 
 ## Roadmap
-Remaining: DB table rename (`programs` → `engagements`, retire legacy path middleware), RBAC / multi-user support, client-facing deliverable generation
+Remaining: DB table rename (`programs` → `engagements`, retire legacy path middleware), organization administration / team UI, organization-scoped runner credentials (RBAC and client-facing deliverables are implemented)

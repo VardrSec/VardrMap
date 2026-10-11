@@ -26,3 +26,5 @@ build/
 Thumbs.db
 .vercel
 .env*
+# Companion checkouts and environments used by the integration CI job.
+.integration/
