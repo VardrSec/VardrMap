@@ -2,6 +2,15 @@
 
 All notable changes to VardrMap. Full release notes live in [`changelog/`](changelog/).
 
+## Unreleased
+
+- Accept legacy VardrGate `findings: null` as an empty list; other malformed
+  shapes remain errors. Validate Gate job timeouts at queue time.
+- Persist runner `target_stats`, `target_warning`, and `blocked` events.
+- Add an explicit evidence-to-finding link endpoint with member-write checks,
+  an audit entry, and unchanged evidence identity, content and provenance.
+  Existing links cannot be moved to a different finding. No migration.
+
 | Version | Date | Summary |
 |---|---|---|
 | [v0.43.0](changelog/v0.43.0.md) | 2026-10-10 | **Bug fix** - new recon and nuclei imports store URLs exactly as reported. The importers ran them through `strip_html`, which encoded `&` (`?a=1&b=2` became `?a=1&amp;b=2`); recon URLs are read back as scan targets, so runners scanned a URL whose second parameter was named `amp;b`. Existing rows are **not** rewritten (a blind decode is a guess: five originals collapsed to one value); a read-only audit and a recovery plan are provided for review. No migration |

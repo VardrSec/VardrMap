@@ -7,6 +7,10 @@
 - PostgreSQL (or use Railway for a hosted instance)
 - A GitHub OAuth App for local login
 
+For the isolated three-product API engagement test, see
+[`scripts/integration/README.md`](../scripts/integration/README.md). It uses real
+Runner and Gate execution with a loopback fixture and disposable SQLite database.
+
 ---
 
 ## Backend Setup

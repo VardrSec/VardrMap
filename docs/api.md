@@ -1882,3 +1882,29 @@ removed once VardrRunner and the frontend are both updated.
 Note that *program* still has a distinct, correct meaning elsewhere in this API:
 a **bug bounty program** on HackerOne or Bugcrowd, as surfaced by
 `GET /radar`. Those are not engagements and were not renamed.
+# Integration contract updates
+
+`POST /engagements/{program_id}/evidence/{evidence_id}/link` accepts
+`{"finding_id": "..."}` and returns the existing evidence with its new association.
+This is an explicit reviewed write: the caller needs member-level write access.
+Both objects must belong to this engagement; inaccessible or missing objects
+return 404, viewers receive 403, and unauthenticated/invalid credentials receive
+401. Linking again to the same finding is idempotent. Linking evidence already
+associated with a different finding returns 409. It does not copy evidence or
+change its body, hash, source, collector, or creation timestamp. A successful new
+link is audited and permits using that evidence ID in finding activity/retests.
+
+VardrGate job `config.timeout`, when supplied, must be an integer from 1 to 86400
+seconds; VardrRunner applies it to Gate execution and the subprocess timeout.
+Private-target access is opted into locally using the runner's
+`VARDRRUNNER_ALLOW_PRIVATE_TARGETS=1` environment setting, never by queued config.
+The backend continues to serialize `program_id`; runners normalize that wire
+field to their internal engagement ID.
+
+`POST /jobs/{job_id}/upload` accepts legacy Gate `findings: null` as `[]`, as well
+as omitted/empty findings. Other malformed findings shapes still return 422.
+This compatibility handling does not reinterpret execution failures as clean
+scans; the worker still fails unsuccessful Gate processes.
+
+`POST /jobs/{job_id}/events` also accepts `target_stats`, `target_warning`, and
+`blocked`, retaining the existing lifecycle event types and access checks.
