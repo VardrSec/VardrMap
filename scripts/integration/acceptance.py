@@ -34,7 +34,7 @@ if postgres:
         [sys.executable, "-m", "alembic", "upgrade", "head"],
         cwd=root / "map/backend", check=True, timeout=90,
     )
-import jwt, requests, uvicorn
+import jwt, httpx, uvicorn
 from main import app
 from db import SessionLocal
 from models import ScanJob
@@ -137,7 +137,7 @@ other = {"Authorization": "Bearer " + token("lab_other")}
 
 
 def req(method, path, payload=None, expected=(200,), auth=None):
-    r = requests.request(
+    r = httpx.request(
         method, backend + path, json=payload, headers=auth or headers, timeout=10
     )
     if r.status_code not in expected:
@@ -336,7 +336,7 @@ try:
     )
     check(
         "Cross-user case access hidden",
-        requests.get(
+        httpx.get(
             backend + base + "/test-cases", headers=other, timeout=5
         ).status_code
         == 404,
@@ -469,7 +469,7 @@ try:
             "Evidence link preserves original record",
             linked == {**original, "finding_id": fid},
         )
-    attach = requests.post(
+    attach = httpx.post(
         backend + base + "/findings/" + fid + "/activity",
         headers=headers,
         json={

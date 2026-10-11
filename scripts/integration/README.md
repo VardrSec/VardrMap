@@ -44,3 +44,14 @@ to snapshot the supplied checkouts, including uncommitted changes.
 
 This supplements the repositories' normal suites and does not test browser UI
 or GitHub OAuth.
+
+## Hosted staging boundary
+
+The automated workflow above runs a real backend in staging mode on a disposable
+PostgreSQL database. It is not a claim about a Railway/Vercel deployment. Hosted
+checks require a dedicated staging backend URL and test identities; do not direct
+this harness at production. The browser preview must point to that staging backend,
+not inherit the production API URL. Validate OAuth with two real GitHub sessions,
+viewer/member permissions, production-style CORS and webhook delivery there.
+The existing loopback checks cover the execution/evidence/report path without
+requiring production accounts or targets.

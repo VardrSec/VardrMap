@@ -104,12 +104,10 @@ original), how many are **collisions** (two different originals share the value)
    today, but changes what existing jobs target.
 4. What `--fixed-since` is the real deploy time? Without it every marked row counts as suspect.
 
-## Not covered — but a larger, related problem
+## Related ordinary text storage
 
-The same encoding hits **every field that goes through `strip_html`**, not only URLs: confirmed against
-the sanitiser, `Terms & Conditions` is stored as `Terms &amp; Conditions` and a finding titled
-`IDOR on /orders?a=1&b=2` as `...a=1&amp;b=2` (14 call sites in `schemas.py` alone). The frontend has no
-entity decoder, so users see the literal `&amp;`. That is display corruption rather than data a tool reads
-back, so it is out of scope for this plan and was not changed, but it is wider than recon and worth its
-own decision: store text losslessly and escape on output (the frontend already does), or keep
-sanitising on input and decode on output.
+New sanitized text now preserves ampersands and literal entity syntax, while
+retaining existing HTML stripping and identifier rejection rules. Existing rows
+are not rewritten. Historical display corruption remains ambiguous and needs
+reviewed recovery, just like historical recon URLs; blindly decoding entities
+would change legitimate literal text.

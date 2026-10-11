@@ -1921,3 +1921,15 @@ Webhook delivery connects to an approved resolved address while preserving the
 original HTTP Host and TLS identity. It disables environment proxies and redirects,
 rejects malformed/credential-bearing URLs and logs error types rather than secret URLs.
 Imports enforce the existing size cap with a bounded read.
+
+## Text preservation and deletion ordering
+
+New sanitized text preserves literal ampersands and entity syntax (`&`, `&amp;`,
+`&#38;`) instead of HTML-encoding or collapsing them. Existing rules still remove
+HTML tags, remove null bytes and reject injection patterns in identifier fields.
+Render the result as text or through the existing safe Markdown renderer, never
+by inserting raw HTML. Existing stored text is not decoded or rewritten.
+
+Observation links declare their recon/scan/service relationships so the ORM
+orders their deletion before deleting observed targets. Job deletion continues
+to remove its links while retaining observations. No database migration is needed.

@@ -74,7 +74,7 @@ subsequent complete SQLite and PostgreSQL suites passed.
    npm proposes breaking downgrades of Next/Jest tooling. Those were not applied;
    a tooling migration needs its own compatibility assessment. These are advisory
    package counts, not 25 independently demonstrated product exploits.
-2. **Text escaping can corrupt ordinary stored text.** Some long-form fields
+2. **Text escaping can corrupt ordinary stored text (new writes fixed in the follow-up below).** Some long-form fields
    still use the sanitizer that encodes `&` as `&amp;`. Recon URLs have their
    separate preservation fix, but ordinary display text needs a deliberate lossless
    storage/rendering policy. Existing data cannot be blindly decoded. See
@@ -83,7 +83,7 @@ subsequent complete SQLite and PostgreSQL suites passed.
    identity credential objects reject literal secrets, but arbitrary request
    headers, URLs and bodies can contain sensitive values. Review them before
    saving cases. Redaction is heuristic, not a proof of secret absence.
-4. **PostgreSQL cleanup emits ORM warnings.** Some engagement deletions delete
+4. **PostgreSQL cleanup emits ORM warnings (resolved in the follow-up below).** Some engagement deletions delete
    result links through overlapping ORM/database cascades, producing expected-row
    count warnings. Tests pass, but the cascade ownership should be simplified in
    a focused change rather than suppressing the warnings.
@@ -100,3 +100,25 @@ The default backend Ruff scan also reports existing conventions/style findings
 (including FastAPI dependency defaults and intentional exception boundaries).
 This audit does not claim the entire historical codebase is Ruff-clean or replace
 those conventions with broad mechanical changes.
+
+## Follow-up implementation
+
+PR #85 commits the audit work. New sanitized text now preserves ampersands and
+literal entities without changing existing HTML-removal rules or rewriting old
+rows. The historical recon audit keeps its old transformation explicitly.
+Observation-link relationships now give the ORM the dependency ordering needed
+to avoid PostgreSQL cascade double-deletes; warnings are not suppressed.
+Next.js lint configuration retains its working version: 16.4 enables additional
+React effect rules requiring a separate UI refactor, so the compatible security
+updates are kept without that rule migration. The remaining advisory
+roots (`braces` 3.0.3 and `sprintf-js` 1.1.3) are still flagged at their latest
+published versions; compatible updates cannot currently remove them.
+The integration harness uses its declared httpx dependency instead of relying
+on requests being incidentally installed locally.
+
+Follow-up verification: 1,037 SQLite tests and 1,037 PostgreSQL backend tests plus
+four migration tests pass. PostgreSQL runs treat SQLAlchemy warnings as errors;
+no overlapping-cascade warnings remain. The final httpx-based staging-mode
+Map → Runner → Gate acceptance run passes all 39 checks on a freshly migrated
+PostgreSQL database. Hosted staging/OAuth remain pending a dedicated endpoint
+and test credentials.

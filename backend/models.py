@@ -730,6 +730,13 @@ class JobResultLink(Base):
     scan_id = Column(String, ForeignKey("scan_items.id", ondelete="CASCADE"), nullable=True, index=True)
     service_id = Column(String, ForeignKey("services.id", ondelete="CASCADE"), nullable=True, index=True)
 
+    # Declare target dependencies so ORM deletes links before deleting observed
+    # rows. Otherwise PostgreSQL's target cascade removes them first and the ORM
+    # subsequently issues duplicate deletes while deleting their job.
+    recon = relationship("ReconItem")
+    scan = relationship("ScanItem")
+    service = relationship("Service")
+
 
 class FindingActivity(Base):
     """Append-only revisions, remediation updates, and completed retest attempts."""

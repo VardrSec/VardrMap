@@ -4,6 +4,15 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Preserve ampersands and literal entity syntax in newly sanitized text, keeping
+  the existing HTML-removal and identifier rejection rules. Existing stored rows
+  are not rewritten; historical recon auditing keeps its frozen transformation.
+- Order ORM observation-link deletions before target deletions, removing duplicate
+  PostgreSQL cascade deletes without suppressing warnings or adding a migration.
+- Use the declared HTTP client
+  in the integration harness so clean CI environments need no undeclared requests dependency.
+
+
 - Require expiry and identity claims in backend JWTs; deny shared client writes by organization viewers.
 - Pin webhook connections to validated public IPs while preserving TLS identity;
   reject malformed URLs and avoid logging webhook secrets.
