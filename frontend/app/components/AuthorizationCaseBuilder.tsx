@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import ApiPlaybookGuide from "./ApiPlaybookGuide";
 import { useAppContext } from "../context/AppContext";
 import { Panel } from "./ui";
 import { buttonClass, errorText, Field, fieldClass, Pages, requestJson } from "./workflowUi";
@@ -40,6 +41,7 @@ export default function AuthorizationCaseBuilder({ engagementId, endpointIds }: 
   }
   return <Panel title="Draft authorization tests">
     <div className="space-y-4">
+      <ApiPlaybookGuide key={engagementId} engagementId={engagementId} />
       <p className="text-sm text-[#94a3b8]">Choose observed Burp operations below or load an OpenAPI 3.x JSON document. Review concrete URLs, request bodies, identity references, and expected access before saving.</p>
       {error && <p role="alert" className="text-sm text-red-400">{error}</p>}{message && <p role="status" className="text-sm text-[#a6e3a1]">{message}</p>}
       <fieldset className="space-y-3" disabled={busy}>

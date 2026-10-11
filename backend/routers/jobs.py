@@ -8,6 +8,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, R
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
+import assessments
 import enforcement
 import redaction
 import sse as _sse
@@ -317,6 +318,7 @@ def serialize_job(j: ScanJob) -> dict:
         "target_source": j.target_source,
         "config": j.config or {},
         "status": j.status,
+        "assessment": j.assessment,
         "depends_on": j.depends_on,
         "created_at":   j.created_at.isoformat()   if j.created_at   else None,
         "started_at":   j.started_at.isoformat()   if j.started_at   else None,
@@ -747,6 +749,13 @@ def update_job(
     warnings: list[dict] = []
     if body.status == "running" and job.status != "running":
         warnings = _check_run_transition(job, current_user, db, now)
+        if job.tool_type == _VARDRGATE and job.case_snapshot is None:
+            case = db.query(AuthorizationTestCase).filter(
+                AuthorizationTestCase.id == str((job.config or {}).get("test_case_id") or ""),
+                AuthorizationTestCase.program_id == job.program_id,
+            ).first()
+            if case:
+                job.case_snapshot = case.spec
 
     job.status = body.status
     if body.status == "running" and not job.started_at:
@@ -821,6 +830,16 @@ def claim_job(
             )
         )
 
+    snapshot = None
+    if pending is not None and pending.status == "pending" and pending.tool_type == _VARDRGATE:
+        case = db.query(AuthorizationTestCase).filter(
+            AuthorizationTestCase.id == str((pending.config or {}).get("test_case_id") or ""),
+            AuthorizationTestCase.program_id == pending.program_id,
+        ).first()
+        if not case:
+            raise HTTPException(status_code=404, detail="Test case not found")
+        snapshot = case.spec
+
     claimed = (
         db.query(ScanJob)
         .filter(
@@ -829,7 +848,7 @@ def claim_job(
             ScanJob.status == "pending",
         )
         .update(
-            {ScanJob.status: "running", ScanJob.started_at: now},
+            {ScanJob.status: "running", ScanJob.started_at: now, ScanJob.case_snapshot: snapshot},
             synchronize_session=False,
         )
     )
@@ -859,7 +878,10 @@ def claim_job(
         )
         .first()
     )
-    return {**serialize_job(job), "warnings": warnings}
+    data = serialize_job(job)
+    if job.case_snapshot is not None:
+        data["config"] = {**data["config"], "test_case": job.case_snapshot}
+    return {**data, "warnings": warnings}
 
 
 def serialize_event(e: JobEvent) -> dict:
@@ -977,6 +999,7 @@ class VardrGateUpload(BaseModel):
     not rest on the sender.
     """
 
+    case_hash: str = Field(default="", pattern=r"^([a-f0-9]{64})?$")
     test_case_id: str = Field(default="", max_length=200)
     executions: list[dict] = Field(default_factory=list, max_length=100)
     findings: list[dict] = Field(default_factory=list, max_length=500)
@@ -1047,8 +1070,12 @@ def upload_job_result(
             detail=f"job {job_id} is a '{job.tool_type}' job; /upload accepts {_VARDRGATE} results",
         )
 
+    receipt_payload = body.model_dump()
+    # Preserve hashes of legacy receipts created before case_hash existed.
+    if not body.case_hash:
+        receipt_payload.pop("case_hash")
     canonical_payload = json.dumps(
-        body.model_dump(), sort_keys=True, separators=(",", ":"), default=str
+        receipt_payload, sort_keys=True, separators=(",", ":"), default=str
     ).encode("utf-8")
     if len(canonical_payload) > _MAX_RESULT_BYTES:
         raise HTTPException(status_code=413, detail="result payload is too large")
@@ -1082,9 +1109,13 @@ def upload_job_result(
         )
         .first()
     )
-    if case:
-        target = str(((case.spec or {}).get("request") or {}).get("url") or "")[:2000]
-        authoritative_id = case.test_case_id or ""
+    spec = job.case_snapshot
+    authoritative_spec = spec or (case.spec if case else {})
+    if spec and body.case_hash and body.case_hash != assessments.case_hash(spec):
+        raise HTTPException(status_code=400, detail="Result case_hash does not match the claimed case snapshot")
+    if authoritative_spec:
+        target = str((authoritative_spec.get("request") or {}).get("url") or "")[:2000]
+        authoritative_id = str(authoritative_spec.get("id") or "")
         if template_id and template_id != authoritative_id:
             raise HTTPException(
                 status_code=400,
@@ -1119,12 +1150,28 @@ def upload_job_result(
         )
         created_items += 1
 
+    verified = bool(spec and body.case_hash == assessments.case_hash(spec))
+    job.assessment = {
+        **assessments.assess(spec, body.executions, created_items, case_verified=verified),
+        "case_id": queued_case or None,
+        "case_ref": template_id or None,
+    }
+    decisions = {
+        i["identity_id"]: i["expected_decision"] for i in job.assessment["identities"]
+    } if verified else {}
     created_evidence = 0
     for execution in body.executions:
         if not isinstance(execution, dict):
             continue
-        identity = str(execution.get("identity_id") or "unknown")
+        identity = redaction.redact_text(str(execution.get("identity_id") or "unknown"))
+        outcome = execution.get("observed_outcome")
+        if not isinstance(outcome, str) or outcome not in {
+            "allow", "deny", "not_found", "redirect", "server_error", "client_error", "error",
+        }:
+            outcome = "unknown"
         detail: dict[str, Any] = {
+            "case_hash": body.case_hash or None,
+            "case_snapshot_verified": verified,
             "identity_id": identity,
             "status_code": execution.get("status_code"),
             "observed_outcome": execution.get("observed_outcome"),
@@ -1143,6 +1190,14 @@ def upload_job_result(
         db.add(
             Evidence(
                 program_id=job.program_id,
+                job_id=job.id,
+                case_id=case.id if case else None,
+                case_ref=template_id or None,
+                # Never turn an overlong identifier into a different identity.
+                # The redacted body retains it; nullable metadata stays unknown.
+                identity_id=identity if len(identity) <= 200 else None,
+                observed_outcome=outcome,
+                expected_decision=decisions.get(identity, "unknown"),
                 kind="tool_result",
                 title=f"vardrgate · {identity} → {execution.get('status_code', '?')}"[:200],
                 body=text,

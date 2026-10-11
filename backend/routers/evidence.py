@@ -87,6 +87,12 @@ def _serialize(e: Evidence) -> dict:
         "finding_id": e.finding_id or "",
         "collector": e.collector or "",
         "source": e.source or "",
+        "job_id": e.job_id,
+        "case_id": e.case_id,
+        "case_ref": e.case_ref,
+        "identity_id": e.identity_id,
+        "observed_outcome": e.observed_outcome,
+        "expected_decision": e.expected_decision,
         "sensitivity": e.sensitivity or "internal",
         "retention": e.retention or "engagement",
         "redacted": bool(e.redacted),
@@ -156,6 +162,9 @@ def create_evidence(
 def list_evidence(
     program_id: str,
     finding_id: str | None = Query(default=None),
+    job_id: str | None = Query(default=None, max_length=200),
+    case_id: str | None = Query(default=None, max_length=200),
+    identity_id: str | None = Query(default=None, max_length=200),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     current_user: dict = Depends(get_current_user),
@@ -165,6 +174,9 @@ def list_evidence(
     query = db.query(Evidence).filter(Evidence.program_id == program_id)
     if finding_id:
         query = query.filter(Evidence.finding_id == finding_id)
+    for column, value in ((Evidence.job_id, job_id), (Evidence.case_id, case_id), (Evidence.identity_id, identity_id)):
+        if value is not None:
+            query = query.filter(column == value)
     total = query.count()
     rows = query.order_by(Evidence.created_at.desc()).offset(offset).limit(limit).all()
     return {"evidence": [_serialize(e) for e in rows], "total": total}

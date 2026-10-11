@@ -1,5 +1,6 @@
 import { test, expect, type Page, type APIRequestContext } from "@playwright/test";
 import { SignJWT } from "jose";
+import { createHash } from "node:crypto";
 
 const api = "http://127.0.0.1:8765";
 const secret = new TextEncoder().encode("browser-fixture-signing-key-only-32-characters");
@@ -31,6 +32,57 @@ test("unauthenticated browser presents GitHub login", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("button", { name: "Sign in with GitHub" })).toBeVisible();
   await expect(page.getByLabel("Active Engagement")).toHaveCount(0);
+});
+
+test("API playbook, partial assessment and evidence linking use the real backend", async ({ page, request }) => {
+  const user = "browser_api_operator";
+  const { token, headers } = await identity(user);
+  await post(request, "/auth/sync", headers, {});
+  const engagement = await post(request, "/engagements", headers, { name: "Browser API provenance", engagement_type: "internal" });
+  const base = `/engagements/${engagement.id}`;
+  const spec = { id: "browser-ownership", identities: [
+    { id: "owner", credential: { type: "bearer", value_env: "FIXTURE_OWNER" } },
+    { id: "other", credential: { type: "bearer", value_env: "FIXTURE_OTHER" } },
+  ], request: { method: "GET", url: "https://api.example.test/objects/42" }, expected_access: [
+    { identity_id: "owner", decision: "allow" }, { identity_id: "other", decision: "deny" },
+  ] };
+  const stored = await post(request, base + "/test-cases", headers, { name: "Ownership", spec });
+  const job = await post(request, base + "/jobs", headers, { tool_type: "vardrgate_api_test", target_source: "scope", config: { test_case_id: stored.id } });
+  await post(request, `/jobs/${job.id}/claim`, headers, {});
+  const canonical = (value: unknown): unknown => Array.isArray(value) ? value.map(canonical) : value && typeof value === "object" ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => [k, canonical(v)])) : value;
+  const caseHash = createHash("sha256").update(JSON.stringify(canonical(spec))).digest("hex");
+  // Synthetic result exercises storage and UI. Real execution is tested by the
+  // separate loopback Map -> Runner -> Gate acceptance harness.
+  await post(request, `/jobs/${job.id}/upload`, headers, { test_case_id: spec.id, case_hash: caseHash, findings: [], executions: [
+    { identity_id: "owner", status_code: 200, observed_outcome: "allow" },
+    { identity_id: "other", status_code: 503, observed_outcome: "server_error" },
+  ] });
+  expect((await request.patch(api + `/jobs/${job.id}`, { headers, data: { status: "done" } })).ok()).toBeTruthy();
+  await post(request, base + "/findings", headers, { title: "Operator reviewed finding", severity: "high" });
+  await session(page, user, token);
+  await page.goto("/");
+  await page.getByLabel("Active Engagement").selectOption(engagement.id);
+  await expect(page.getByText("Assessment: partial", { exact: true })).toBeVisible();
+  await page.getByText("vardrgate_api_test", { exact: true }).click();
+  await expect(page.getByText(/Job completion alone/)).toBeVisible();
+  await expect(page.getByText("1 evaluated · 1 inconclusive · 0 missing · 0 skipped · 0 unexpected executions")).toBeVisible();
+  await expect(page.getByText(`Case: ${spec.id} · Identity: other`)).toBeVisible();
+  await page.getByRole("button", { name: "Link evidence to a finding" }).click();
+  await page.getByLabel("Finding for selected evidence").selectOption({ label: "Operator reviewed finding" });
+  const linked = page.waitForResponse(r => r.url().endsWith("/link") && r.request().method() === "POST");
+  await page.getByRole("button", { name: "Link this evidence", exact: true }).first().click();
+  const proof = await (await linked).json();
+  expect(proof.job_id).toBe(job.id);
+  expect(proof.case_id).toBe(stored.id);
+  expect(proof.identity_id).toBeTruthy();
+  await expect(page.getByText(`Linked finding: ${proof.finding_id}`)).toBeVisible();
+  await page.locator("nav").getByRole("button", { name: /Review$/ }).click();
+  await page.getByRole("button", { name: "API Surface", exact: true }).click();
+  await page.getByRole("button", { name: "Show API playbooks" }).click();
+  await expect(page.getByText("API-01 · version 1.0")).toBeVisible();
+  await page.getByLabel("API playbook").selectOption("API-03");
+  await expect(page.getByText("API-03 · version 1.0")).toBeVisible();
+  await expect(page.getByText(/Historical or manual records without provenance/)).toBeVisible();
 });
 
 test("pentest creation, job preview/queue, candidate review and immutable client report", async ({ page, request }) => {

@@ -3,7 +3,10 @@
 Edition 1, 2026-10-11. Original Vardr guidance, tested against the controlled
 fixtures in [integration acceptance](../scripts/integration/README.md).
 These are operator runbooks; reading them queues nothing and grants no access.
-They are not yet served as structured MCP playbooks or an interactive UI wizard.
+The original version 1.0 definitions live in `backend/api_playbooks.json`, served
+on demand to the case builder and Runner MCP (`list_api_playbooks`,
+`get_api_playbook`, `api_playbook`). The UI displays guidance; it is not an
+execution wizard or a mutable coverage checklist.
 
 ## Common prerequisites and interpretation
 
@@ -99,9 +102,8 @@ and impacts that require observing side effects beyond one response.
 retest evidence and an immutable client deliverable revision.
 
 1. Review the candidate and create the finding with reproduction, impact and
-   remediation. Preserve the execution evidence's hash and source. Map currently
-   stores Gate evidence at engagement level; explicitly select the relevant
-   identities/runs rather than guessing provenance from similar titles.
+   remediation. Preserve the execution evidence's hash and source. Select Gate evidence by job_id, case_id and identity_id in the job panel. Historical
+   or manual evidence without provenance requires explicit operator identification.
 2. Link the evidence through the Evidence UI or
    `POST /engagements/{id}/evidence/{evidence_id}/link`. A linked record cannot be
    moved to another finding; it should remain an account of the original observation.

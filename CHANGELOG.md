@@ -4,6 +4,17 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Separate Gate assessment completeness from job lifecycle, with per-identity
+  evaluated/inconclusive/missing/skipped outcomes and legitimate-baseline checks.
+- Bind results to a claim-time case snapshot using a SHA-256 from Runner; legacy
+  uploads remain usable evidence with an inconclusive assessment.
+- Preserve structured job/case/identity provenance in Gate evidence, finding
+  activity and new client report revisions; expose evidence filters and linking
+  in the job UI. Additive migration 0027 leaves historical provenance unknown.
+- Serve three original versioned API playbooks from one backend catalog to the
+  case builder and Runner MCP. Reading guidance records no coverage or progress.
+- Run CI for stacked PRs as well as PRs targeting main.
+
 - Add real browser acceptance against a disposable backend and run it in CI;
   expand Map → Runner → Gate fixtures for denial conventions, stale sessions,
   pagination, parameter integrity and inconclusive HTTP outcomes.

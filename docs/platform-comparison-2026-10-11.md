@@ -4,7 +4,10 @@ Reviewed 2026-10-11. This is an engineering/workflow comparison, not a security
 certification or a finding-rate benchmark. Vardr's controlled fixtures were run;
 ars0n was inspected without launching its scanners against external targets.
 
-## Sources and revisions
+The first sections preserve the pre-feature baseline. The final update records
+the implementation and verification of assessment, provenance and shared guidance.
+
+## Sources and revisions (baseline)
 
 - VardrMap: `codex/postgres-reliability`, based on `49e786`, including PR #85.
 - VardrRunner: local `77a56c8dd93de184ec26bf39e7a6658e5bfbfecc`.
@@ -104,7 +107,7 @@ operator's halt; authorization/scope warnings remain advisory.
 Borrow the design idea, not ars0n's prose or payload catalog. The starter content
 here is original and grounded in Vardr's current contracts.
 
-## Priority order
+## Priority order (baseline)
 
 1. **Execution outcome and provenance.** Show inconclusive/partial results next
    to completion; persist job/case/identity references for Gate evidence. Add
@@ -126,3 +129,36 @@ here is original and grounded in Vardr's current contracts.
 Revisit this comparison when companion pins or workflow behavior change. For
 each proposed feature, require a user problem, an executable fixture or manual
 acceptance criterion, and a clear statement of what the evidence cannot prove.
+
+## Platform update: assessment, provenance and playbook integration
+
+The comparison above records the pre-feature baseline. In the current feature
+branches, Map has an assessment summary separate from lifecycle, claim-time case
+snapshots and structured job/case/identity evidence. Results carry an unresolved
+case hash from Runner; unbound historical/legacy results stay unknown/inconclusive.
+The UI can inspect a run and link its exact evidence to a reviewed finding; new
+report revisions and activity entries retain that provenance.
+
+The three original API playbooks are now one backend versioned catalog, read on
+demand in the case builder and through Runner MCP. MCP has a sixth instruction-only
+prompt, api_playbook, and read tools for the catalog and filtered evidence. This
+closes the initial integration gap without copying ars0n's playbook prose. ars0n
+still has much broader web-testing guidance (37 attack playbooks at the inspected
+revision), session maintenance and hunting workflows. This does not establish
+comparative detection performance or exhaustive API coverage.
+
+The next substantive gap is identity/session preflight and refresh. Invalid or
+missing legitimate baselines are now visible; verifying a separate known-good
+login/session endpoint and refreshing credentials remain future work. Hosted
+OAuth/deployment checks still need dedicated staging resources. Review this
+comparison on platform updates, as requested, rather than on a weekly schedule.
+
+Final validation of the update: 1061 backend tests on both SQLite and PostgreSQL
+(1 platform skip), 144 frontend tests, five browser journeys, and 89 real
+Map → Runner → Gate checks on each database backend (70 loopback requests each,
+under the fixture ceiling). Runner passes 1429 tests (10 opt-in smoke tests
+skipped) at 95.80% coverage. PostgreSQL migration checks include the additive
+0027 round trip and retention; frontend lint/typecheck/build and Runner ruff/mypy
+pass. Local acceptance uses Runner 923cb08 and Gate f756df1; CI pins Runner 923cb08
+and the equivalent merged Gate baseline bb242589. These are tested feature
+branches, not a statement that deployment or release occurred.

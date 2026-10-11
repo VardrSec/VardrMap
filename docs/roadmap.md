@@ -20,8 +20,11 @@ deliverable work. Shipped history lives in [CHANGELOG](../CHANGELOG.md).
 - Define automated evidence retention and export sensitivity rules. Metadata and
   redaction exist, but metadata alone is not a deletion or disclosure policy.
 - Expand API methodology and real-binary, multi-platform integration coverage.
-- Add shared UI/MCP API playbooks and an execution-backed assessment view,
-  preserving inconclusive outcomes and first-class job/case/identity evidence links.
+- Extend the original shared UI/MCP API playbooks and execution-backed assessment
+  view beyond the initial ownership, roles and handoff guides. Claim-bound
+  job/case/identity evidence and inconclusive outcomes are implemented.
+- Improve identity setup and credential/session preflight. Current assessments
+  expose missing/denied legitimate baselines; automatic login/refresh is not implemented.
   See [the platform comparison](platform-comparison-2026-10-11.md) and
   [starter API playbooks](api-playbooks.md) for priorities and acceptance criteria.
 - Design remote MCP OAuth in coordination with VardrRunner before implementation.
