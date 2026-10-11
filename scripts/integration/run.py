@@ -77,7 +77,9 @@ def main() -> int:
     )
     env = {
         **os.environ,
-        "RUNNER_PYTHON": str(args.runner_python.resolve()),
+        # Unix venv interpreters are symlinks. Resolving that symlink invokes
+        # the base interpreter and loses the venv's installed dependencies.
+        "RUNNER_PYTHON": os.path.abspath(args.runner_python),
         "PYTHONIOENCODING": "utf-8",
         "PYTHONDONTWRITEBYTECODE": "1",
         "INTEGRATION_POSTGRES": "1" if args.postgres else "0",

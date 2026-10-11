@@ -4,6 +4,10 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Preserve Unix virtualenv interpreter paths in the integration launcher instead
+  of resolving them to the base Python, and report redacted worker startup errors.
+
+
 - Preserve ampersands and literal entity syntax in newly sanitized text, keeping
   the existing HTML-removal and identifier rejection rules. Existing stored rows
   are not rewritten; historical recon auditing keeps its frozen transformation.

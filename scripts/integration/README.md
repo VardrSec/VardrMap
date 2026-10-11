@@ -55,3 +55,8 @@ not inherit the production API URL. Validate OAuth with two real GitHub sessions
 viewer/member permissions, production-style CORS and webhook delivery there.
 The existing loopback checks cover the execution/evidence/report path without
 requiring production accounts or targets.
+
+On Unix, pass the virtualenv's `bin/python` path. The launcher preserves that path
+rather than following its symlink to the base Python, so installed Runner
+packages remain available. Worker failures report redacted stderr and stop the
+harness before a missing journal can mask the actual startup error.
