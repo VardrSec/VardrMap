@@ -94,7 +94,7 @@ _UNDOCUMENTED_ALLOWLIST = {
 
 
 def test_all_routes_mentioned_in_api_md():
-    """Every route path must appear somewhere in docs/api.md."""
+    """Every public HTTP method and route path must appear in docs/api.md."""
     text = api_md_text()
     routes = _app_routes()
     missing = []
@@ -105,7 +105,7 @@ def test_all_routes_mentioned_in_api_md():
         # unless they appear in the allowlist (already handled above).
         if method == "HEAD":
             continue
-        if path not in text:
+        if f"{method} {path}" not in text:
             missing.append(f"{method} {path}")
     assert not missing, (
         "The following routes are not mentioned in docs/api.md:\n"

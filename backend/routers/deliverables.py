@@ -100,7 +100,7 @@ def _snapshot(db, engagement, body, revision):
         "authorizations": [{"reference": a.reference, "authorized_by": a.authorized_by, "window_start": _iso(a.window_start), "window_end": _iso(a.window_end), "status": a.status} for a in auths],
         "findings": [serialize_finding(f) for f in findings],
         "activity": [{"finding_id": a.finding_id, "kind": a.kind, "outcome": a.outcome, "notes": a.notes, "created_at": _iso(a.created_at)} for a in history],
-        "evidence": [{"id": e.id, "finding_id": e.finding_id, "title": e.title, "kind": e.kind, "body": e.body, "content_hash": e.content_hash, "sensitivity": e.sensitivity, "source": e.source} for e in evidence],
+        "evidence": [{"id": e.id, "finding_id": e.finding_id, "title": e.title, "kind": e.kind, "body": e.body, "content_hash": e.content_hash, "sensitivity": e.sensitivity, "source": e.source, "job_id": e.job_id, "case_id": e.case_id, "case_ref": e.case_ref, "identity_id": e.identity_id, "observed_outcome": e.observed_outcome, "expected_decision": e.expected_decision} for e in evidence],
     }
     snapshot = finding_history.clean_tree(snapshot)
     if len(json.dumps(snapshot, ensure_ascii=False).encode("utf-8")) > MAX_SNAPSHOT_BYTES:
@@ -123,8 +123,13 @@ def _markdown(s):
                 lines += [f"#### {activity['kind'].capitalize()} — {activity['created_at']}", activity["outcome"] or "", activity["notes"]]
     lines += ["## Selected evidence"]
     for item in s["evidence"]:
+        provenance = (
+            f"Job: {item.get('job_id') or 'unknown'} | Case: {item.get('case_ref') or 'unknown'} "
+            f"({item.get('case_id') or 'unknown'}) | Identity: {item.get('identity_id') or 'unknown'} | "
+            f"Expected: {item.get('expected_decision') or 'unknown'} | Observed: {item.get('observed_outcome') or 'unknown'}"
+        )
         # Indented blocks cannot be escaped by target-controlled triple backticks.
-        lines += [f"### {item['title'] or item['id']}", f"Sensitivity: {item['sensitivity']} | Source: {item['source']} | SHA-256: {item['content_hash']}", "\n".join("    " + line for line in item["body"].splitlines())]
+        lines += [f"### {item['title'] or item['id']}", f"Sensitivity: {item['sensitivity']} | Source: {item['source']} | SHA-256: {item['content_hash']}", provenance, "\n".join("    " + line for line in item["body"].splitlines())]
     return "\n\n".join(lines) + "\n"
 
 

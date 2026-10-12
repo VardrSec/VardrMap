@@ -2,6 +2,9 @@
 
 **Status:** **Proposed — not implemented.** · **Date:** 2026-10-09 · **Supersedes:** none
 
+**Reviewed against current platform:** 2026-10-11. Merging this document records a
+proposal; it does not accept the open decisions or authorize OAuth implementation.
+
 > This document exists to be argued with before any code is written. It is the
 > design half of MCP Phase 7. Nothing in this ADR has been built; the roadmap
 > item stays open until the decisions below are agreed or replaced.
@@ -25,28 +28,32 @@ means:
 VardrMap's current auth accepts exactly two bearer tokens (`backend/deps.py`): a
 short-lived HS256 JWT minted by the frontend after GitHub OAuth, and an opaque
 `vmap_` personal API key stored as a SHA-256 hash with a coarse `full` /
-`runner` scope. Tenancy is keyed on `github_id`, enforced at the DB query level,
-and a cross-tenant read returns `404` rather than `403`.
+`runner` scope. Database access combines direct ownership, organization membership
+and engagement invitations through `deps.py`; inaccessible resources return `404`.
+Viewer roles cannot write. API keys remain user-bound, not organization-bound.
 
 Neither existing token is a legitimate credential for a remote MCP client. The
 browser JWT is minted by our own frontend for our own frontend. The `vmap_` key
-is a long-lived bearer secret with near-total authority and no consent step —
+with full scope is a long-lived bearer secret with broad authority and no consent step —
 handing one to a hosted third party would be the worst option available.
 
 ## What the MCP specification requires
 
-The MCP authorization spec is explicit that the server is a **resource server**,
-not an authorization server, and the requirements that shape this design are:
+The [MCP authorization specification, edition 2025-11-25](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization)
+defines the MCP endpoint as an OAuth **resource server**. It permits an authorization
+server to be co-hosted or separate; using a separate service is this proposal's
+design choice, not a protocol requirement. The requirements shaping it are:
 
 - The MCP server **MUST** implement OAuth 2.0 Protected Resource Metadata
-  (RFC 9728) at `/.well-known/oauth-protected-resource`, and advertise its
-  authorization server there.
+  (RFC 9728), advertising its authorization server. Discovery uses the advertised
+  metadata URL in a 401 challenge or a root/path-specific well-known URI.
 - The authorization server **MUST** implement OAuth 2.1, and **MUST** expose
   either RFC 8414 metadata or OIDC Discovery.
 - Clients **MUST** send a `resource` parameter (RFC 8707) identifying the server,
   and the server **MUST** validate that an access token was issued **for it** as
   the intended audience.
-- The server **MUST NOT** accept or transit any other tokens.
+- The server **MUST NOT** accept tokens issued for other resources or pass through
+  a client's access token to another service.
 - `401` carries `WWW-Authenticate: Bearer resource_metadata="…", scope="…"`;
   insufficient scope is `403` with `error="insufficient_scope"` and the scopes
   the operation needs.
@@ -56,11 +63,11 @@ obvious shortcut of letting a client present a GitHub token, because a GitHub
 token is not issued for VardrMap and forwarding it would be exactly the token
 passthrough the spec forbids.
 
-## Decision
+## Proposed decisions
 
 ### 1. VardrMap is a resource server. It does not become an authorization server.
 
-Identity and token issuance are delegated to an external OAuth 2.1
+Identity and token issuance would be delegated to an external OAuth 2.1
 authorization server that federates GitHub login, so `github_id` remains the
 tenancy key and the operator signs in as the same identity they already use.
 
@@ -71,9 +78,10 @@ is not what this project is for, and a subtle mistake in it is a critical
 authentication bug rather than a scanning inconvenience. We would be writing the
 most security-sensitive component in the product in order to avoid a dependency.
 
-**Consequence to accept openly:** this adds a hosted dependency to the
-deployment, and a remote MCP endpoint cannot be stood up without choosing and
-configuring one. That cost is the point of the trade.
+**Consequence to decide openly:** this adds an authorization-server dependency.
+It could be self-hosted or managed; choosing and operating it is unresolved.
+Provider selection must also settle client registration/interoperability, key
+rotation, token/refresh-token handling and revocation. Existing stdio remains usable.
 
 ### 2. Token validation is stateless; reach is stateful.
 
@@ -83,10 +91,14 @@ stored.
 
 Authority is then narrowed by a stored **MCP connection** record: which user,
 which engagements, which scopes, when it was created and last used. Every
-request checks it.
+request checks it together with current engagement access and write-role predicates.
+The authenticated grant must be unambiguously bound to that connection using
+issuer-verified claims or a server-managed grant mapping. A caller-supplied
+connection id or matching user id alone must not let a revoked token select a
+different active connection. The provider-specific binding contract is still open.
 
 This split is deliberate. Stateless validation keeps the hot path cheap, and the
-connection record gives **immediate revocation** without token introspection or
+bound connection record is intended to give **immediate per-connection revocation** without token introspection or
 waiting for a token to expire: the operator revokes a connection in the UI and
 the next request fails, whatever the token's remaining lifetime.
 
@@ -97,7 +109,7 @@ settled:
 
 | Scope | Covers |
 |---|---|
-| `engagement:read` | Every read tool: scope, authorizations, findings and history, assets, API surface, recon, jobs, reports, deliverables, methodologies |
+| `engagement:read` | Allowed read tools: scope, authorizations, findings/history, assets, API surface, recon, jobs/assessments, reports/deliverables, filtered evidence, versioned playbooks and methodology guidance |
 | `job:write` | `queue_job`, `queue_pipeline` |
 | `finding:write` | `create_finding`, `draft_report` |
 
@@ -109,8 +121,8 @@ withholding rationales from ADR 0015 both still hold, and the second applies
 harder here — a remote agent is even further from the human whose review a saved
 test case asserts.
 
-Scope checks are **additional to**, not instead of, the existing `github_id`
-query-level scoping. A scope says what kind of operation is allowed; it never
+Scope checks are **additional to**, not instead of, the shared database access
+predicates in `deps.py` and current write-role checks. A scope says what kind of operation is allowed; it never
 decides which rows are visible. Re-deriving visibility in a new code path is how
 BOLA regressions happen.
 
@@ -128,8 +140,9 @@ either can be narrowed or revoked without touching the other.
 
 ### 5. Tenant isolation is unchanged, and that is the requirement.
 
-- Tenancy stays keyed on `github_id`, enforced in the DB query, with
-  cross-tenant access returning `404`.
+- Access stays enforced through the existing ownership/organization/invitation
+  database predicates, with inaccessible resources returning `404`. Revoked
+  membership or a downgrade to viewer immediately narrows a connection's reach.
 - The subject claim is mapped to a user on a **verified, immutable** claim —
   never on email, which is mutable and re-assignable.
 - An unmapped subject is refused. The remote endpoint does not provision
@@ -138,29 +151,32 @@ either can be narrowed or revoked without touching the other.
 - A token whose `aud` is not this server is refused, so a token minted for
   another relying party on the same IdP cannot be replayed here.
 
-### 6. A remote agent cannot generate traffic at a target.
+### 6. Queue permission can cause target traffic through a runner.
 
-Worth stating because it bounds the blast radius more than any scope does. The
-remote server can read an engagement and **enqueue** work. It cannot execute a
-tool: jobs are claimed and run by a VardrRunner the operator installed, on
-hardware the operator controls, which heartbeats and can simply be stopped.
-Stop-work remains absent from the tool surface and available in the UI.
+The remote server does not execute a binary itself, but an installed daemon
+automatically claims queued work. Granting `job:write` therefore grants a path to
+active target traffic; there is no separate per-job human consent step today.
 
-So the worst case for a compromised or manipulated remote agent is reading one
-tenant's engagement data and queueing jobs that the operator's own runner will
-pick up — bad, and bounded by the scopes and engagements the operator granted.
-It is not remote code execution and it is not traffic at a client's estate
-without a runner consenting to run it.
+A compromised agent can read the engagement data it was granted and enqueue
+repeated permitted scans. Scope/window warnings remain advisory. Per-execution
+rate/worker limits do not create an engagement-wide traffic budget. Stop-work
+blocks new starts and skips schedules, but does not cancel running processes;
+remote tools cannot release it. Local target guards and bounded job types remain
+in effect, and arbitrary shell execution is not exposed.
+
+Read-only remote MCP should be evaluated as the first-release option. Before any
+remote write surface is accepted, its consent, traffic/concurrency budget and
+audit/revocation behavior must be explicitly designed and tested.
 
 ## Consequences
 
-- A hosted IdP becomes part of the deployment. Self-hosters who do not want one
-  keep the stdio path, which remains the recommended and fully-featured route.
+- An authorization-server dependency would become part of a remote deployment;
+  its hosting model is undecided. Operators can retain stdio without that dependency.
 - The stdio server stays the primary integration. Remote MCP is a convenience
   for claude.ai, and it is strictly more exposed, so it gets a strictly smaller
   surface.
-- Two new persisted concepts: the MCP connection record and its audit trail.
-  Both are additive.
+- Proposed persisted concepts include a grant-bound MCP connection and its audit
+  trail. Any implementation needs an additive migration plan; none exists here.
 - Prompt injection is unchanged in kind but worse in reach: tool results still
   carry target-controlled text, and the mitigation is still that no tool can
   widen what may be tested. The remote path adds rate limiting as a second
@@ -174,8 +190,8 @@ These are the decisions I do not think I should make alone:
    OIDC Discovery, RFC 8707 `resource` support, and GitHub federation. Several
    products qualify; the choice has cost, data-residency and lock-in
    consequences that are yours.
-2. **Is a hosted IdP acceptable at all**, given the product's self-hosting
-   posture? A defensible answer is "no, and Phase 7 is therefore declined" —
+2. **Managed or self-hosted authorization server, or no remote MCP**, given the
+   product's hosting posture? Declining Phase 7 remains defensible —
    the stdio server already does everything the remote one would, for operators
    willing to run VardrRunner.
 3. **Should `job:write` exist remotely in the first release?** A read-only
@@ -183,26 +199,38 @@ These are the decisions I do not think I should make alone:
    `triage` and most of `untested`.
 4. **Default connection lifetime.** Short-lived connections requiring periodic
    re-consent, versus long-lived ones revocable in the UI.
-5. **Organizations.** The scopes above are per-user. How a connection interacts
-   with org membership and the member write role needs settling before anything
-   multi-user is built on it.
+5. **Organizations.** Organization membership and engagement invitations already
+   exist. Connections must use those live predicates; settle grant ownership,
+   member/viewer changes and organization administration before remote implementation.
+6. **Grant binding and token lifecycle.** How does the selected provider bind an
+   access token to one connection, prevent reuse after revocation and handle expiry,
+   refresh tokens and rotation? Map must never store raw access/refresh tokens.
 
 ## Alternatives considered
 
 - **Reuse the `vmap_` API key.** Rejected: a long-lived bearer secret with
   `full` authority, no audience binding, no consent step and no per-engagement
-  reach. It is also the credential VardrRunner uses, so a leak from a hosted
-  client would compromise the operator's runners too. The spec's audience
+  reach. Reusing the Runner key would expose its shared backend authority,
+  including permitted queue operations. The spec's audience
   requirement independently forbids it.
 - **Let clients present a GitHub token.** Rejected: not issued for VardrMap, so
   accepting it is the token passthrough the spec prohibits, and it would make
   VardrMap a confused deputy for every GitHub scope the token carried.
 - **Implement the authorization server in VardrMap.** Rejected for now, per
   Decision 1 — the surface is large and the failure mode is critical. Worth
-  revisiting only if the hosted-dependency cost is judged unacceptable *and*
+  revisiting only if the external-service tradeoff is judged unacceptable *and*
   there is appetite to own an AS properly.
 - **Tunnel the stdio server instead.** Expose the operator's local MCP server
   through a tunnel rather than building a remote one. Rejected: it moves the
   authorization problem to the tunnel, where it is usually solved with a shared
   secret, and it requires the operator's machine to be reachable and running
   anyway — which is the condition under which stdio already works.
+
+## Sources and implementation gate
+
+The protocol claims above were checked against the pinned
+[MCP authorization edition](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization)
+and [security guidance](https://modelcontextprotocol.io/docs/2025-11-25/tutorials/security/security_best_practices).
+No endpoint, scope, token flow, connection model, migration or OAuth dependency
+is implemented by this ADR. Record accepted decisions and a concrete auth test plan
+before starting that work; retain stdio and existing engagement access boundaries.

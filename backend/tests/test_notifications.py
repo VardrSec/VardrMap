@@ -14,7 +14,7 @@ _WEBHOOK = "https://discord.com/api/webhooks/123/abc"
 
 @pytest.fixture
 def webhook_user(client, auth_headers):
-    """Set a webhook for user1 and ALWAYS clear it after — a leftover URL would
+    """Set a webhook for user1 and ALWAYS clear it after â€” a leftover URL would
     make unrelated tests fire real HTTP from background tasks."""
     client.patch("/settings", json={"webhook_url": _WEBHOOK, "notify_min_severity": "high"}, headers=auth_headers)
     yield
@@ -71,7 +71,7 @@ class TestValidateWebhookUrl:
 
 class TestSendWebhookSSRF:
     """send_webhook resolves the host at send time and refuses any target that
-    points at a private/internal address — the layer that defeats a hostname
+    points at a private/internal address â€” the layer that defeats a hostname
     (or DNS rebind) aimed at an internal or cloud-metadata IP."""
 
     @staticmethod
@@ -85,53 +85,53 @@ class TestSendWebhookSSRF:
 
     def test_public_host_is_sent(self):
         with patch("notifications.socket.getaddrinfo", return_value=self._addrinfo("93.184.216.34")), \
-             patch("notifications.httpx.post") as mock_post:
+             patch("notifications._post_to_address") as mock_post:
             assert send_webhook("https://example.com/h", "hi") is True
             mock_post.assert_called_once()
 
     def test_host_resolving_to_private_is_blocked(self):
         with patch("notifications.socket.getaddrinfo", return_value=self._addrinfo("10.0.0.5")), \
-             patch("notifications.httpx.post") as mock_post:
+             patch("notifications._post_to_address") as mock_post:
             assert send_webhook("https://sneaky.example/h", "hi") is False
             mock_post.assert_not_called()
 
     def test_host_resolving_to_metadata_ip_is_blocked(self):
         with patch("notifications.socket.getaddrinfo", return_value=self._addrinfo("169.254.169.254")), \
-             patch("notifications.httpx.post") as mock_post:
+             patch("notifications._post_to_address") as mock_post:
             assert send_webhook("https://metadata.example/h", "hi") is False
             mock_post.assert_not_called()
 
     def test_unresolvable_host_is_blocked(self):
         with patch("notifications.socket.getaddrinfo", side_effect=socket.gaierror), \
-             patch("notifications.httpx.post") as mock_post:
+             patch("notifications._post_to_address") as mock_post:
             assert send_webhook("https://nope.example/h", "hi") is False
             mock_post.assert_not_called()
 
     def test_any_private_leg_blocks_mixed_resolution(self):
-        # A name resolving to both a public and a private address is refused —
+        # A name resolving to both a public and a private address is refused â€”
         # the private leg is the SSRF vector.
         with patch("notifications.socket.getaddrinfo",
                    return_value=self._addrinfo("93.184.216.34", "10.0.0.5")), \
-             patch("notifications.httpx.post") as mock_post:
+             patch("notifications._post_to_address") as mock_post:
             assert send_webhook("https://dual.example/h", "hi") is False
             mock_post.assert_not_called()
 
     def test_private_ip_literal_blocked_without_dns(self):
         with patch("notifications.socket.getaddrinfo") as mock_resolve, \
-             patch("notifications.httpx.post") as mock_post:
+             patch("notifications._post_to_address") as mock_post:
             assert send_webhook("https://10.0.0.1/h", "hi") is False
             mock_resolve.assert_not_called()  # literal short-circuits DNS
             mock_post.assert_not_called()
 
     def test_http_scheme_blocked_before_send(self):
-        with patch("notifications.httpx.post") as mock_post:
+        with patch("notifications._post_to_address") as mock_post:
             assert send_webhook("http://example.com/h", "hi") is False
             mock_post.assert_not_called()
 
     def test_blocked_host_is_logged(self, caplog):
-        """A blocked webhook is no longer a silent swallow — it logs a warning."""
+        """A blocked webhook is no longer a silent swallow â€” it logs a warning."""
         with patch("notifications.socket.getaddrinfo", return_value=self._addrinfo("10.0.0.5")), \
-             patch("notifications.httpx.post"):
+             patch("notifications._post_to_address"):
             with caplog.at_level(logging.WARNING, logger="vardrmap.notifications"):
                 assert send_webhook("https://sneaky.example/h", "hi") is False
         assert any("did not resolve to a public address" in r.message for r in caplog.records)

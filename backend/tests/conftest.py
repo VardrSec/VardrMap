@@ -2,7 +2,12 @@ import os
 
 # Set env vars BEFORE any app imports so db.py and deps.py pick them up.
 # load_dotenv() in db.py uses override=False, so these take precedence over .env.
-os.environ["DATABASE_URL"] = "sqlite:///./test_vardrmap.db"
+_TEST_DB = os.getenv("TEST_DATABASE_URL", "sqlite:///./test_vardrmap.db")
+if os.getenv("TEST_DATABASE_URL"):
+    from sqlalchemy.engine import make_url
+    if not (make_url(_TEST_DB).database or "").startswith("vardrmap_test"):
+        raise RuntimeError("TEST_DATABASE_URL must name a disposable vardrmap_test* database")
+os.environ["DATABASE_URL"] = _TEST_DB
 os.environ["BACKEND_JWT_SECRET"] = "test-secret-key-for-pytest-needs-32-chars!!"
 os.environ["ENV"] = "test"
 os.environ["ALLOWED_ORIGINS"] = "http://localhost:3000"
@@ -15,10 +20,14 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from db import Base, get_db
+from database_options import connection_args, normalize_url
 from main import app
 
-_TEST_DB = "sqlite:///./test_vardrmap.db"
-_engine = create_engine(_TEST_DB, connect_args={"check_same_thread": False})
+_TEST_DB = normalize_url(_TEST_DB)
+_args = connection_args(_TEST_DB)
+if _TEST_DB.startswith("sqlite:"):
+    _args["check_same_thread"] = False
+_engine = create_engine(_TEST_DB, connect_args=_args)
 _SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=_engine)
 
 Base.metadata.drop_all(bind=_engine)
@@ -66,14 +75,18 @@ def client():
 
 
 @pytest.fixture
-def auth_headers() -> dict:
-    return {"Authorization": f"Bearer {mint_token('gh_user1', 'user1')}"}
+def auth_headers(client) -> dict:
+    headers = {"Authorization": f"Bearer {mint_token('gh_user1', 'user1')}"}
+    assert client.post("/auth/sync", headers=headers).status_code == 200
+    return headers
 
 
 @pytest.fixture
-def other_headers() -> dict:
+def other_headers(client) -> dict:
     """Headers for a second, unrelated user — used to verify BOLA protection."""
-    return {"Authorization": f"Bearer {mint_token('gh_user2', 'user2')}"}
+    headers = {"Authorization": f"Bearer {mint_token('gh_user2', 'user2')}"}
+    assert client.post("/auth/sync", headers=headers).status_code == 200
+    return headers
 
 
 @pytest.fixture

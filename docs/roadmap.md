@@ -1,125 +1,39 @@
 # Roadmap
 
-Forward-looking backlog. Shipped history lives in [`CHANGELOG.md`](../CHANGELOG.md);
-the canonical session rules and "shipped" list live in [`CLAUDE.md`](../CLAUDE.md).
+Current backlog after the organization, evidence, API authorization and client
+deliverable work. Shipped history lives in [CHANGELOG](../CHANGELOG.md).
+[Domain model](domain-model.md) describes implemented entities, and
+[implementation roadmap](implementation-roadmap.md) provides historical sequencing.
 
-Until GitHub issues/milestones are adopted, this file is the backlog of record.
-When an item ships it moves to the changelog and its `changelog/vX.Y.Z.md` notes.
+## Remaining platform work
 
----
+- Schedule the physical `programs` table / `program_id` rename and retire legacy
+  `/programs/*` aliases after coordinating every API consumer. This requires a
+  production migration plan; do not drop or replace live tables opportunistically.
+- Extend organization administration and team UI. Access predicates, organization
+  membership, engagement invitations and viewer permissions already exist.
+- Design organization-bound runner credentials and explicit credential permissions.
+  Current API keys authenticate a user and may have runner-only scope.
+- Specify signed/versioned execution contracts and cancellation of already running
+  processes. Stop-work currently prevents starting work and skips schedules.
+- Add engagement-wide concurrency/rate budgets; current tool limits apply per execution.
+- Define automated evidence retention and export sensitivity rules. Metadata and
+  redaction exist, but metadata alone is not a deletion or disclosure policy.
+- Expand API methodology and real-binary, multi-platform integration coverage.
+- Extend the original shared UI/MCP API playbooks and execution-backed assessment
+  view beyond the initial ownership, roles and handoff guides. Claim-bound
+  job/case/identity evidence and inconclusive outcomes are implemented.
+- Improve identity setup and credential/session preflight. Current assessments
+  expose missing/denied legitimate baselines; automatic login/refresh is not implemented.
+  See [the platform comparison](platform-comparison-2026-10-11.md) and
+  [starter API playbooks](api-playbooks.md) for priorities and acceptance criteria.
+- Settle the [proposed remote MCP authorization design](adr/0002-remote-mcp-authorization.md)
+  with VardrRunner before implementation: provider/hosting, grant binding, token
+  lifecycle, organization access and whether to expose writes remotely remain open.
 
-## v0.20 — shipped (2026-06-20)
+## Operational validation
 
-v0.20.0 – v0.20.2 shipped: recon host-detail panel, Dashboard stat cards,
-findings search/severity filter, submissions status/platform filter,
-finding→submission promotion, Review tab live badges, manual→finding promotion,
-scope filter on Recon/Scans, UX hardening (AbortController, debounce, confirm
-dialogs, loading skeletons), job-board trash icon, Terminal → Review navigation,
-`/programs/{id}/stats` endpoint, N+1 fix, DB indexes, dedup fix, double-commit fix.
-
-See `CHANGELOG.md` and `changelog/v0.20.0.md` – `v0.20.2.md` for details.
-
-### Production smoke checklist (v0.19 → v0.20 upgrade)
-
-- [ ] Confirm migrations `0011rbacreconscopes` and `0012programidindexes` applied
-      cleanly — `alembic current` equals head.
-- [ ] **RBAC:** invite a second GitHub account; member can read/write resources,
-      non-member gets `404` on all program endpoints.
-- [ ] **Runner-scoped keys:** `runner`-scope key succeeds on jobs/imports/heartbeat,
-      blocked (`403`) everywhere else.
-- [ ] **Recon dedup:** re-import same httpx file → `new_count == 0`, no duplicates.
-
-### Platform / ops
-
-- [ ] **Migrate production off Node 20.** Bump `.nvmrc` 20 → 24 (Vercel reads it);
-      verify a preview deploy before promoting to production.
-- [x] **Dependabot enabled.** Weekly automated PRs for frontend + backend deps;
-      security bumps opened proactively.
-
-### Product
-
-- [ ] **RBAC depth** — read-only viewer role; audit-log membership changes.
-- [x] **VardrRunner repo extraction** — extracted to
-      [VardrSec/VardrRunner](https://github.com/VardrSec/VardrRunner).
-
----
-
-## v0.21 — shipped (2026-07-22)
-
-Scan automation & integration — the input → output → triage loop tied together:
-
-- [x] **Scan pipelines** — `POST /programs/{id}/pipelines` chains subfinder→httpx→nuclei
-      via `scan_jobs.depends_on`; dependent stages held out of `GET /jobs/pending`
-      until the parent is `done`, auto-failed if the parent fails.
-- [x] **Job→results provenance** — `recon_items.job_id` / `scan_items.job_id` stamped
-      on import; `?job_id=` filters on recon/scans list endpoints.
-- [x] **AI triage over raw scan output** — `POST /programs/{id}/scans/triage`.
-- [x] **Dry-run target preview** — `POST /programs/{id}/jobs/preview`.
-- [x] **Saved scan profiles** — `GET/POST/DELETE /programs/{id}/scan-profiles`.
-
-See `changelog/v0.21.0.md`.
-
-## v0.22 — next
-
-- [ ] **Frontend section tests.** `FindingsSection` and `JobsSection` mutations are
-      untested. Needs `AppContext` + `fetch` mocking harness.
-      (`SubmissionsSection` was removed in v0.23.0.)
-- [ ] **Docs contract test coverage.** `test_docs_contract.py` now catches route and
-      enum drift; extend to cover response-key shape assertions as new endpoints are added.
-- [ ] **Wire Sentry in production.** `SENTRY_DSN` set on Railway.
-- [ ] **RBAC depth** — tracked above.
-- [ ] **`react-hooks/set-state-in-effect` rule.** Adopt in ESLint config after
-      component-test harness is in place.
-
-## Full-repo assessment notes (2026-06-14, updated 2026-06-22)
-
-Backend: 380 tests, ~97% coverage. The remaining gaps:
-
-- [ ] **Frontend `Section` component tests.** Only `ui.tsx` (15) and the reducer (32)
-      are covered. Needs `AppContext` + `fetch` mocking harness.
-- [x] **AbortController cleanup.** All fetch effects in FindingsSection,
-      SubmissionsSection, ReconSection, DashboardSection now abort on unmount.
-- [x] **TypeScript 6 migration.** Build passes. `ts-jest` migration done.
-- [ ] **ESLint 10 — upstream-blocked.** Wait for `eslint-config-next` to support it.
-- [ ] **Wire Sentry in production.** `SENTRY_DSN` not yet set on Railway.
-- [x] **Double-commit fix** (jobs + submissions create).
-- [x] **N+1 fix** (serialize_program count queries).
-- [x] **Recon dedup host-only fix.**
-- [x] **DB indexes** (migration 0012).
-
-Smaller, non-urgent: API-key `last_used_at` writes on every authenticated request
-(write amplification at scale); the webhook guard's documented residual
-(IPv4-mapped IPv6 / resolve→connect TOCTOU) if this ever goes multi-tenant.
-
----
-
-## Conventions
-
-- Patch releases (`vX.Y.Z`) = fixes, security bumps, CI/doc maintenance.
-- Minor releases (`vX.Y.0`) = new endpoints, models, env vars, or user-visible
-  features. Every behavior-changing item updates `docs/` per the rules in
-  `CLAUDE.md`.
-
----
-
-## Deferred: physical rename of `programs` → `engagements`
-
-The entity became `Engagement` in v0.21, but the table is still `programs` and
-its 14 foreign keys are still `program_id`. That is deliberate, not an oversight.
-
-Renaming them means `ALTER TABLE` against the live Railway Postgres. `start.sh`
-runs `alembic upgrade head` and *then* starts uvicorn, so there is a window
-where the schema has moved and a process is still serving the old shape — a hard
-failure, not a degraded one. The benefit is zero: nobody sees a table name.
-
-If it is done later it needs its own commit, its own deploy, and a maintenance
-window — never bundled with code changes.
-
-Related cleanup that can happen independently, once VardrRunner is updated to
-call `/engagements/*` and read the `engagements` response key:
-
-- [ ] Update VardrRunner (`vardrrunner/api.py`) to `/engagements/*`
-- [ ] Delete `LegacyProgramPathMiddleware` from `backend/main.py`
-- [ ] Drop the duplicate `programs` key from `GET /engagements`
-- [ ] Delete `backend/tests/test_legacy_program_paths.py`
-- [ ] Remove the "Deprecated: `/programs/*`" section from `docs/api.md`
+Verify actual GitHub OAuth with separate accounts, deployed migrations and database
+readiness, production CORS, notification delivery and cross-organization access.
+Local test results do not establish production configuration or deployment success.
+PostgreSQL CI and migration tests complement the default SQLite suite.

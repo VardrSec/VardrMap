@@ -44,6 +44,15 @@ def test_valid_token_returns_user(client, auth_headers):
     assert data["username"] == "user1"
 
 
+def test_signed_token_without_expiry_is_rejected(client):
+    import jwt
+    token = jwt.encode(
+        {"sub": "gh_user1", "aud": "vardrmap-backend", "iss": "vardrmap-frontend"},
+        "test-secret-key-for-pytest-needs-32-chars!!", algorithm="HS256",
+    )
+    assert client.get("/me", headers={"Authorization": f"Bearer {token}"}).status_code == 401
+
+
 def test_runner_scoped_key_can_call_me(client, auth_headers):
     """Runner keys must be able to hit /me so vardrrunner login works."""
     key_res = client.post("/auth/apikeys", json={"scope": "runner"}, headers=auth_headers)

@@ -1,12 +1,14 @@
 import hashlib
 import json
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Any, Literal, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
+import assessments
 import enforcement
 import redaction
 import sse as _sse
@@ -21,6 +23,7 @@ from deps import (
 from limiter import limiter
 from models import (
     AuthorizationTestCase,
+    Engagement,
     Evidence,
     JobEvent,
     JobResultReceipt,
@@ -44,7 +47,7 @@ SCHEDULE_INTERVALS: dict[str, timedelta] = {
 }
 
 
-EventKind = Literal["started", "targets_resolved", "running", "uploaded", "done", "failed", "log"]
+EventKind = Literal["started", "targets_resolved", "target_stats", "target_warning", "blocked", "running", "uploaded", "done", "failed", "log"]
 
 
 class EventCreate(BaseModel):
@@ -56,7 +59,7 @@ class EventCreate(BaseModel):
 # stored test case rather than being resolved from scope or recon.
 _VARDRGATE = "vardrgate_api_test"
 
-_VALID_TOOLS = {"httpx", "nuclei", "subfinder", "nmap", "dnsx", "naabu", "katana", "gau", _VARDRGATE}
+_VALID_TOOLS = {"httpx", "nuclei", "subfinder", "nmap", "dnsx", "naabu", "katana", "gau", "ffuf", "dalfox", _VARDRGATE}
 _VALID_SOURCES = {"scope", "recon"}
 
 # Per-tool allowed config keys. Keys not in this set are rejected.
@@ -69,14 +72,25 @@ _TOOL_CONFIG_KEYS: dict[str, set[str]] = {
     "naabu":     {"top_ports", "limit", "timeout"},
     "katana":    {"limit", "status_code", "depth", "js_crawl", "timeout"},
     "gau":       {"subs", "providers", "timeout"},
+    "dalfox":    {"limit", "status_code", "delay", "worker", "mining", "timeout"},
+    "ffuf":      {"wordlist", "extensions", "match_codes", "rate", "limit", "timeout"},
     # Only the reference. The spec is stored in authorization_test_cases and
     # inlined at hand-off, which keeps this config flat like every other tool's.
     _VARDRGATE:  {"test_case_id", "timeout"},
 }
 _NUCLEI_SEVERITIES = {"info", "low", "medium", "high", "critical"}
 _GAU_PROVIDERS = {"wayback", "commoncrawl", "otx", "urlscan"}
+# A ffuf wordlist is a *name*, resolved by VardrRunner against its own
+# ~/.vardrmap/wordlists on the machine that runs the scan. It is never a path:
+# a job that could supply one would let this API name any file the runner can
+# read for ffuf to read and replay at a target. This pattern mirrors
+# VardrRunner's `configs.WORDLIST_NAME` exactly — the runner refuses anything
+# else anyway, so accepting it here would only queue a job that cannot run.
+_FFUF_WORDLIST = re.compile(r"^[a-z0-9][a-z0-9_-]{0,39}$")
+_FFUF_EXTENSION = re.compile(r"^\.[A-Za-z0-9]{1,10}$")
+_FFUF_STATUS = re.compile(r"^\d{3}$")
 # Boolean config keys. A form posts them as "true"/"false"; JSON callers send booleans.
-_BOOL_CONFIG_KEYS = {("katana", "js_crawl"), ("gau", "subs")}
+_BOOL_CONFIG_KEYS = {("katana", "js_crawl"), ("gau", "subs"), ("dalfox", "mining")}
 
 # Config keys parsed as plain integers, with the bounds VardrRunner enforces.
 # Keeping the bounds here means a bad value is refused at queue time rather than
@@ -91,6 +105,19 @@ _INT_CONFIG_BOUNDS: dict[tuple[str, str], tuple[int, int]] = {
     ("katana", "depth"):     (1, 10),
     ("katana", "timeout"):   (1, 86_400),
     ("gau", "timeout"):      (1, 86_400),
+    # dalfox sends payloads at every parameter it finds, so like any active tool
+    # its load is bounded at queue time: `worker` caps concurrency and `delay`
+    # (milliseconds) spaces requests out.
+    ("dalfox", "limit"):     (1, 1_000_000),
+    ("dalfox", "worker"):    (1, 100),
+    ("dalfox", "delay"):     (0, 10_000),
+    ("dalfox", "timeout"):   (1, 86_400),
+    # ffuf's rate cap is a safety control, not a tuning knob: it bounds the load a
+    # job can put on a client's host. There is deliberately no value meaning
+    # "unlimited", and the ceiling matches VardrRunner's FFUF_MAX_RATE.
+    ("ffuf", "rate"):        (1, 1_000),
+    ("ffuf", "limit"):       (1, 1_000_000),
+    ("ffuf", "timeout"):     (1, 86_400),
 }
 
 
@@ -123,7 +150,81 @@ def _validate_test_case_ref(program_id: str, config: dict, db: Session) -> None:
         )
 
 
+def _validate_ffuf_config(config: dict) -> None:
+    """Check ffuf's wordlist name, extensions and status filter.
+
+    Refusing a path-shaped wordlist here is the important part: see
+    ``_FFUF_WORDLIST``. The rest is ordinary shape validation, kept at queue time
+    so a bad value is refused while the operator is still looking at it rather
+    than failing on their machine after a runner has claimed the job.
+    """
+    wordlist = config.get("wordlist")
+    if wordlist not in (None, ""):
+        if not isinstance(wordlist, str) or not _FFUF_WORDLIST.match(wordlist.strip()):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "ffuf config.wordlist must be a wordlist name like 'common' or "
+                    "'api-paths' (lowercase letters, digits, '-' and '_'), not a path. "
+                    "The runner resolves it against its own wordlists directory."
+                ),
+            )
+    # The accepted *types* must match VardrRunner's `configs.FfufConfig` exactly.
+    # A type accepted here and refused there clears queue-time validation and then
+    # fails on the operator's machine after a runner has claimed the job, which is
+    # precisely what validating at queue time is meant to prevent. VardrRunner
+    # carries the same table (`test_accepted_types_match_vardrmaps_validator`).
+    raw_ext = config.get("extensions")
+    if raw_ext not in (None, ""):
+        if not isinstance(raw_ext, (str, list)):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "ffuf config.extensions must be a string or list, got "
+                    f"{type(raw_ext).__name__}"
+                ),
+            )
+        parts = raw_ext if isinstance(raw_ext, list) else str(raw_ext).split(",")
+        names = [str(p).strip() for p in parts if str(p).strip()]
+        normalized = [n if n.startswith(".") else f".{n}" for n in names]
+        bad = [n for n in normalized if not _FFUF_EXTENSION.match(n)]
+        if bad:
+            raise HTTPException(
+                status_code=400,
+                detail=f"ffuf config.extensions must look like '.php' or '.bak', got: {bad}",
+            )
+    raw_codes = config.get("match_codes")
+    if raw_codes not in (None, ""):
+        # A bare status code is fine (`{"match_codes": 200}` is natural over JSON,
+        # and the runner takes it). `bool` is not: `True` is an `int` in Python,
+        # and a status of 1 is nobody's intent.
+        if isinstance(raw_codes, bool) or not isinstance(raw_codes, (str, list, int)):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "ffuf config.match_codes must be a status code, string or list, got "
+                    f"{type(raw_codes).__name__}"
+                ),
+            )
+        parts = raw_codes if isinstance(raw_codes, list) else str(raw_codes).split(",")
+        codes = [str(p).strip() for p in parts if str(p).strip()]
+        if codes != ["all"]:
+            bad = [c for c in codes if not _FFUF_STATUS.match(c)]
+            if bad:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "ffuf config.match_codes must be three-digit statuses like "
+                        f"'200,301,403', or 'all', got: {bad}"
+                    ),
+                )
+
+
 def _validate_job_config(tool_type: str, config: dict) -> None:
+    if tool_type == _VARDRGATE and "timeout" in config:
+        value = config["timeout"]
+        if type(value) is not int or not 1 <= value <= 86_400:
+            raise HTTPException(status_code=400, detail="vardrgate_api_test config.timeout must be an integer between 1 and 86400")
     allowed = _TOOL_CONFIG_KEYS.get(tool_type, set())
     unknown = set(config.keys()) - allowed
     if unknown:
@@ -167,6 +268,8 @@ def _validate_job_config(tool_type: str, config: dict) -> None:
                 status_code=400,
                 detail=f"gau providers must be wayback/commoncrawl/otx/urlscan, got: {bad}",
             )
+    if tool_type == "ffuf":
+        _validate_ffuf_config(config)
     for key, (low, high) in (
         (k, bounds) for (t, k), bounds in _INT_CONFIG_BOUNDS.items() if t == tool_type
     ):
@@ -215,6 +318,7 @@ def serialize_job(j: ScanJob) -> dict:
         "target_source": j.target_source,
         "config": j.config or {},
         "status": j.status,
+        "assessment": j.assessment,
         "depends_on": j.depends_on,
         "created_at":   j.created_at.isoformat()   if j.created_at   else None,
         "started_at":   j.started_at.isoformat()   if j.started_at   else None,
@@ -455,10 +559,18 @@ def _materialize_due_schedules(db: Session, github_id: str) -> None:
     that was offline for a week creates one catch-up job, not seven.
     """
     now = datetime.now(timezone.utc)
+    # Stop-work is the operator's halt switch, and it must stop a schedule too. Refusing the
+    # claim is not enough on its own: materialization would keep queueing a job per interval
+    # behind the refusal, and all of them would become claimable on release -- a burst of
+    # repeated active scans the moment work resumes. So a stopped engagement's schedules are
+    # skipped AND left untouched: next_run_at is not advanced, so on release each schedule
+    # fires exactly one catch-up job, the same as after a runner outage.
+    stopped = db.query(Engagement.id).filter(Engagement.stop_work_at.isnot(None))
     due = (
         db.query(ScheduledScan)
         .filter(
             ScheduledScan.program_id.in_(accessible_engagement_ids(github_id, db)),
+            ScheduledScan.program_id.notin_(stopped),
             ScheduledScan.enabled == True,  # noqa: E712 — SQLAlchemy needs the comparison
             ScheduledScan.next_run_at <= now,
         )
@@ -637,6 +749,13 @@ def update_job(
     warnings: list[dict] = []
     if body.status == "running" and job.status != "running":
         warnings = _check_run_transition(job, current_user, db, now)
+        if job.tool_type == _VARDRGATE and job.case_snapshot is None:
+            case = db.query(AuthorizationTestCase).filter(
+                AuthorizationTestCase.id == str((job.config or {}).get("test_case_id") or ""),
+                AuthorizationTestCase.program_id == job.program_id,
+            ).first()
+            if case:
+                job.case_snapshot = case.spec
 
     job.status = body.status
     if body.status == "running" and not job.started_at:
@@ -711,6 +830,16 @@ def claim_job(
             )
         )
 
+    snapshot = None
+    if pending is not None and pending.status == "pending" and pending.tool_type == _VARDRGATE:
+        case = db.query(AuthorizationTestCase).filter(
+            AuthorizationTestCase.id == str((pending.config or {}).get("test_case_id") or ""),
+            AuthorizationTestCase.program_id == pending.program_id,
+        ).first()
+        if not case:
+            raise HTTPException(status_code=404, detail="Test case not found")
+        snapshot = case.spec
+
     claimed = (
         db.query(ScanJob)
         .filter(
@@ -719,7 +848,7 @@ def claim_job(
             ScanJob.status == "pending",
         )
         .update(
-            {ScanJob.status: "running", ScanJob.started_at: now},
+            {ScanJob.status: "running", ScanJob.started_at: now, ScanJob.case_snapshot: snapshot},
             synchronize_session=False,
         )
     )
@@ -749,7 +878,10 @@ def claim_job(
         )
         .first()
     )
-    return {**serialize_job(job), "warnings": warnings}
+    data = serialize_job(job)
+    if job.case_snapshot is not None:
+        data["config"] = {**data["config"], "test_case": job.case_snapshot}
+    return {**data, "warnings": warnings}
 
 
 def serialize_event(e: JobEvent) -> dict:
@@ -867,9 +999,17 @@ class VardrGateUpload(BaseModel):
     not rest on the sender.
     """
 
+    case_hash: str = Field(default="", pattern=r"^([a-f0-9]{64})?$")
     test_case_id: str = Field(default="", max_length=200)
     executions: list[dict] = Field(default_factory=list, max_length=100)
     findings: list[dict] = Field(default_factory=list, max_length=500)
+
+    @field_validator("findings", mode="before")
+    @classmethod
+    def legacy_empty_findings(cls, value):
+        # Older Gate binaries encode a nil slice as null. Other malformed
+        # shapes still fail validation; execution errors remain in executions.
+        return [] if value is None else value
 
 
 def _finding_description(finding: dict) -> str:
@@ -930,8 +1070,12 @@ def upload_job_result(
             detail=f"job {job_id} is a '{job.tool_type}' job; /upload accepts {_VARDRGATE} results",
         )
 
+    receipt_payload = body.model_dump()
+    # Preserve hashes of legacy receipts created before case_hash existed.
+    if not body.case_hash:
+        receipt_payload.pop("case_hash")
     canonical_payload = json.dumps(
-        body.model_dump(), sort_keys=True, separators=(",", ":"), default=str
+        receipt_payload, sort_keys=True, separators=(",", ":"), default=str
     ).encode("utf-8")
     if len(canonical_payload) > _MAX_RESULT_BYTES:
         raise HTTPException(status_code=413, detail="result payload is too large")
@@ -965,9 +1109,13 @@ def upload_job_result(
         )
         .first()
     )
-    if case:
-        target = str(((case.spec or {}).get("request") or {}).get("url") or "")[:2000]
-        authoritative_id = case.test_case_id or ""
+    spec = job.case_snapshot
+    authoritative_spec = spec or (case.spec if case else {})
+    if spec and body.case_hash and body.case_hash != assessments.case_hash(spec):
+        raise HTTPException(status_code=400, detail="Result case_hash does not match the claimed case snapshot")
+    if authoritative_spec:
+        target = str((authoritative_spec.get("request") or {}).get("url") or "")[:2000]
+        authoritative_id = str(authoritative_spec.get("id") or "")
         if template_id and template_id != authoritative_id:
             raise HTTPException(
                 status_code=400,
@@ -1002,12 +1150,28 @@ def upload_job_result(
         )
         created_items += 1
 
+    verified = bool(spec and body.case_hash == assessments.case_hash(spec))
+    job.assessment = {
+        **assessments.assess(spec, body.executions, created_items, case_verified=verified),
+        "case_id": queued_case or None,
+        "case_ref": template_id or None,
+    }
+    decisions = {
+        i["identity_id"]: i["expected_decision"] for i in job.assessment["identities"]
+    } if verified else {}
     created_evidence = 0
     for execution in body.executions:
         if not isinstance(execution, dict):
             continue
-        identity = str(execution.get("identity_id") or "unknown")
+        identity = redaction.redact_text(str(execution.get("identity_id") or "unknown"))
+        outcome = execution.get("observed_outcome")
+        if not isinstance(outcome, str) or outcome not in {
+            "allow", "deny", "not_found", "redirect", "server_error", "client_error", "error",
+        }:
+            outcome = "unknown"
         detail: dict[str, Any] = {
+            "case_hash": body.case_hash or None,
+            "case_snapshot_verified": verified,
             "identity_id": identity,
             "status_code": execution.get("status_code"),
             "observed_outcome": execution.get("observed_outcome"),
@@ -1026,6 +1190,14 @@ def upload_job_result(
         db.add(
             Evidence(
                 program_id=job.program_id,
+                job_id=job.id,
+                case_id=case.id if case else None,
+                case_ref=template_id or None,
+                # Never turn an overlong identifier into a different identity.
+                # The redacted body retains it; nullable metadata stays unknown.
+                identity_id=identity if len(identity) <= 200 else None,
+                observed_outcome=outcome,
+                expected_decision=decisions.get(identity, "unknown"),
                 kind="tool_result",
                 title=f"vardrgate · {identity} → {execution.get('status_code', '?')}"[:200],
                 body=text,

@@ -359,11 +359,21 @@ class ScanItem(Base):
     severity = Column(String(20), default="info")
     asset = Column(Text, default="")
     matched_at = Column(Text, default="")
+    # The scanner's own classification of the match, kept as it reported it.
+    # For dalfox this is its tier: vulnerable | reflected | ast | informational.
     type = Column(String(50), default="")
     description = Column(Text, default="")
     status = Column(String(20), default="new")
     cwe = Column(String(50), default="")
     cvss = Column(String(50), default="")
+    # How the scanner detected it and how sure it was — three independent facts
+    # with `type`, and all three matter when triaging. Never folded into severity.
+    detection_method = Column(String(40), default="")
+    # The scanner's payload and evidence, stored exactly as reported (never HTML-sanitised:
+    # the dangerous input IS the evidence). Untrusted text: render only as text.
+    payload = Column(Text, default="")
+    match_evidence = Column(Text, default="")
+    confidence = Column(String(20), default="")
     asset_id = Column(String, ForeignKey("assets.id", ondelete="SET NULL"), nullable=True, index=True)
     job_id = Column(String, nullable=True)  # scan_job that produced this item, if any
     created_at = Column(DateTime, nullable=True, default=lambda: datetime.now(timezone.utc))
@@ -410,7 +420,13 @@ class Evidence(Base):
     body = Column(Text, default="")            # already redacted
     content_hash = Column(String(64), default="")   # sha256 of the stored body
 
-    # Provenance and handling.
+    # Provenance and handling. Never inferred for historical or manual evidence.
+    job_id = Column(String, ForeignKey("scan_jobs.id", ondelete="SET NULL"), nullable=True, index=True)
+    case_id = Column(String, ForeignKey("authorization_test_cases.id", ondelete="SET NULL"), nullable=True, index=True)
+    case_ref = Column(String(200), nullable=True)
+    identity_id = Column(String(200), nullable=True, index=True)
+    observed_outcome = Column(String(30), nullable=True)
+    expected_decision = Column(String(10), nullable=True)
     collector = Column(String(100), default="")     # analyst login, tool, or runner id
     source = Column(String(60), default="")
     sensitivity = Column(String(20), default="internal")   # public|internal|confidential|restricted
@@ -501,6 +517,8 @@ class ScanJob(Base):
     tool_type = Column(String(20), nullable=False)          # see routers/jobs.py _VALID_TOOLS
     target_source = Column(String(20), nullable=False)      # "scope" or "recon"
     config = Column(JSON, nullable=True)                    # tool-specific options
+    case_snapshot = Column(JSON, nullable=True)             # spec frozen at claim
+    assessment = Column(JSON, nullable=True)                # independent of lifecycle
     status = Column(String(20), default="pending")          # pending | running | done | failed
     # Soft ref to the scan_job this stage waits on. A dependent job stays out of
     # GET /jobs/pending until its parent is "done"; if the parent "failed" the child
@@ -719,6 +737,13 @@ class JobResultLink(Base):
     recon_id = Column(String, ForeignKey("recon_items.id", ondelete="CASCADE"), nullable=True, index=True)
     scan_id = Column(String, ForeignKey("scan_items.id", ondelete="CASCADE"), nullable=True, index=True)
     service_id = Column(String, ForeignKey("services.id", ondelete="CASCADE"), nullable=True, index=True)
+
+    # Declare target dependencies so ORM deletes links before deleting observed
+    # rows. Otherwise PostgreSQL's target cascade removes them first and the ORM
+    # subsequently issues duplicate deletes while deleting their job.
+    recon = relationship("ReconItem")
+    scan = relationship("ScanItem")
+    service = relationship("Service")
 
 
 class FindingActivity(Base):

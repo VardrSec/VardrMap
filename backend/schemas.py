@@ -30,7 +30,7 @@ ScopeKind = Literal["domain", "subdomain", "url", "cidr", "api", "mobile"]
 # The ordering below reads as the common path, nothing more:
 #     draft -> internal_review -> final -> delivered
 ReportStatus = Literal["draft", "internal_review", "final", "delivered", "archived"]
-ToolType = Literal["ffuf", "httpx", "nuclei", "katana", "gau"]
+ToolType = Literal["ffuf", "httpx", "nuclei", "katana", "gau", "dalfox"]
 EngagementType = Literal["bug_bounty", "pentest", "red_team", "internal"]
 EngagementStatus = Literal["planned", "active", "reporting", "closed"]
 AuthorizationStatus = Literal["active", "expired", "revoked"]

@@ -11,6 +11,7 @@ node_modules/
 
 # Test artefacts
 test_vardrmap.db
+backend/*.db
 .pytest_cache/
 htmlcov/
 .coverage
@@ -25,3 +26,5 @@ build/
 Thumbs.db
 .vercel
 .env*
+# Companion checkouts and environments used by the integration CI job.
+.integration/

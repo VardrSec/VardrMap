@@ -12,12 +12,12 @@ to the operator.
 |---|---|---|---|
 | T1 | Testing outside authorization (expired window, revoked, out of scope) | Central policy evaluator warns; operator decides. Stop-work refuses. | Advisory by design — see below |
 | T2 | Cross-tenant read of another user's engagement | `get_engagement_or_404` → 404, never 403 | Implemented |
-| T3 | Secrets leaking into findings, evidence, logs, reports | Centralized redaction | Phase 2 |
-| T4 | SSRF via webhook or scan target | Resolve-and-block private/metadata ranges | Implemented (webhooks) |
-| T5 | Stolen runner API key → arbitrary execution | Runner-scoped keys, hashed at rest, policy re-check at claim | Partial → **this slice** |
+| T3 | Secrets leaking into findings, evidence, logs, reports | Centralized redaction | Implemented; see limitations below |
+| T4 | SSRF via webhook or scan target | Resolve, reject unsafe addresses and pin webhook connections to approved IPs | Implemented (webhooks) |
+| T5 | Stolen runner API key → arbitrary execution | Runner-scoped keys, hashed at rest, policy re-check at claim | Implemented; user-bound keys |
 | T6 | Audit tampering | No FK constraints; append-only; survives subject deletion | Implemented |
-| T7 | Denial of service against a client | Rate/concurrency limits in job envelope | Phase 3 |
-| T8 | Prompt injection into AI triage | No raw secrets to model; human approval before intrusive action | Phase 2 |
+| T7 | Denial of service against a client | Rate/concurrency limits in job envelope | Per execution; aggregate budgets remain future work |
+| T8 | Prompt injection into AI triage | Heuristic redaction before provider calls; AI returns drafts, not execution authority | Implemented; see limitations below |
 
 ## Scope is advisory — a deliberate product decision
 
@@ -105,17 +105,20 @@ Current: engagement-scoped resources route through `get_engagement_or_404`,
 which returns **404 rather than 403** for a non-member — never revealing that
 another user's object exists.
 
-**Known gap (Phase 1b):** job, schedule, and client endpoints filter directly on
-`owner_github_id == current_user`, bypassing membership. A teammate can read an
-engagement's findings but not operate its jobs. The identity anchor is a GitHub
-user, not an organization. Documented in `architecture.md` § Tenancy.
+Organization membership, legacy ownership and engagement invitations are combined
+at the database access predicate. Jobs and schedules follow engagement access;
+clients follow organization membership or direct ownership. Viewers cannot mutate
+shared clients. API keys remain user-bound rather than organization-bound.
+JWTs must carry expiry, subject, audience and issuer; HS256 signature, expiry,
+audience and issuer are verified. Wrong-user resources remain 404.
 
 ## Secrets
 
 - API keys are stored as hashes, never plaintext.
-- Credential values use `${VAR}` references resolved by the runner in the
-  customer environment (VardrGate `internal/secretref`). The control plane
-  stores the reference, never the secret.
+- Identity credentials in stored test cases must use `value_env` or
+  `value_keychain` references resolved by the runner in the customer environment.
+  The literal-value guard applies to identity credential objects; arbitrary
+  request headers, URLs and bodies still require review for embedded secrets.
 - An unset reference is an **error**, not an empty string — a blank token turns
   an authenticated identity into an anonymous one, inverting a test's meaning
   while still reporting a clean run.
@@ -132,9 +135,12 @@ because that is a deliberate operator action with an incident behind it. The
 
 ## Data handling
 
-- Evidence retention and sensitivity classification: Phase 2.
-- Report exports must respect redaction and sensitivity: Phase 4.
-- No credentials or tokens in URLs; no sensitive values in telemetry.
+- Evidence sensitivity and retention metadata are implemented; automatic retention enforcement is not implied.
+- Deliverable snapshots are implemented. Review evidence sensitivity before exporting; classification is not a universal export authorization policy.
+- AI suggestion and triage inputs use the shared heuristic redactor. Provider errors are generic. This is not a guarantee that every client secret is detected; do not send restricted evidence to an external provider.
+- Webhook delivery pins the approved IP, retains original Host and TLS identity, disables environment proxies and redirects, and avoids logging secret-bearing URLs. Malformed URLs and URL credentials are rejected.
+- Imports read at most the upload cap plus one byte before rejecting oversize data; infrastructure request limits are still needed for multipart ingress.
+- Stop-work prevents new execution and skips schedules; it does not kill an already running local process.
 
 ## Test coverage required
 

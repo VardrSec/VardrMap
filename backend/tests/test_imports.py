@@ -3,6 +3,24 @@ import io
 import json
 
 
+def test_oversize_import_read_is_bounded(client, auth_headers, program_id, monkeypatch):
+    from starlette.datastructures import UploadFile
+    from routers import imports
+
+    reads = []
+    original = UploadFile.read
+
+    async def tracked_read(self, size=-1):
+        reads.append(size)
+        return await original(self, size)
+
+    monkeypatch.setattr(imports, "MAX_UPLOAD_BYTES", 8)
+    monkeypatch.setattr(UploadFile, "read", tracked_read)
+    response = _upload(client, auth_headers, program_id, b"x" * 30, "scan.json", "httpx")
+    assert response.status_code == 413
+    assert reads == [9]
+
+
 def _upload(client, auth_headers, program_id, content: bytes, filename: str, tool_type: str, content_type: str = "application/json"):
     return client.post(
         f"/programs/{program_id}/imports",

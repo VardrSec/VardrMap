@@ -4,7 +4,6 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
 
 jobs:
   backend:
@@ -45,6 +44,118 @@ jobs:
             echo "Multiple migration heads detected ($count). Run 'alembic merge heads' to resolve."
             exit 1
           fi
+
+  postgres:
+    name: PostgreSQL migrations and integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci-fixture-password
+          POSTGRES_DB: vardrmap_test_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # Disposable CI service only; application connections require TLS by default.
+      TEST_DATABASE_URL: postgresql://postgres:ci-fixture-password@127.0.0.1:5432/vardrmap_test_ci?sslmode=disable
+      INTEGRATION_DATABASE_URL: postgresql://postgres:ci-fixture-password@127.0.0.1:5432/vardrmap_test_integration?sslmode=disable
+    steps:
+      - uses: actions/checkout@v7
+      # Pin companion revisions so a PR is tested against a reproducible stack.
+      - uses: actions/checkout@v7
+        with:
+          repository: VardrSec/VardrRunner
+          ref: 923cb08a40f23a6953eb5999293c393941aaef5d
+          path: .integration/runner
+      - uses: actions/checkout@v7
+        with:
+          repository: VardrSec/VardrGate
+          ref: bb242589c084e8a40b7b2bcac49643c27372addf
+          path: .integration/gate
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: .integration/gate/go.mod
+          cache-dependency-path: .integration/gate/go.sum
+      - name: Install test dependencies
+        run: |
+          pip install -r backend/requirements.txt -r backend/requirements-dev.txt
+          python -m venv .integration/runner-venv
+          .integration/runner-venv/bin/pip install ./.integration/runner
+      - name: Prepare disposable databases with a non-UTC default
+        run: |
+          python - <<'PY'
+          import os, psycopg
+          with psycopg.connect(os.environ['TEST_DATABASE_URL'], autocommit=True) as conn:
+              conn.execute("ALTER DATABASE vardrmap_test_ci SET timezone TO 'America/Chicago'")
+              conn.execute('CREATE DATABASE vardrmap_test_integration')
+              conn.execute("ALTER DATABASE vardrmap_test_integration SET timezone TO 'America/Chicago'")
+          PY
+      - name: Verify migrations and UTC connections
+        run: python -m pytest backend/postgres_tests -v
+      - name: Run backend suite on PostgreSQL
+        working-directory: backend
+        run: python -m pytest tests -v
+      - name: Run Map to Runner to Gate on migrated PostgreSQL
+        run: >-
+          python scripts/integration/run.py --postgres
+          --runner .integration/runner --gate .integration/gate
+          --runner-python .integration/runner-venv/bin/python
+          --output "${{ runner.temp }}"
+      - name: Retain integration verdict and source manifest
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: api-integration-verdict
+          path: |
+            ${{ runner.temp }}/vardr-integration-*/acceptance-results.json
+            ${{ runner.temp }}/vardr-integration-*/sources.json
+          if-no-files-found: ignore
+          retention-days: 7
+
+  browser:
+    name: Browser acceptance
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install isolated test dependencies
+        run: |
+          pip install -r backend/requirements.txt -r backend/requirements-dev.txt
+          npm ci --prefix frontend
+      - name: Install browser
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+      - name: Exercise real UI against disposable backend
+        working-directory: frontend
+        run: npm run test:e2e
+      - name: Retain failure traces
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: browser-acceptance-failure
+          path: |
+            frontend/playwright-report
+            frontend/test-results
+          retention-days: 7
 
   frontend:
     name: Frontend lint + build
@@ -113,7 +224,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-java@v5
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "21"

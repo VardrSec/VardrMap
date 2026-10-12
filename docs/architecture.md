@@ -58,7 +58,14 @@ race runs from a stop every time.
 
 `Base.metadata.create_all()` is guarded to only run when `ENV=development` or `ENV=test`. It never runs in production. Alembic is the sole schema authority for production and staging.
 
-Local development still uses `create_all` for convenience — no migration step needed to start the server. Tests rebuild the SQLite schema from scratch on every run.
+Local development still uses `create_all` for convenience. Fresh production
+databases are created by the frozen `0001baseline` schema and the incremental
+Alembic chain; an already-versioned database skips that baseline. Unstamped,
+nonempty databases are refused until their actual schema revision is identified.
+Default tests rebuild SQLite; CI also exercises migrated PostgreSQL and the full
+backend suite on PostgreSQL. Application and Alembic connections consistently use
+UTC because existing timestamp columns store naive UTC values. This connection
+policy does not reinterpret or rewrite previously stored timestamps.
 
 ---
 
@@ -70,7 +77,7 @@ There are two accepted token types. Both arrive on the `Authorization: Bearer <t
 
 1. User clicks "Sign in with GitHub"
 2. Auth.js v5 completes the GitHub OAuth flow and mints a session
-3. On every request, the frontend's `authFetch` helper calls `getServerSideSession()` to get the current session and reads `backendToken` from it
+3. The client-side `authFetch` helper in `AppContext.tsx` uses the Auth.js session's `backendToken` and calls the backend directly
 4. `backendToken` is a short-lived HS256 JWT signed by the frontend using `BACKEND_JWT_SECRET`, with claims: `sub` (GitHub ID), `username`, `email`, `iss` (`vardrmap-frontend`), `aud` (`vardrmap-backend`), `exp` (1 hour)
 5. The backend's `get_current_user` dependency verifies the JWT against `BACKEND_JWT_SECRET` and extracts the claims
 
@@ -102,219 +109,48 @@ and body again before writing it. Identity labels such as `anonymous`,
 `standard-user`, and `admin` describe a test perspective; they do not store or
 model the corresponding account or credential.
 
-All primary keys are UUID strings. All tables have `created_at` (UTC datetime).
+Most primary keys are UUID strings; `User.github_id` is the GitHub identity key.
 
-```
-users
-  github_id (PK)
-  username
-  email
-  webhook_url (VARCHAR 500 — Discord/Slack incoming webhook; "" = notifications off)
-  notify_min_severity ("info"|"low"|"medium"|"high"|"critical" — finding notification threshold)
-  created_at
+The current ORM inventory below includes implemented tenancy, assets, evidence,
+test cases and deliverables. SQL constraints and column types are defined in
+`backend/models.py`; persisted schema upgrades are defined by Alembic.
 
-programs
-  id (PK)
-  owner_github_id (FK → users.github_id)
-  name, platform, program_url
-  scope_summary, severity_guidance, safe_harbor_notes
-  created_at
-  → scope_items, findings, reports, manual_tests,
-    recon_items, scan_items, import_records, scan_jobs, services (all cascade delete)
-
-scope_items
-  id (PK), program_id (FK), scope_type ("in"|"out")
-  value, kind, notes, created_at
-
-findings
-  id (PK), program_id (FK)
-  title, severity, asset, status
-  summary, steps, impact, remediation
-  created_at
-
-reports
-  id (PK), program_id (FK)
-  finding_id (soft ref — no FK constraint)
-  title, summary, steps, impact, remediation
-  cwe, cvss, status
-  created_at
-
-manual_tests
-  id (PK), program_id (FK)
-  title, hypothesis, payload, evidence, status
-  created_at
-
-recon_items
-  id (PK), program_id (FK), source ("ffuf"|"httpx"|"katana"|"gau"); subfinder and dnsx results arrive through httpx imports
-  url, path, host, title, status_code, webserver,
-  port, tech, content_type, length, words, lines, notes
-  first_seen_at (nullable datetime — set once at first import, never overwritten; used for dedup)
-  job_id (nullable VARCHAR — soft ref to the scan_job that produced this item)
-  created_at
-
-scan_items
-  id (PK), program_id (FK), source ("nuclei")
-  template_id, title, severity, asset, matched_at,
-  type, description, status, cwe, cvss
-  job_id (nullable — scan_job that produced this item; null for manual imports)
-  created_at
-
-import_records
-  id (PK), program_id (FK)
-  tool_type, filename (always "redacted"), imported_count
-  job_id (FK -> scan_jobs.id, SET NULL, nullable, indexed - the job that produced the import)
-  created_at
-
-api_keys
-  id (PK)
-  github_id (FK → users.github_id, indexed)
-  key_hash (SHA-256 hex, unique)
-  label, created_at
-  scope (VARCHAR 20 — "full" (default) or "runner"; runner keys may only call jobs/imports/heartbeat)
-  last_used_at (nullable — stamped on every successful API key auth)
-
-scan_jobs
-  id (PK)
-  program_id (FK → programs.id, CASCADE DELETE, indexed)
-  owner_github_id (indexed)
-  tool_type ("httpx"|"nuclei"|"subfinder"|"nmap")
-  target_source ("scope"|"recon")
-  config (JSON — tool-specific options: status_code/limit for httpx; severity/templates for nuclei; top_ports/timing for nmap)
-  status ("pending"|"running"|"done"|"failed")
-  depends_on (nullable — soft ref to another scan_job; this stage is held out of
-    GET /jobs/pending until its parent is "done", auto-failed if the parent failed)
-  created_at, started_at (nullable), completed_at (nullable)
-  error_message
-
-services
-  id (PK)
-  program_id (FK → programs.id, CASCADE DELETE, indexed)
-  owner_github_id (indexed)
-  host (VARCHAR 500)
-  port (INTEGER 1–65535)
-  protocol ("tcp"|"udp")
-  service_name, product, version
-  state ("open"|"filtered")
-  source (default "nmap")
-  created_at
-  last_scanned_at (nullable datetime — stamped on every upsert, reflects when port was last seen by nmap)
-
-radar_programs
-  id (PK)
-  owner_github_id (indexed — one set of rows per user)
-  platform (VARCHAR 20 — "bugcrowd" | "hackerone")
-  platform_id (VARCHAR 200 — unique slug/handle on the platform)
-  name (VARCHAR 300)
-  url (VARCHAR 500)
-  max_payout (nullable INTEGER)
-  is_new (VARCHAR 1 — "1" = unseen since last refresh, "0" = seen; marked "0" when GET /radar delivers it)
-  discovered_at (UTC datetime — when first inserted)
-  last_fetched_at (UTC datetime — updated on every POST /radar/refresh)
-  Indexes: owner_github_id; (platform, platform_id)
-
-runner_heartbeats
-  id (PK)
-  owner_github_id (indexed)
-  hostname, version, os_info
-  tools (JSON — {"httpx": {"ok": true, "version": "v1.6.9"}, ...})
-  last_seen (UTC datetime — frontend derives online = last_seen < 5 min ago)
-  Unique: (owner_github_id, hostname) — one row per user per machine
-
-scheduled_scans
-  id (PK)
-  program_id (FK → programs.id, CASCADE DELETE, indexed)
-  owner_github_id (indexed)
-  tool_type ("httpx"|"nuclei"|"subfinder"|"nmap")
-  target_source ("scope"|"recon")
-  config (JSON — same shape and validation as scan_jobs.config)
-  interval ("hourly"|"daily"|"weekly")
-  enabled (BOOLEAN — paused schedules are skipped at materialization)
-  last_run_at (nullable datetime — when a job was last materialized)
-  next_run_at (datetime — schedule is due when <= now)
-  created_at
-
-job_events
-  id (PK)
-  job_id (FK → scan_jobs.id, CASCADE DELETE, indexed)
-  owner_github_id (indexed)
-  kind ("started"|"targets_resolved"|"running"|"uploaded"|"done"|"failed"|"log")
-  text (detail message — target count, result count, error text, etc.)
-  created_at (UTC datetime)
-
-program_members
-  id (PK)
-  program_id (FK → programs.id, CASCADE DELETE, indexed)
-  owner_github_id (indexed — the program owner, for fast BOLA checks)
-  member_github_id (indexed — the invited collaborator)
-  role (VARCHAR 20 — "member"; future: "admin")
-  invited_at
-  Unique: (program_id, member_github_id)
-
-scan_profiles
-  id (PK)
-  program_id (FK → programs.id, CASCADE DELETE, indexed)
-  owner_github_id (indexed)
-  name (VARCHAR 100)
-  tool_type (see routers/jobs.py _VALID_TOOLS)
-  target_source ("scope"|"recon")
-  config (JSON — same shape and validation as scan_jobs.config)
-  created_at
-
-authorization_test_cases
-  id (PK)
-  program_id (FK → programs.id, CASCADE DELETE, indexed)
-  owner_github_id (indexed)
-  name (VARCHAR 200)
-  test_case_id (VARCHAR 200 — VardrGate's own spec.id, surfaced for traceability;
-    not unique, a case may be revised)
-  description
-  spec (JSON — VardrGate AuthorizationTestCase, stored verbatim)
-  created_at, updated_at (nullable)
-
-job_result_receipts
-  id (PK)
-  job_id (FK → scan_jobs.id, CASCADE DELETE, unique)
-  payload_hash (SHA-256 of canonical result JSON)
-  scan_items_created, evidence_created
-  created_at
-
-job_result_links
-  id (PK)
-  job_id (FK -> scan_jobs.id, CASCADE DELETE, indexed)
-  recon_id | scan_id | service_id (each a nullable FK, CASCADE DELETE, indexed;
-    a CHECK constraint requires exactly one to be set)
-  UNIQUE (job_id, recon_id), (job_id, scan_id), (job_id, service_id)
-
-finding_activities
-  id (PK)
-  program_id (FK -> programs.id, CASCADE DELETE, indexed)
-  finding_id (FK -> findings.id, CASCADE DELETE, indexed)
-  kind ("created"|"updated"|"baseline"|"remediation"|"retest"), outcome (nullable)
-  notes (redacted), actor (github_id)
-  snapshot (JSON - the finding as it stood, redacted)
-  evidence (JSON - [{id, title, content_hash}] references)
-  created_at
-
-engagement_deliverables
-  id (PK)
-  program_id (FK -> programs.id, CASCADE DELETE, indexed)
-  title, latest_revision, created_at
-
-deliverable_revisions
-  id (PK)
-  deliverable_id (FK -> engagement_deliverables.id, CASCADE DELETE, indexed)
-  revision, UNIQUE (deliverable_id, revision)
-  status ("draft"|"internal_review"|"final"|"delivered"|"archived") - the only mutable column
-  snapshot (JSON, redacted), markdown, content_hash (SHA-256 of the markdown)
-  actor, created_at
-
-audit_logs
-  id (PK)
-  github_id (no FK — records survive user deletion)
-  action ("create"|"update"|"delete")
-  resource_type, resource_id, program_id
-  timestamp
-```
+| Model / table | Columns |
+|---|---|
+| `User` / `users` | `github_id`, `username`, `email`, `webhook_url`, `notify_min_severity`, `created_at` |
+| `Organization` / `organizations` | `id`, `name`, `personal_for_github_id`, `created_at` |
+| `OrganizationMember` / `organization_members` | `id`, `org_id`, `github_id`, `role`, `created_at` |
+| `Asset` / `assets` | `id`, `program_id`, `canonical_key`, `asset_type`, `label`, `hostname`, `ip`, `port`, `scheme`, `environment`, `criticality`, `exposure`, `owner_note`, `tags`, `source`, `confidence`, `first_seen_at`, `last_seen_at`, `created_at` |
+| `AssetRelationship` / `asset_relationships` | `id`, `program_id`, `src_asset_id`, `dst_asset_id`, `relationship`, `source`, `confidence`, `first_seen_at`, `last_seen_at`, `created_at` |
+| `Client` / `clients` | `id`, `owner_github_id`, `org_id`, `name`, `contact_name`, `contact_email`, `notes`, `created_at` |
+| `Engagement` / `programs` | `id`, `owner_github_id`, `name`, `platform`, `program_url`, `scope_summary`, `severity_guidance`, `safe_harbor_notes`, `client_id`, `org_id`, `engagement_type`, `engagement_status`, `starts_at`, `ends_at`, `stop_work_at`, `stop_work_reason`, `created_at` |
+| `Authorization` / `authorizations` | `id`, `program_id`, `owner_github_id`, `permits`, `authorized_by`, `authorized_at`, `reference`, `window_start`, `window_end`, `status`, `notes`, `created_at` |
+| `ScopeItem` / `scope_items` | `id`, `program_id`, `scope_type`, `value`, `kind`, `notes`, `created_at` |
+| `ManualTest` / `manual_tests` | `id`, `program_id`, `title`, `hypothesis`, `payload`, `evidence`, `status`, `created_at` |
+| `Finding` / `findings` | `id`, `program_id`, `title`, `severity`, `asset`, `asset_id`, `status`, `summary`, `steps`, `impact`, `remediation`, `created_at` |
+| `Report` / `reports` | `id`, `program_id`, `finding_id`, `title`, `summary`, `steps`, `impact`, `remediation`, `cwe`, `cvss`, `status`, `created_at` |
+| `ReconItem` / `recon_items` | `id`, `program_id`, `source`, `url`, `path`, `host`, `title`, `status_code`, `webserver`, `port`, `tech`, `content_type`, `length`, `words`, `lines`, `notes`, `asset_id`, `first_seen_at`, `job_id`, `created_at` |
+| `ScanItem` / `scan_items` | `id`, `program_id`, `source`, `template_id`, `title`, `severity`, `asset`, `matched_at`, `type`, `description`, `status`, `cwe`, `cvss`, `detection_method`, `payload`, `match_evidence`, `confidence`, `asset_id`, `job_id`, `created_at` |
+| `ImportRecord` / `import_records` | `id`, `program_id`, `tool_type`, `filename`, `imported_count`, `job_id`, `created_at` |
+| `Evidence` / `evidence` | `id`, `program_id`, `finding_id`, `asset_id`, `kind`, `title`, `body`, `content_hash`, `collector`, `source`, `sensitivity`, `retention`, `redacted`, `collected_at`, `created_at` |
+| `ApiEndpoint` / `api_endpoints` | `id`, `program_id`, `asset_id`, `method`, `scheme`, `host`, `port`, `path_template`, `canonical_key`, `source`, `notes`, `observation_count`, `first_seen_at`, `last_seen_at` |
+| `ApiExchange` / `api_exchanges` | `id`, `program_id`, `endpoint_id`, `source_tool`, `identity_label`, `request_headers`, `request_body`, `response_headers`, `response_body`, `request_hash`, `response_hash`, `response_status`, `response_length`, `response_mime`, `response_time_ms`, `parameter_names`, `note`, `captured_at`, `created_at` |
+| `AuditLog` / `audit_logs` | `id`, `github_id`, `action`, `resource_type`, `resource_id`, `program_id`, `reason`, `detail`, `timestamp` |
+| `ScanJob` / `scan_jobs` | `id`, `program_id`, `owner_github_id`, `tool_type`, `target_source`, `config`, `status`, `depends_on`, `created_at`, `started_at`, `completed_at`, `error_message` |
+| `JobResultReceipt` / `job_result_receipts` | `id`, `job_id`, `payload_hash`, `scan_items_created`, `evidence_created`, `created_at` |
+| `RunnerHeartbeat` / `runner_heartbeats` | `id`, `owner_github_id`, `hostname`, `version`, `os_info`, `tools`, `last_seen` |
+| `JobEvent` / `job_events` | `id`, `job_id`, `owner_github_id`, `kind`, `text`, `created_at` |
+| `ApiKey` / `api_keys` | `id`, `github_id`, `key_hash`, `label`, `scope`, `created_at`, `last_used_at` |
+| `Service` / `services` | `id`, `program_id`, `owner_github_id`, `host`, `port`, `protocol`, `service_name`, `product`, `version`, `state`, `source`, `created_at`, `asset_id`, `last_scanned_at` |
+| `RadarProgram` / `radar_programs` | `id`, `owner_github_id`, `platform`, `platform_id`, `name`, `url`, `max_payout`, `is_new`, `discovered_at`, `last_fetched_at` |
+| `ScheduledScan` / `scheduled_scans` | `id`, `program_id`, `owner_github_id`, `tool_type`, `target_source`, `config`, `interval`, `enabled`, `last_run_at`, `next_run_at`, `created_at` |
+| `EngagementMember` / `program_members` | `id`, `program_id`, `owner_github_id`, `member_github_id`, `role`, `invited_at` |
+| `ScanProfile` / `scan_profiles` | `id`, `program_id`, `owner_github_id`, `name`, `tool_type`, `target_source`, `config`, `created_at` |
+| `AuthorizationTestCase` / `authorization_test_cases` | `id`, `program_id`, `owner_github_id`, `name`, `test_case_id`, `description`, `spec`, `created_at`, `updated_at` |
+| `JobResultLink` / `job_result_links` | `id`, `job_id`, `recon_id`, `scan_id`, `service_id` |
+| `FindingActivity` / `finding_activities` | `id`, `program_id`, `finding_id`, `kind`, `outcome`, `notes`, `actor`, `snapshot`, `evidence`, `created_at` |
+| `EngagementDeliverable` / `engagement_deliverables` | `id`, `program_id`, `title`, `latest_revision`, `created_at` |
+| `DeliverableRevision` / `deliverable_revisions` | `id`, `deliverable_id`, `revision`, `status`, `snapshot`, `markdown`, `content_hash`, `actor`, `created_at` |
 
 **Notes:**
 - `Report.finding_id` is a soft reference — no FK constraint. Reports can exist without a linked finding.
@@ -322,9 +158,9 @@ audit_logs
 - `api_keys.key_hash` stores the SHA-256 hex digest of the plaintext token. The plaintext is never stored. `last_used_at` is stamped on every successful API key authentication. `scope` restricts runner-scoped keys to jobs/imports/heartbeat endpoints — all other endpoints return `403` for runner keys.
 - `recon_items.first_seen_at` is set once when an item is first imported and never overwritten. Dedup key is `(program_id, source, url)`: re-importing the same URL produces `new_count: 0` with no duplicate row.
 - `program_members` grant collaborators access to a program's resources, with two roles: **`member`** (read + write) and **`viewer`** (read-only). Only the owner can manage members and delete/PATCH the program itself. `GET /programs` returns both owned programs and programs where the user is a member.
-- **Viewer enforcement:** every program-scoped write endpoint (create/update/delete of findings, reports, manual tests, scans, schedules, scan profiles, services, scope, imports, jobs, pipelines) calls `require_member_write` after `get_program_or_404`, which raises `403` for a viewer-role member. The guard fires before any resource lookup, so a viewer gets `403` even for a non-existent target id. Owners always pass; runner-scoped API keys resolve to the owner and therefore also pass (so uploads/heartbeats are unaffected). AI actions (`findings/{id}/suggest`, `scans/triage`) are gated too, since they incur cost. Read (`GET`) endpoints remain open to viewers.
+- **Viewer enforcement:** every program-scoped write endpoint (create/update/delete of findings, reports, manual tests, scans, schedules, scan profiles, services, scope, imports, jobs, pipelines) calls `require_member_write` after `get_engagement_or_404`, which raises `403` for a viewer-role member. The guard fires before any resource lookup, so a viewer gets `403` even for a non-existent target id. Owners always pass; runner-scoped API keys resolve to the owner and therefore also pass (so uploads/heartbeats are unaffected). AI actions (`findings/{id}/suggest`, `scans/triage`) are gated too, since they incur cost. Read (`GET`) endpoints remain open to viewers.
 - `scan_jobs.config` is a JSON column with optional tool options. VardrRunner reads this dict when executing the job. Unknown config keys are rejected at creation time.
-- `scan_jobs` are scoped to the owning user via `owner_github_id` — a user can only see/update their own jobs. Claiming a job uses `POST /jobs/{id}/claim` which atomically sets `status = "running"` only if currently `"pending"`, returning 409 otherwise.
+- `scan_jobs` are scoped through engagement access, including organization membership and invitations; viewers cannot mutate jobs. Claiming a job uses `POST /jobs/{id}/claim` which atomically sets `status = "running"` only if currently `"pending"`, returning 409 otherwise.
 - `services` rows are bulk-upserted on `(host, port, protocol)` — repeated nmap scans update metadata rather than creating duplicates. `last_scanned_at` is stamped on both insert and update so freshness is always visible.
 - `radar_programs` are upserted per user on `(owner_github_id, platform, platform_id)`. New programs land with `is_new = "1"` so the Overview Radar widget can badge them; `GET /radar` marks all returned rows as seen.
 - Deleting a `scan_job` (via `DELETE /jobs/{id}`) also deletes all its `job_events` via CASCADE.
@@ -333,7 +169,7 @@ audit_logs
 - `users.webhook_url` (stored plaintext — it must be usable, unlike hashed API keys; only ever returned to its owner) and `users.notify_min_severity` drive outbound notifications, sent via FastAPI BackgroundTasks so webhook latency never delays API responses. URLs are validated against an SSRF guard (HTTPS only, no localhost/private/link-local targets).
 - `job_events` are appended by VardrRunner via `POST /jobs/{id}/events` at each lifecycle stage. The frontend Terminal polls `GET /jobs/{id}/events` (3 s interval while job is pending/running, stops on terminal state). Events cascade-delete with their parent job. Rate-limited to 600/min.
 - **Pipelines** (`POST /programs/{id}/pipelines`) create an ordered chain of `scan_jobs` linked by `depends_on`. A dependent stage is withheld from `GET /jobs/pending` until its parent is `done`; the runner's own poll drives the clock (same pattern as scheduled scans). If a parent `failed`, `GET /jobs/pending` auto-fails the dependent stage so it never hangs. The endpoint accepts any valid ordered chain. The UI offers named chains from `PIPELINES` (`frontend/app/components/jobs/mockData.tsx`) — Attack Surface (subfinder → dnsx → httpx → nuclei), Host Enumeration (naabu → nmap → httpx), Content Discovery (subfinder → httpx → katana → gau), and API Assessment — with each stage individually includable, so it may post any ordered subset. `depends_on` is linked sequentially over whatever arrives, so a subset still chains correctly.
-- **Provenance:** `recon_items.job_id` and `scan_items.job_id` record which `scan_job` *created* each row (from the optional `job_id` on `POST /imports`; null for manual uploads). Because deduplication means a later job often re-observes a row an earlier job created, `job_result_links` additionally records every row a job *observed* - recon, scan and service - so "what did this run find" stays answerable after enrichment or de-duplication. The `job_id` is validated against the engagement's own jobs (`404` otherwise): it is a real foreign key, and an unvalidated one could link another engagement's job. `GET /programs/{id}/recon?job_id=`, `.../scans?job_id=` and `.../services?job_id=` filter by it, so the Terminal can deep-link from a finished job to exactly the rows it yielded. VardrRunner passes the job id on every upload.
+- **Provenance:** `recon_items.job_id` and `scan_items.job_id` record which `scan_job` *created* each row (from the optional `job_id` on `POST /imports`; null for manual uploads). Because deduplication means a later job often re-observes a row an earlier job created, `job_result_links` additionally records every row a job *observed* - recon, scan and service - so "what did this run find" stays answerable after enrichment or de-duplication. The `job_id` is validated against the engagement's own jobs (`404` otherwise): it is a real foreign key, and an unvalidated one could link another engagement's job. `GET /programs/{id}/recon?job_id=`, `.../scans?job_id=` and `.../services?job_id=` filter by it, so the Terminal can deep-link from a finished job to exactly the rows it yielded. VardrRunner passes the job id on every upload. (`scans` only honoured the creator stamp until v0.41.0, so a deduplicated re-scan looked as though it had found nothing; it now matches recon and services.)
 - **Finding history:** every finding create and update appends a `finding_activities` snapshot (the first update of a pre-existing finding records a `baseline` of its prior state, under a row lock). Remediation notes and retests are further activity kinds; a retest requires an outcome. Snapshots and notes pass through the secret redactor before storage, and evidence is referenced by title and SHA-256 so its integrity survives later retention. History is deleted with its finding (the audit log retains that it happened).
 - **Deliverables:** `engagement_deliverables` / `deliverable_revisions` are the client-facing report. A revision freezes the scope, authorizations, selected findings and evidence and retest history at save time, with rendered Markdown and its SHA-256; only `status` changes afterwards. Saves use optimistic concurrency (`base_revision`, `409` if stale) and the snapshot is redacted and capped at 4 MiB. Evidence is rendered as indented blocks so target-controlled text cannot escape the report, and the UI renders the Markdown without raw HTML, with images replaced by text and links filtered.
 - **Case authoring:** `POST /test-cases/preview` drafts VardrGate cases from observed API operations or an OpenAPI document and stores nothing; `POST /test-cases/reviewed` saves them only with an explicit `reviewed: true`. Drafts never copy credentials or example values, never fetch `$ref`s, and start with every access decision `skip`, because observed responses do not establish who *should* have access.
@@ -399,14 +235,16 @@ The sidebar exposes **7 top-level sections** mapped to the engagement workflow:
 
 1. **Bridge** (`jobs/Bridge.tsx`) — animated link visualization showing VardrMap ↔ VardrRunner connection; runner node shows real hostname, OS, version, and per-tool availability chips from the latest heartbeat; collapses to a slim strip. Collapse state persists to `localStorage`.
 2. **Telemetry** (`jobs/Telemetry.tsx`) — four stat tiles: running, completed, results yielded, avg runtime.
-3. **Composer** (`jobs/Composer.tsx`) — a single selection across the named pipelines and the eight tools (subfinder/httpx/nuclei/nmap/dnsx/naabu/katana/gau). Picking a pipeline clears the tool highlight and vice versa, so only one thing is ever chosen; the tool's config is preserved across the toggle. Nothing is queued until **Queue**, and a pipeline confirms first since it queues several jobs at once.
+3. **Composer** (`jobs/Composer.tsx`) — a single selection across the named pipelines and the eleven tools (subfinder/httpx/nuclei/nmap/dnsx/naabu/katana/gau/ffuf/dalfox/vardrgate_api_test). Picking a pipeline clears the tool highlight and vice versa, so only one thing is ever chosen; the tool's config is preserved across the toggle. Nothing is queued until **Queue**, and a pipeline confirms first since it queues several jobs at once.
 
-   Two pipelines ship in `PIPELINES` (`jobs/mockData.tsx`):
+   Four pipelines ship in `PIPELINES` (`jobs/mockData.tsx`):
 
    | Pipeline | Chain | For |
    |---|---|---|
    | **Attack Surface** | subfinder → dnsx → httpx → nuclei | An external surface you have to discover. Each stage feeds the next through the recon store. |
-   | **Host Enumeration** | naabu → nmap → httpx | A scope you were given. These read the same scope rather than feeding each other; chaining them keeps three tools off the client's hosts at once. |
+   | **Host Enumeration** | naabu → nmap → httpx | A scope you were given; each stage uses scope. |
+   | **Content Discovery** | subfinder → httpx → katana → gau | Find live hosts, crawl them and import archived URLs. |
+   | **API Assessment** | httpx → vardrgate_api_test | Confirm reachability, then execute a selected stored authorization test case. |
 
    Selecting a pipeline expands it into a **stage editor**: each stage can be included or excluded, so subfinder → httpx alone is as valid as the full chain. Order always follows the pipeline definition, so re-including a stage restores its original position rather than appending it. Stage inclusion is stored per pipeline (`Record<pipelineId, Record<toolType, boolean>>`) because httpx appears in both — excluding it from one must not touch the other. The card blurb, the summary line and the confirm dialog all read from the current selection, so none of them can advertise a chain the operator has edited away. Queue is disabled while zero stages are included.
 
@@ -432,7 +270,7 @@ Validation order:
 2. Content-Type must be `application/json`, `application/x-ndjson`, `application/octet-stream`, or `text/plain`
 3. File size must not exceed `MAX_UPLOAD_BYTES` (default 2 MB)
 4. Content is parsed as JSON array or JSONL (one object per line)
-5. Items are passed to the tool-specific parser (`parse_ffuf`, `parse_httpx`, `parse_nuclei`, `parse_katana`, `parse_gau`). URL-shaped recon (ffuf, katana, gau) is deduplicated per engagement and source, against stored rows and within the upload
+5. Items are passed to the tool-specific parser (`parse_ffuf`, `parse_httpx`, `parse_nuclei`, `parse_katana`, `parse_gau`, `parse_dalfox`). URL-shaped recon (ffuf, katana, gau) is deduplicated per engagement and source, against stored rows and within the upload. **dalfox scan items are deduplicated too** — on the query-less URL, the injection context and parameter (`template_id`), and the tier — because a re-scan re-reports every match it still finds; the payload and PoC URL are excluded from the key since both carry a per-run marker class. Deduplicated matches still get a `job_result_links` row, so a re-scan's observations remain visible. nuclei is **not** deduplicated, which is pre-existing behaviour. `parse_ffuf` reads ffuf's own keys (`url`, `input.FUZZ`, `status`, `content-type`), so both a raw `ffuf -of json` report and the JSONL VardrRunner uploads import identically
 6. An `ImportRecord` is written with `filename = "redacted"` — original filenames often leak local paths and have no value post-import
 
 ---
@@ -535,55 +373,27 @@ which parts are already true.
              behind the contract, never a control-plane dependency
 ```
 
-The control plane holds no tool-specific logic. It emits job envelopes and
-consumes results. This is why VardrGate can be swapped, extended, or run
-standalone without touching VardrMap.
-
-**Already true:** VardrRunner calls `/engagements/*`, `/jobs/pending`,
-`/jobs/{id}/claim`, `/jobs/{id}/events`, and `/runner/heartbeat`. Registration,
-heartbeat, claim, and progress contracts substantially exist. Phase 3 versions
-them and adds signing, cancellation, and capability reporting rather than
-rebuilding them.
-
-### Job envelope — derived, not invented
-
-VardrGate already defines the execution-bounds contract in `internal/job`:
-
-```go
-type Execution struct {
-    TimeoutSeconds      int   `json:"timeout_seconds,omitempty"`
-    MaxResponseBytes    int64 `json:"max_response_bytes,omitempty"`
-    AllowPrivateTargets bool  `json:"allow_private_targets,omitempty"`
-}
-```
-
-The shared protocol derives from this rather than defining a competing shape.
-
-**Known mismatch:** VardrGate's `Envelope.ProgramID` is `int`; VardrMap uses
-string UUIDs throughout. The shared contract must use the string form, and
-VardrGate's field needs widening when the adapter is built (Phase 3). Recorded
-here rather than papered over.
+The control plane validates tool configuration and imports tool-specific results;
+execution lives in VardrRunner and VardrGate. Runner registration, heartbeat,
+claim and progress contracts are implemented. Gate integration uses string
+engagement identifiers; the earlier integer identifier mismatch is resolved.
+Signed/versioned contracts and running-process cancellation remain future work.
 
 ### Secret handling across the boundary
 
 VardrGate's `internal/secretref` resolves `${VAR}` against the local process
 environment, and treats an unset variable as an error rather than an empty
-string. The control plane stores the *reference*; the runner resolves the
-*value* in the customer's environment. Secrets never traverse the control plane.
+string. Stored identity credentials use `value_env`/`value_keychain` references;
+the runner resolves the value in the customer's environment. This guard does not
+prove arbitrary request bodies, URLs or evidence are free of embedded secrets.
 
-### Tenancy — the known structural gap
+### Tenancy
 
-Two access models currently coexist:
-
-- Engagement-scoped resources use `get_engagement_or_404` (`deps.py:77`) —
-  owner **or** member. Correct.
-- Job, schedule, and client endpoints filter on
-  `owner_github_id == current_user["github_id"]` directly — owner only.
-
-Consequences: an invited teammate cannot operate an engagement's jobs; the
-runner authenticates as a user, so a team cannot share runner infrastructure;
-and a firm cannot share a client record. The identity anchor is a GitHub user,
-not an organization. Phase 1b converts this; see `implementation-roadmap.md`.
+`deps.engagement_access()` combines direct ownership, organization membership
+and engagement invitations. Job and schedule access follows the engagement.
+Clients allow direct ownership or organization membership; viewers cannot mutate them.
+API keys and runner heartbeats remain user-bound, so organization-bound execution
+credentials need a separate design.
 
 ### Policy evaluation
 
@@ -601,9 +411,68 @@ Findings are **advisory**: they ride back on the response as a `warnings` array
 and the job runs anyway. Only `stop_work_active` raises (`403`). See
 `security-model.md` for the reason-code table and the rationale.
 
-### Asset graph (Phase 2)
+### Asset graph
 
-The largest remaining structural gap. Today a host exists as five unrelated
-free-text columns with no foreign keys between them, and identity resolution is
-string comparison. Nothing can be correlated, aggregated by asset, or diffed
-over time. The relational edge-table design is specified in `domain-model.md`.
+Assets and relationship edges are implemented. Importers and findings link hosts
+to canonical assets, and evidence can reference both assets and findings.
+See [domain model](domain-model.md) for the implemented relationship boundaries.
+
+# Evidence association
+
+Evidence retains its existing nullable `finding_id` relationship. A reviewed
+link operation can associate engagement-level scan evidence with a finding in
+the same engagement. It preserves the row ID, body hash and execution provenance;
+it does not create a copy. Evidence already linked to another finding cannot be
+reassigned, preserving finding history. New links require member-level write
+access and produce an audit entry. No schema migration is needed.
+
+## Security audit amendments (2026-10-11)
+
+Signed JWTs require `exp`, `sub`, `aud` and `iss` claims. Shared client PATCH/DELETE
+requires direct ownership or organization member-level write access; organization
+viewers receive 403, unrelated users 404. AI suggestion/triage inputs are redacted
+before provider calls and provider failures return generic 502 details. Redaction
+is heuristic; AI output remains a draft requiring human review.
+Webhook delivery connects to an approved resolved address while preserving the
+original HTTP Host and TLS identity. It disables environment proxies and redirects,
+rejects malformed/credential-bearing URLs and logs error types rather than secret URLs.
+Imports enforce the existing size cap with a bounded read.
+
+## Text preservation and deletion ordering
+
+New sanitized text preserves literal ampersands and entity syntax (`&`, `&amp;`,
+`&#38;`) instead of HTML-encoding or collapsing them. Existing rules still remove
+HTML tags, remove null bytes and reject injection patterns in identifier fields.
+Render the result as text or through the existing safe Markdown renderer, never
+by inserting raw HTML. Existing stored text is not decoded or rewritten.
+
+Observation links declare their recon/scan/service relationships so the ORM
+orders their deletion before deleting observed targets. Job deletion continues
+to remove its links while retaining observations. No database migration is needed.
+
+## Gate assessment records and shared guidance
+
+`ScanJob.case_snapshot` (nullable JSON) freezes the unresolved reviewed spec in the
+atomic claim transition; `ScanJob.assessment` (nullable JSON) is computed on upload
+against this snapshot and stored in the same transaction as evidence, candidates
+and the idempotency receipt. Lifecycle `done` means execution finished. Assessment
+`conclusive` means the declared identities have definite reported outcomes and a
+working legitimate baseline, not that the API is secure or the candidates verified.
+
+Runner adds a canonical SHA-256 of its unresolved case to the retained result
+artifact. A conflicting hash is refused; a missing binding remains inconclusive.
+This is correlation, not a signed attestation of an uncompromised runner. Historical
+assessments remain null. Migration 0027 is additive, with one successor to 0026.
+
+Evidence has nullable indexed `job_id`, `case_id`, `identity_id`, plus `case_ref`,
+`observed_outcome` and `expected_decision`. Job/case FKs use SET NULL so deleting
+one preserves retained proof and logical identity metadata. Engagement/finding
+retention rules remain unchanged. The stored evidence body and hash include the
+case binding signal; report revisions and finding activity snapshot provenance.
+Manual evidence cannot set execution metadata. Queries remain engagement-scoped.
+
+`backend/api_playbooks.json` is the sole original v1.0 guidance catalog, validated
+at startup by `playbooks.py` (extra fields forbidden, unique ids). Full-scope read
+endpoints serve summaries and individual guides. Map's case builder and Runner
+MCP read that same catalog on demand; no duplicate data bundle, progress fields,
+automatic permission decisions or automatic human sign-off are introduced.

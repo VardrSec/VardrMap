@@ -103,6 +103,43 @@ export const TOOLS: Record<string, ToolDef> = {
       { key: "providers", label: "Providers", type: "text", placeholder: "wayback,commoncrawl,otx,urlscan" },
     ],
   },
+  ffuf: {
+    id: "ffuf",
+    label: "ffuf",
+    glyph: "⊞",
+    blurb: "Fuzz site roots for hidden paths (active)",
+    yields: "paths",
+    yieldsTo: "recon",
+    sources: ["recon", "scope"],
+    config: [
+      // A name, not a path — the runner resolves it against its own wordlists
+      // directory, and the API refuses anything path-shaped.
+      { key: "wordlist", label: "Wordlist name", type: "text", placeholder: "common" },
+      { key: "extensions", label: "Extensions", type: "text", placeholder: ".php,.bak" },
+      { key: "match_codes", label: "Status filter", type: "text", placeholder: "200,301,403" },
+      // The rate cap bounds the load this puts on a client's host; there is no
+      // value that disables it.
+      { key: "rate", label: "Requests/sec", type: "number", placeholder: "50" },
+    ],
+  },
+  dalfox: {
+    id: "dalfox",
+    label: "dalfox",
+    glyph: "◭",
+    blurb: "XSS candidates needing verification (active)",
+    // Scan items, not findings: dalfox reports what to verify, and even its
+    // top tier is the scanner asserting exploitability rather than us
+    // confirming it. Promoting one to a finding stays an operator's act.
+    yields: "XSS candidates",
+    yieldsTo: "scan",
+    sources: ["recon", "scope"],
+    config: [
+      { key: "limit", label: "Limit", type: "number", placeholder: "100" },
+      { key: "worker", label: "Workers", type: "number", placeholder: "10" },
+      { key: "delay", label: "Delay (ms)", type: "number", placeholder: "0" },
+      { key: "mining", label: "Mine parameters", type: "toggle", default: true },
+    ],
+  },
   vardrgate_api_test: {
     id: "vardrgate_api_test",
     label: "vardrgate",

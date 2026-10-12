@@ -21,6 +21,42 @@ describe("tool catalog", () => {
     expect(gau.config.find((c) => c.key === "subs")).toMatchObject({ type: "toggle", default: true });
   });
 
+  it("offers ffuf against recon or scope with a rate field", () => {
+    const ffuf = TOOLS.ffuf;
+    expect(ffuf.sources).toEqual(["recon", "scope"]);
+    expect(ffuf.yieldsTo).toBe("recon");
+    expect(ffuf.config.map((c) => c.key)).toEqual([
+      "wordlist",
+      "extensions",
+      "match_codes",
+      "rate",
+    ]);
+  });
+
+  it("asks for a ffuf wordlist by name, never a path", () => {
+    // The API refuses a path-shaped wordlist, so a placeholder that looked like
+    // one would walk the operator into a 400.
+    const wordlist = TOOLS.ffuf.config.find((c) => c.key === "wordlist");
+    expect(wordlist).toMatchObject({ type: "text", placeholder: "common" });
+    expect(wordlist!.placeholder).not.toMatch(/[/\\]/);
+  });
+
+  it("offers dalfox as a scan tool with parameter mining on by default", () => {
+    const dalfox = TOOLS.dalfox;
+    expect(dalfox.sources).toEqual(["recon", "scope"]);
+    // Scan items, not recon: dalfox produces candidates to verify.
+    expect(dalfox.yieldsTo).toBe("scan");
+    expect(dalfox.config.map((c) => c.key)).toEqual(["limit", "worker", "delay", "mining"]);
+    expect(dalfox.config.find((c) => c.key === "mining")).toMatchObject({ type: "toggle", default: true });
+  });
+
+  it("describes dalfox output as candidates rather than findings", () => {
+    // Even dalfox's top tier is the scanner asserting exploitability, not a
+    // confirmed finding, and the composer copy should not imply otherwise.
+    expect(TOOLS.dalfox.yields).toBe("XSS candidates");
+    expect(TOOLS.dalfox.blurb).toMatch(/candidate/i);
+  });
+
   it("keys every tool by its own id", () => {
     for (const [key, tool] of Object.entries(TOOLS)) {
       expect(tool.id).toBe(key);

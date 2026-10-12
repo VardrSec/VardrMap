@@ -37,6 +37,46 @@ class EvidenceCreate(BaseModel):
         return sanitize_identifier(v) if v else ""
 
 
+class EvidenceLink(BaseModel):
+    finding_id: str = Field(min_length=1, max_length=100)
+
+
+@router.post("/engagements/{program_id}/evidence/{evidence_id}/link")
+def link_evidence(
+    program_id: str,
+    evidence_id: str,
+    payload: EvidenceLink,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Explicitly associate existing evidence with a finding, without copying it."""
+    engagement = get_engagement_or_404(program_id, current_user, db)
+    require_member_write(engagement, current_user, db)
+    finding = db.query(Finding).filter(
+        Finding.id == payload.finding_id, Finding.program_id == program_id
+    ).with_for_update().first()
+    item = db.query(Evidence).filter(
+        Evidence.id == evidence_id, Evidence.program_id == program_id
+    ).with_for_update().first()
+    if finding is None or item is None:
+        raise HTTPException(status_code=404, detail="Finding or evidence not found")
+    if item.finding_id and item.finding_id != finding.id:
+        raise HTTPException(status_code=409, detail="Evidence is already linked to another finding")
+    if not item.finding_id:
+        # Atomic condition also prevents competing links on databases without
+        # row locks. Never move evidence out of an existing finding's history.
+        changed = db.query(Evidence).filter(
+            Evidence.id == item.id, Evidence.program_id == program_id,
+            Evidence.finding_id.is_(None),
+        ).update({Evidence.finding_id: finding.id}, synchronize_session=False)
+        if not changed:
+            raise HTTPException(status_code=409, detail="Evidence link changed; reload and retry")
+        log_action(db, current_user["github_id"], "link", "evidence", item.id, program_id)
+        db.commit()
+        db.refresh(item)
+    return _serialize(item)
+
+
 def _serialize(e: Evidence) -> dict:
     return {
         "id": e.id,
@@ -47,6 +87,12 @@ def _serialize(e: Evidence) -> dict:
         "finding_id": e.finding_id or "",
         "collector": e.collector or "",
         "source": e.source or "",
+        "job_id": e.job_id,
+        "case_id": e.case_id,
+        "case_ref": e.case_ref,
+        "identity_id": e.identity_id,
+        "observed_outcome": e.observed_outcome,
+        "expected_decision": e.expected_decision,
         "sensitivity": e.sensitivity or "internal",
         "retention": e.retention or "engagement",
         "redacted": bool(e.redacted),
@@ -116,6 +162,9 @@ def create_evidence(
 def list_evidence(
     program_id: str,
     finding_id: str | None = Query(default=None),
+    job_id: str | None = Query(default=None, max_length=200),
+    case_id: str | None = Query(default=None, max_length=200),
+    identity_id: str | None = Query(default=None, max_length=200),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     current_user: dict = Depends(get_current_user),
@@ -125,6 +174,9 @@ def list_evidence(
     query = db.query(Evidence).filter(Evidence.program_id == program_id)
     if finding_id:
         query = query.filter(Evidence.finding_id == finding_id)
+    for column, value in ((Evidence.job_id, job_id), (Evidence.case_id, case_id), (Evidence.identity_id, identity_id)):
+        if value is not None:
+            query = query.filter(column == value)
     total = query.count()
     rows = query.order_by(Evidence.created_at.desc()).offset(offset).limit(limit).all()
     return {"evidence": [_serialize(e) for e in rows], "total": total}

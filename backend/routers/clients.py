@@ -1,21 +1,26 @@
 """Clients — the organisations engagements are performed for.
 
-Scoped to the authenticated user like every other resource: a client belongs to
-whoever created it, and another user asking for it gets 404 rather than 403, so
-existence is never confirmed.
+Clients are shared through organization membership and legacy direct ownership.
+Unrelated users get 404; organization viewers can read but cannot mutate them.
 
 Clients are not shared through EngagementMember. Membership grants access to a
 engagement, not to the client record behind it, which may cover other engagements
 the member has nothing to do with.
 """
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-
 from db import get_db
-from deps import accessible_org_ids, get_current_user, log_action, personal_org
+from deps import (
+    ROLE_RANK,
+    accessible_org_ids,
+    get_current_user,
+    log_action,
+    org_role,
+    personal_org,
+)
+from fastapi import APIRouter, Depends, HTTPException
 from models import Client, Engagement
 from schemas import ClientCreate, ClientUpdate
 from serializers import serialize_client
+from sqlalchemy.orm import Session
 
 router = APIRouter()
 
@@ -41,6 +46,14 @@ def _get_client_or_404(client_id: str, current_user: dict[str, str], db: Session
     if not client:
         raise HTTPException(status_code=404, detail="Client not found")
     return client
+
+
+def _require_client_write(client: Client, current_user: dict, db: Session) -> None:
+    if client.owner_github_id == current_user["github_id"]:
+        return
+    role = org_role(client.org_id, current_user["github_id"], db)
+    if ROLE_RANK.get(role, -1) < ROLE_RANK["member"]:
+        raise HTTPException(status_code=403, detail="Viewers cannot make changes to this client")
 
 
 @router.get("/clients")
@@ -101,6 +114,7 @@ def update_client(
     db: Session = Depends(get_db),
 ):
     client = _get_client_or_404(client_id, current_user, db)
+    _require_client_write(client, current_user, db)
     for field, value in payload.model_dump(exclude_unset=True).items():
         if value is not None:
             setattr(client, field, value)
@@ -117,6 +131,7 @@ def delete_client(
     db: Session = Depends(get_db),
 ):
     client = _get_client_or_404(client_id, current_user, db)
+    _require_client_write(client, current_user, db)
     # Deleting a client must not delete its engagements — the testing record
     # outlives the commercial relationship. Detach instead.
     db.query(Engagement).filter(Engagement.client_id == client.id).update(

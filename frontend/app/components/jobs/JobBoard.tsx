@@ -1,5 +1,6 @@
 "use client";
 
+import AssessmentBadge from "./AssessmentBadge";
 import type { ScanJobUI } from "../../types";
 import { TOOLS, fmtAgo, fmtDur } from "./mockData";
 
@@ -75,7 +76,7 @@ function StreamCard({ job, accent, active, onClick, onDelete }: {
           <span className="ml-auto font-mono text-[10px] text-[#3a3a3a]">{fmtAgo(job.queuedAt)}</span>
         </div>
         <div className="mt-1.5 flex items-center gap-2">
-          <StatusChip status={job.status} accent={accent} />
+          <StatusChip status={job.status} accent={accent} /><AssessmentBadge job={job} />
           {job.status === "running" ? (
             <div className="flex flex-1 items-center gap-2">
               <MiniBar progress={job.progress} color={sc} />
@@ -123,6 +124,7 @@ function PipelineCard({ job, accent, active, onClick, onDelete }: {
         <TrashButton onClick={(e) => { e.stopPropagation(); onDelete(); }} />
       </div>
       <div className="mt-1 font-mono text-[10px] text-[#52525b]">{job.source} · {job.targets} targets</div>
+      <AssessmentBadge job={job} />
       {job.status === "running" && <div className="mt-2"><MiniBar progress={job.progress} color={sc} /></div>}
       {job.status === "done" && (
         <div className="mt-1.5 font-mono text-[10px] text-[#a6e3a1]">+{job.yield} {job.yieldKind}</div>
@@ -194,7 +196,7 @@ function TableView({ jobs, accent, activeId, onSelect, onDelete }: ViewProps) {
                   </span>
                 </td>
                 <td className="px-3 py-2.5 font-mono text-[11px] text-[#94a3b8]">{j.source}</td>
-                <td className="px-3 py-2.5"><StatusChip status={j.status} accent={accent} /></td>
+                <td className="px-3 py-2.5"><StatusChip status={j.status} accent={accent} /><AssessmentBadge job={j} /></td>
                 <td className="px-3 py-2.5">
                   <div className="flex items-center gap-2">
                     <div className="w-16"><MiniBar progress={j.progress} color={sc} /></div>

@@ -2,11 +2,16 @@
 
 This document captures manual security testing performed on VardrMap during development. Tests were run directly against the deployed backend on Railway using Burp Suite Community Edition. The frontend was bypassed entirely — all requests were made at the HTTP level.
 
+The manual results below are historical records, not a verification of today's
+deployment. Sanitization now uses `nh3`, replacing the historical `bleach` implementation.
+See [the current code audit](code-audit-2026-10-11.md) for local regression testing
+and current limitations.
+
 ---
 
 ## Authentication
 
-All protected API routes require a valid `Authorization: Bearer <token>` header. Tokens are issued by the backend after GitHub OAuth login completes. JWT claims include `sub` (GitHub ID), `iss`, `aud`, and expiry — validated on every request. Requests without a valid token return `401 Unauthorized`.
+All protected API routes require a valid `Authorization: Bearer <token>` header. Browser JWTs are issued by the frontend after GitHub OAuth login completes. JWT claims include `sub` (GitHub ID), `iss`, `aud`, and expiry — required and validated on every request. Requests without a valid token return `401 Unauthorized`.
 
 ---
 
@@ -88,7 +93,7 @@ Initial regex-based sanitization was bypassed by the obfuscated payload `<scr<sc
 **Implementation notes:**
 
 - Short identifier fields (`name`, `title`, `asset`) run injection detection on raw input before any stripping — prevents obfuscated tag bypass
-- Long-form fields use `bleach.clean()` to strip all HTML while preserving markdown syntax
+- Long-form fields now use the shared `nh3` sanitizer; the historical tests below describe its predecessor. Raw scanner evidence has separate preservation and safe-rendering requirements.
 - SQLAlchemy ORM parameterizes all queries — SQL payloads are stored as inert strings
 
 ---

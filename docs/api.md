@@ -2,9 +2,9 @@
 
 All endpoints require `Authorization: Bearer <token>` unless noted otherwise. The token is either a browser JWT (minted by the frontend after GitHub OAuth) or a personal API key with the `vmap_` prefix. See [architecture.md](architecture.md) for how each token type is resolved.
 
-All responses are JSON. Timestamps are ISO 8601 UTC strings.
+Responses are JSON unless a streaming endpoint is documented otherwise. Timestamps are ISO 8601 UTC strings.
 
-**Base URL (production):** set by `NEXT_PUBLIC_API_URL` — the frontend proxies `/api/backend/*` to this value.
+**Base URL (production):** set by `NEXT_PUBLIC_API_URL` — the browser sends authenticated requests directly to this value; backend CORS must allow the frontend origin.
 
 ---
 
@@ -110,7 +110,7 @@ Revoke an API key. Returns 404 if the key does not belong to the current user.
 ## Engagements
 
 ### `GET /engagements`
-List all engagements where the current user is the owner **or** an invited member. Each engagement includes aggregate stats — not full arrays of findings, reports, or manual tests.
+List all engagements accessible through ownership, organization membership or an engagement invitation. Each engagement includes aggregate stats — not full arrays of findings, reports, or manual tests.
 
 **Response**
 ```json
@@ -291,7 +291,14 @@ Structure is preserved deliberately: `Authorization: Bearer [REDACTED]` still pr
 **Errors** — `400` invalid enum or foreign `finding_id`; `422` body too large; `404` engagement not accessible.
 
 ### `GET /engagements/{program_id}/evidence`
-Filter with `finding_id`; paginate with `limit` (max 200) and `offset`.
+Filter with `finding_id`, `job_id`, `case_id` (stored case UUID), and/or `identity_id`
+(case-sensitive). Filters combine and remain scoped to this engagement. Paginate
+with `limit` (max 200) and `offset`. Each row includes nullable `job_id`, `case_id`,
+`case_ref` (logical Gate case id), `identity_id`, `observed_outcome`, and
+`expected_decision`. These are set by Gate upload, not accepted by manual evidence
+creation. Historical/manual rows keep null provenance; it is never inferred. Overlong identity
+ids (above 200 characters) retain their redacted text in the body and use null
+identity metadata, never a truncated identifier that names a different identity.
 
 ### `DELETE /engagements/{program_id}/evidence/{evidence_id}`
 
@@ -680,7 +687,7 @@ Delete all recon items for a engagement. This is a bulk clear operation.
 ## Scans
 
 ### `GET /engagements/{program_id}/scans`
-List scan items with pagination and optional status filter. Items come from nuclei imports.
+List scan items with pagination and optional status filter. Items come from nuclei and dalfox imports.
 
 **Query parameters**
 | Parameter | Default | Constraints | Description |
@@ -688,7 +695,14 @@ List scan items with pagination and optional status filter. Items come from nucl
 | `limit` | 100 | 1–500 | Max items to return |
 | `offset` | 0 | ≥0 | Number of items to skip |
 | `status` | (none) | — | Filter by status value |
-| `job_id` | (none) | — | Only items produced by this scan job (provenance link) |
+| `job_id` | (none) | — | Only items this scan job saw: the ones it first produced **plus** ones an earlier job had already stored that this run observed again. Matches `/recon` and `/services`. **Changed in v0.41.0** — it previously returned only items the job produced, so a deduplicated re-scan appeared to have found nothing |
+
+Each item carries the scanner's own verification signal alongside severity: `type` (the
+scanner's classification of the match — for dalfox its tier: `vulnerable`, `reflected`,
+`ast`, `informational`), `detection_method` (dalfox: `reflection`, `dom-verification`,
+`ast`, `oob`, `library`) and `confidence` (`high`/`low`), plus the scanner's `payload` and `match_evidence` exactly as reported (untrusted text; render only as text). These are independent of severity
+and of each other, and none of them is a confirmation: imported matches are always
+`status: "new"`, and promoting one is an operator's act.
 
 **Response**
 ```json
@@ -707,6 +721,10 @@ List scan items with pagination and optional status filter. Items come from nucl
       "status": "new",
       "cwe": "CWE-22",
       "cvss": "9.8",
+      "detection_method": "",
+      "confidence": "",
+      "payload": "",
+      "match_evidence": "",
       "job_id": "<uuid | null>"
     }
   ],
@@ -716,6 +734,24 @@ List scan items with pagination and optional status filter. Items come from nucl
 }
 ```
 `job_id` is the scan job that produced the item (null for manual file imports), enabling a job → its-results provenance link.
+
+`detection_method` and `confidence` are empty for sources that report neither (nuclei today). A dalfox item looks like:
+
+```json
+{
+  "source": "dalfox",
+  "template_id": "inHTML:q",
+  "title": "XSS in parameter 'q' (inHTML)",
+  "severity": "high",
+  "type": "vulnerable",
+  "detection_method": "dom-verification",
+  "confidence": "high",
+  "cwe": "CWE-79",
+  "status": "new"
+}
+```
+
+`template_id` is the injection context and parameter — dalfox has no template id, and this pair is what identifies the same issue across runs, so the importer dedupes on it.
 
 ### `POST /engagements/{program_id}/scans/triage`
 AI triage over **raw** scan items (before promotion to findings). Sends a batch to Claude and returns a prioritized, false-positive-flagged list — turning the nuclei firehose into a ranked queue. Requires `ANTHROPIC_API_KEY` on the server.
@@ -775,7 +811,7 @@ Upload tool output for parsing and storage. Accepts `multipart/form-data`.
 **Form fields**
 | Field | Type | Description |
 |---|---|---|
-| `tool_type` | string | `ffuf`, `httpx`, `nuclei`, `katana`, or `gau` |
+| `tool_type` | string | `ffuf`, `httpx`, `nuclei`, `katana`, `gau`, or `dalfox` |
 | `file` | file | `.json` or `.jsonl` output file |
 | `job_id` | string (optional) | Scan job that produced this output. **Must be a job of this engagement, otherwise `404` and nothing is imported** (a made-up id, or another engagement's job, is refused). Stamped onto new rows, and every row the job observed - including ones that already existed - is linked to it. VardrRunner passes the id of the job it is executing. |
 
@@ -839,7 +875,7 @@ Queue a new scan job.
   "depends_on": null
 }
 ```
-- `tool_type`: `"httpx"`, `"nuclei"`, `"subfinder"`, `"nmap"`, `"dnsx"`, `"naabu"`, `"katana"`, `"gau"`, or `"vardrgate_api_test"`
+- `tool_type`: `"httpx"`, `"nuclei"`, `"subfinder"`, `"nmap"`, `"dnsx"`, `"naabu"`, `"katana"`, `"gau"`, `"ffuf"`, `"dalfox"`, or `"vardrgate_api_test"`
 - `target_source`: `"scope"` or `"recon"`
 - `config` (optional): tool-specific options. Unknown keys are rejected.
 
@@ -853,10 +889,18 @@ Queue a new scan job.
   | `naabu` | `top_ports` (1–65535), `limit` (1–1000000), `timeout` (1–86400 s) |
   | `katana` | `depth` (1–10), `js_crawl` (`true`/`false`), `limit` (1–1000000), `status_code`, `timeout` (1–86400 s) |
   | `gau` | `subs` (`true`/`false`), `providers` (any of `wayback`, `commoncrawl`, `otx`, `urlscan`; comma string or list), `timeout` (1–86400 s) |
+  | `ffuf` | `wordlist` (a **name**, see below), `extensions` (`.php,.bak`; comma string or list, a bare `php` gains its dot), `match_codes` (three-digit statuses, or `all`), `rate` (1–1000, requests/sec **per target**), `limit` (1–1000000), `timeout` (1–86400 s) |
+  | `dalfox` | `limit` (1–1000000), `status_code`, `worker` (1–100, concurrency), `delay` (0–10000 ms between requests), `mining` (`true`/`false`, discover parameters), `timeout` (1–86400 s) |
   | `vardrgate_api_test` | `test_case_id` (required), `timeout` |
 
   Integer bounds mirror the ones VardrRunner enforces, so an out-of-range value is refused at queue time rather than failing on the operator's machine after the job is claimed.
-- `depends_on` (optional): id of another job (same engagement, same owner) that must reach `done` before this job becomes eligible in `GET /jobs/pending`.
+
+  **`ffuf.wordlist` is a name, never a path.** It must match `[a-z0-9][a-z0-9_-]{0,39}` — `common`, `api-paths`. VardrRunner resolves that name against `~/.vardrmap/wordlists` on the machine running the scan. A path, a traversal, or a drive letter returns `400`. This is deliberate: were a path accepted, this API could name any file the runner can read, and ffuf would read it and replay its lines at a target. The runner refuses a path too, so accepting one here would only queue a job that cannot run.
+
+  **`ffuf.limit` counts recon rows, not hosts.** VardrRunner collapses ffuf's targets to site roots *after* the limit is applied, so 100 recon URLs that all live on one host consume the default limit and fuzz a single root. Raise `limit`, or use `target_source: "scope"`, when a recon table is dense on few hosts. For the same reason `POST /jobs/preview` reports the resolved recon targets rather than the roots ffuf will fuzz, so for `ffuf` its `count` is an **upper bound** on the hosts touched, not the exact execution set.
+
+  **`ffuf.rate` is a safety control, not a tuning knob.** It bounds the load a job can put on a client's host, so it has a ceiling and no value meaning "unlimited"; omitting it gives VardrRunner's default of 50/s. ffuf additionally always runs with auto-calibration, so a host that answers every path with `200` cannot flood recon with phantom endpoints.
+- `depends_on` (optional): id of another job (same engagement) that must reach `done` before this job becomes eligible in `GET /jobs/pending`.
 
 **Response:** job object with `status: "pending"`.
 
@@ -946,7 +990,7 @@ List jobs for an engagement, newest first.
 `total` counts the jobs matching `status`, regardless of paging.
 
 ### `GET /jobs/pending`
-Return `pending` jobs owned by the authenticated user that are eligible to run now, oldest first. Used by VardrRunner to poll for work. Also materializes any due scheduled scans into pending jobs.
+Return `pending` jobs in engagements accessible with write permission to the authenticated user that are eligible to run now, oldest first. Used by VardrRunner to poll for work. Also materializes any due scheduled scans into pending jobs.
 
 Pipeline stages with an unmet dependency are held back: a job with `depends_on` set is only returned once its parent reaches `done`. If the parent `failed` (or no longer exists), the dependent job is auto-failed with an `"upstream pipeline stage failed"` message so it never hangs the queue.
 
@@ -1328,6 +1372,40 @@ Permanently delete a job and all its events. Intended for removing stuck jobs th
 
 Recurring scan definitions. There is no backend cron: due schedules are materialized into pending `scan_jobs` whenever VardrRunner polls `GET /jobs/pending`, so schedules only fire while a runner is connected. New schedules are due immediately — the first job is created on the runner's next poll. After a runner outage, one catch-up job is created (not one per missed interval).
 
+### Scheduling active tools (ffuf, dalfox)
+
+Any `tool_type` a job accepts, a schedule accepts — including `ffuf`, which sends sustained
+traffic at the target, and `dalfox`, which sends payloads at every parameter it finds.
+Creating a schedule needs write access to the engagement (a `full` API key included).
+VardrRunner's MCP server exposes no tool that creates or edits one.
+
+- **Repeated schedules mean repeated active traffic.** The shortest interval is `hourly`, so
+  an `ffuf` or `dalfox` schedule scans the target every hour for as long as it exists. **The
+  load limits — `config.rate` for ffuf, `config.worker`/`config.delay` for dalfox — apply to
+  one execution, not to the engagement:** each run is a fresh process with its own full
+  allowance, and nothing aggregates traffic across runs, across schedules, or across jobs
+  that overlap. They bound how hard one run pushes, not how often runs happen.
+- **Execution limits are validated at creation**, by the same validator a job uses, so a
+  schedule cannot carry a wordlist path, switch the rate cap off, or remove dalfox's
+  concurrency cap. Those limits then travel with every job it materializes, unchanged.
+- **Policy is evaluated when a runner claims the job, not when the schedule is created.**
+  Creating a schedule and materializing its job perform no authorization, testing-window or
+  scope check. At claim (and on the transition to `running`) the engagement is evaluated:
+  findings come back in the claim response's `warnings` array and the job still runs, because
+  scope, window and authorization are advisory (ADR 0001). A schedule therefore **keeps
+  running after the authorization window closes**; each run carries the warning.
+- **Stop-work pauses the schedule as well as refusing the claim.** While stop-work is engaged
+  a claim returns `403 stop_work_active`, and due schedules for that engagement are **skipped**:
+  no job is queued, and `next_run_at` is left untouched. On release each schedule fires
+  **one** catch-up job on the next runner poll, the same rule as after a runner outage,
+  rather than a backlog of one job per missed interval. (Before this was fixed, jobs kept
+  queueing behind the refusal and all became claimable on release, a burst of repeated active
+  scans the moment work resumed.) Other engagements' schedules are unaffected. If you would
+  rather nothing fire on release, disable the schedule (`PATCH ... {"enabled": false}`).
+- **Scheduled dalfox results are deduplicated like any other**, so a recurring scan does not
+  inflate the engagement's candidate count; each run still records that it observed a known
+  candidate (`GET /scans?job_id=`).
+
 **Schedule object shape**
 ```json
 {
@@ -1358,7 +1436,7 @@ Create a recurring scan.
 **Request body**
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `tool_type` | string | yes | `httpx`, `nuclei`, `subfinder`, `nmap`, `dnsx`, `naabu`, `katana`, `gau`, or `vardrgate_api_test` |
+| `tool_type` | string | yes | `httpx`, `nuclei`, `subfinder`, `nmap`, `dnsx`, `naabu`, `katana`, `gau`, `ffuf`, `dalfox`, or `vardrgate_api_test` |
 | `target_source` | string | yes | `scope` or `recon` |
 | `config` | object | no | Tool config, same validation as job creation |
 | `interval` | string | yes | `hourly`, `daily`, or `weekly` |
@@ -1407,7 +1485,7 @@ Create a saved profile. `201` on success.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `name` | string | yes | 1–100 chars |
-| `tool_type` | string | yes | `httpx`, `nuclei`, `subfinder`, `nmap`, `dnsx`, `naabu`, `katana`, `gau`, or `vardrgate_api_test` |
+| `tool_type` | string | yes | `httpx`, `nuclei`, `subfinder`, `nmap`, `dnsx`, `naabu`, `katana`, `gau`, `ffuf`, `dalfox`, or `vardrgate_api_test` |
 | `target_source` | string | yes | `scope` or `recon` |
 | `config` | object | no | Tool config, same validation as job creation |
 
@@ -1625,6 +1703,12 @@ The response now includes `new_count` for httpx, ffuf, katana, and gau imports �
 
 **katana** imports accept VardrRunner's compact records (`url`, `status_code`, `content_length`, `content_type`) or katana's own JSONL (`request.endpoint`, `response.*`); response bodies are never read or stored. **gau** imports take `{"url": ...}` per line. For both, only `http`/`https` URLs are kept (archives routinely include `mailto:`, `javascript:`, and malformed entries), host and path are derived from the URL, and duplicates are dropped both against stored rows and within the upload.
 
+**URL fields are stored exactly as the tool reported them** (`url`, `host`, `path` for httpx, ffuf, katana and gau; `asset`/`matched_at` for nuclei): control characters are removed and length is capped at 8192, and `<`/`>` are percent-encoded (`%3C`/`%3E`) so a URL is never stored as markup. `&` is **not** encoded, so `?a=1&b=2` round-trips and is what a runner scans when it reads recon back as targets. Titles and other descriptive text are still sanitised. **Rows imported before v0.43.0 may hold `&amp;` where the URL had `&`**; they are not rewritten, because several different originals collapsed to the same stored value (see `docs/recon-url-recovery-plan.md`). Re-importing such a URL adds the correct row beside the old one, except httpx, which matches by host and corrects its row in place on the next probe.
+
+**dalfox** imports accept its `-f json` document (findings under `findings`, beside a `meta` envelope) or those objects as JSONL, and land as **scan items with `status: "new"`** — candidates, not findings. The scanner's own signal is preserved: its tier in `type` (`vulnerable`/`reflected`/`ast`/`informational`), plus `detection_method` and `confidence`. Even its top tier means *dalfox* asserts exploitability, so nothing here is imported as confirmed; promoting a candidate stays an operator's act, and a value dalfox does not define is dropped rather than stored. `request`/`response` (present with `--include-all`) are ignored, so response bodies are never stored. The **payload, the evidence and the PoC URL are stored exactly as dalfox reported them** (control characters removed, 2000-character cap), in the `payload`, `match_evidence`, `asset` and `matched_at` fields. They are deliberately *not* HTML-sanitised: the sanitiser deletes anything tag-shaped and HTML-encodes `&`, which turned `<svg onload=alert(1)>` into nothing and `?a=1&q=x` into `?a=1&amp;q=x`, destroying the one thing a tester needs to reproduce the issue. They are **untrusted text and must only ever be rendered as text**. Only the human-readable `description` goes through the sanitiser; it points at the payload column rather than quoting it. A PoC URL that is not `http(s)` is dropped.
+
+Unlike nuclei, dalfox imports are **deduplicated** — a re-scan re-reports every match it still finds, which would otherwise inflate the engagement's count on every run. The key is the URL without its query values, the injection context and parameter (`template_id`), and the tier; it deliberately excludes the payload and the PoC URL, because dalfox mints a fresh marker class per payload and both carry it. A tier change (reflected → vulnerable) is new information and is stored as its own row. Deduplicated matches still get a provenance link, so `GET /scans?job_id=` shows that the later job observed them.
+
 Updated response shape:
 ```json
 {
@@ -1650,12 +1734,13 @@ Now returns a `runners` array — one entry per machine that has sent a heartbea
 An organisation engagements are performed for. Optional: bug bounty work has no
 client, because the programme itself is the counterparty.
 
-Clients are scoped to the user who created them and are **not** shared through
-engagement membership — a collaborator invited to one engagement should not see the
-other engagements a client record covers. Another user's client returns `404`.
+Clients are accessible to their creator and organization members. They are **not**
+shared through engagement invitations alone. Organization viewers can read them;
+PATCH and DELETE require direct ownership or organization member-level write
+access (otherwise `403`). Unrelated users receive `404`.
 
 ### `GET /clients`
-List the calling user's clients, ordered by name.
+List accessible clients, ordered by name.
 
 **Response:** array of client objects
 
@@ -1805,3 +1890,100 @@ removed once VardrRunner and the frontend are both updated.
 Note that *program* still has a distinct, correct meaning elsewhere in this API:
 a **bug bounty program** on HackerOne or Bugcrowd, as surfaced by
 `GET /radar`. Those are not engagements and were not renamed.
+# Integration contract updates
+
+`POST /engagements/{program_id}/evidence/{evidence_id}/link` accepts
+`{"finding_id": "..."}` and returns the existing evidence with its new association.
+This is an explicit reviewed write: the caller needs member-level write access.
+Both objects must belong to this engagement; inaccessible or missing objects
+return 404, viewers receive 403, and unauthenticated/invalid credentials receive
+401. Linking again to the same finding is idempotent. Linking evidence already
+associated with a different finding returns 409. It does not copy evidence or
+change its body, hash, source, collector, or creation timestamp. A successful new
+link is audited and permits using that evidence ID in finding activity/retests.
+
+VardrGate job `config.timeout`, when supplied, must be an integer from 1 to 86400
+seconds; VardrRunner applies it to Gate execution and the subprocess timeout.
+Private-target access is opted into locally using the runner's
+`VARDRRUNNER_ALLOW_PRIVATE_TARGETS=1` environment setting, never by queued config.
+The backend continues to serialize `program_id`; runners normalize that wire
+field to their internal engagement ID.
+
+`POST /jobs/{job_id}/upload` accepts legacy Gate `findings: null` as `[]`, as well
+as omitted/empty findings. Other malformed findings shapes still return 422.
+This compatibility handling does not reinterpret execution failures as clean
+scans; the worker still fails unsuccessful Gate processes.
+
+`POST /jobs/{job_id}/events` also accepts `target_stats`, `target_warning`, and
+`blocked`, retaining the existing lifecycle event types and access checks.
+
+## Security audit amendments (2026-10-11)
+
+Signed JWTs require `exp`, `sub`, `aud` and `iss` claims. Shared client PATCH/DELETE
+requires direct ownership or organization member-level write access; organization
+viewers receive 403, unrelated users 404. AI suggestion/triage inputs are redacted
+before provider calls and provider failures return generic 502 details. Redaction
+is heuristic; AI output remains a draft requiring human review.
+Webhook delivery connects to an approved resolved address while preserving the
+original HTTP Host and TLS identity. It disables environment proxies and redirects,
+rejects malformed/credential-bearing URLs and logs error types rather than secret URLs.
+Imports enforce the existing size cap with a bounded read.
+
+## Text preservation and deletion ordering
+
+New sanitized text preserves literal ampersands and entity syntax (`&`, `&amp;`,
+`&#38;`) instead of HTML-encoding or collapsing them. Existing rules still remove
+HTML tags, remove null bytes and reject injection patterns in identifier fields.
+Render the result as text or through the existing safe Markdown renderer, never
+by inserting raw HTML. Existing stored text is not decoded or rewritten.
+
+Observation links declare their recon/scan/service relationships so the ORM
+orders their deletion before deleting observed targets. Job deletion continues
+to remove its links while retaining observations. No database migration is needed.
+
+## API playbook guidance and Gate assessments
+
+`GET /engagements/{id}/playbooks` returns `{playbooks, total}` with three summaries
+(`id`, `title`, `version`, `use_when`). `GET /engagements/{id}/playbooks/{playbook_id}`
+returns a guide plus `prerequisites`, `expected_artifacts`, `steps`, `common_traps`
+and `manual_remainder`. The original v1.0 catalog is API-01 ownership/tenant
+separation, API-02 privileged functions, API-03 evidence/retest/handoff. Reads need
+full-scope credentials or a browser JWT; viewers can read. Unowned engagements and
+unknown guide ids return 404. Neither endpoint stores progress or queues work.
+
+`POST /jobs/{id}/claim` freezes a Gate case snapshot and returns its exact spec
+in `config.test_case`. Pending polls still reflect edits before claim. The snapshot
+is separate from stored `config`, which continues to hold only a case UUID.
+Legacy PATCH-to-running also freezes the snapshot. Runner refuses a changed spec
+between poll and claim so it cannot execute a target set the operator did not see.
+
+`POST /jobs/{id}/upload` accepts optional `case_hash` (64 lowercase hex chars): SHA-256
+of the unresolved case spec serialized with Python JSON `sort_keys=True`,
+`separators=(",", ":")`, UTF-8 and default `ensure_ascii=True`. Secrets resolved on
+Runner must not enter this hash. A supplied hash conflicting with the claim snapshot
+returns 400. A missing hash or snapshot is accepted for legacy compatibility, but
+cannot establish a conclusive assessment. Existing receipt hashes remain replayable.
+
+Job responses include nullable `assessment`, independent of `status`. Its fields:
+
+| Field | Meaning |
+| --- | --- |
+| `status` | `conclusive` when every declared identity has one definite reported decision and a valid baseline; `partial` when some are evaluated; otherwise `inconclusive` |
+| `evaluated`, `inconclusive`, `missing`, `skipped` | Identity counts; absent/duplicate expectations are skipped rather than guessed |
+| `unexpected` | Execution rows whose identity is absent from the case |
+| `baseline_valid` | At least one reviewed allow identity reports a valid allowed response, with a bound case snapshot |
+| `candidate_findings` | Number of uploaded triage candidates, not confirmed findings |
+| `case_id`, `case_ref`, `case_hash`, `case_snapshot_verified` | Stored case UUID, logical id, claimed spec hash and whether the uploaded hash matches |
+| `identities`, `reasons` | Each identity's expectation, reported outcome, assessment state and machine-readable reasons |
+
+Definite decisions follow reported allow/deny and reviewed denial conventions.
+429/503, redirects, errors, missing responses, duplicate executions and stale/denied
+legitimate baselines cannot establish a clean authorization result. Even a
+`conclusive` assessment can contain violation candidates: it describes completeness
+of runner-reported outcomes, not independent verification or security coverage.
+Old jobs have `assessment: null`; their results are unrecorded, not retrospectively
+classified. Evidence for an unbound result retains an unknown expected decision.
+
+New finding activity references and client report revisions retain structured
+execution provenance along with evidence IDs and hashes. Existing immutable
+revisions remain untouched.

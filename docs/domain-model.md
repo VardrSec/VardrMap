@@ -1,122 +1,65 @@
-# VardrMap — Domain Model
+# VardrMap domain model
 
-Target model, what exists today, and how each gap closes. Entity names in
-`code font` are implemented; **bold** entities are designed but not yet built.
+This describes implemented models, not a proposed future schema. The engagement
+is the unit of work, performed for a client under an authorization.
+See [architecture](architecture.md) for field details and [API](api.md) for endpoints.
 
-## Central relationship
+## Relationships
 
-```
-Organization (Phase 1b)
-  └── Engagement                      [programs table — see naming note]
-        ├── AuthorizationRecord       [authorizations]
-        │     └── RuleOfEngagement / EmergencyContact
-        ├── ScopeRule ── Exclusion    [scope_items, scope_type in/out]
-        ├── Asset ── AssetRelationship (Phase 2)
-        │     └── Identity ── CredentialReference
-        ├── Objective ── TestPlan ── TestCase (Phase 2)
-        ├── ExecutionJob ── Runner ── Observation   [scan_jobs, recon/scan items]
-        ├── Finding ── FindingOccurrence ── Evidence
-        ├── Retest (Phase 2)
-        ├── Report                    [reports]
-        └── AuditEvent                [audit_logs]
-```
+Organizations and organization memberships provide shared access. Engagements
+retain direct ownership and invitation membership for compatibility. Clients can
+be shared through an organization; engagement invitations do not grant access to
+the underlying client record. Organization viewers may read clients but cannot edit or delete them.
 
-## Naming note — `programs` is `Engagement`
+An engagement owns authorizations, scope, assets, evidence, reconnaissance,
+services, scanner candidates, findings, test cases, jobs and deliverables.
+`AssetRelationship` provides graph edges; findings and evidence can reference assets.
+`ApiEndpoint` and `ApiExchange` store discovered API surface and redacted exchanges.
+`AuthorizationTestCase` holds reviewed authorization tests, including the Gate spec.
+Preview drafts are separate from saving reviewed cases and queue no work.
 
-The entity is `Engagement`. The table is still `programs` and its foreign keys
-are still `program_id`. This is deliberate and documented in `CLAUDE.md`:
-renaming a live table means `ALTER TABLE` against production Postgres while
-`start.sh` brings uvicorn up, with zero user-visible benefit.
+`ScanJob` represents execution; `JobResultLink` preserves observations when deduplication
+reuses an existing recon, scan or service row. `JobResultReceipt` supports idempotent uploads.
+Gate jobs freeze the unresolved reviewed case in `case_snapshot` at claim and store a
+separate `assessment` on upload. Runner's `case_hash` binds the artifact to that snapshot;
+legacy unbound uploads remain usable but inconclusive. Lifecycle `done` is not an
+assessment verdict, and conclusive completeness can still contain violation candidates.
+`ScheduledScan` materializes jobs during runner polling, not through a backend cron.
+Stop-work skips materialization; release produces one catch-up execution for a due schedule.
+Per-execution limits do not create an engagement-wide traffic budget.
 
-**New tables FK to `programs.id`** to match existing convention. Introducing a
-parallel `engagements` table would create exactly the data silo this
-architecture prohibits.
+`ScanItem` is a scanner candidate. Dalfox payload and match evidence are preserved
+as reported; raw evidence requires safe rendering, not destructive HTML sanitization.
+A `Finding` is an operator-managed issue. `FindingActivity` records snapshots,
+remediation notes and retest outcomes; finding status alone does not prove remediation.
+`Evidence` has content hashes, collection provenance, redaction and sensitivity/retention metadata.
+Gate evidence also records job/case references, logical case id, identity, expected
+decision and observed outcome. Deleting a job or case clears its foreign-key reference
+without deleting retained evidence; historical/manual provenance is not inferred.
+Retention metadata does not mean automatic deletion is enforced.
 
-`RadarProgram` is unrelated — those are real HackerOne/Bugcrowd programmes and
-must never be renamed.
+`Report` is a finding write-up. `EngagementDeliverable` and `DeliverableRevision`
+represent client deliverables with immutable content snapshots and hashes;
+revision workflow status can change. Reviewed evidence associations retain provenance.
+`AuditLog` deliberately lacks subject foreign keys so deleting a subject does not
+remove its audit trail.
 
-## Entity status
+## Naming and boundaries
 
-### Implemented
+The ORM class is `Engagement`, but the table remains `programs` and foreign keys
+remain `program_id`. `/programs/*` is a compatibility alias for `/engagements/*`.
+Do not introduce a second engagement table. Physical renaming and alias retirement
+remain scheduled work.
 
-| Entity | Table | Notes |
-|---|---|---|
-| `Engagement` | `programs` | `engagement_type`, `engagement_status`, dates, client FK |
-| `Client` | `clients` | Owner-scoped; becomes org-scoped in Phase 1b |
-| `Authorization` | `authorizations` | `window_start`, `window_end`, `status`, `permits`, `reference` |
-| `ScopeItem` | `scope_items` | `scope_type` in/out, `kind`, `value` — serves ScopeRule + Exclusion |
-| `Finding` | `findings` | Text-only; no evidence, no asset FK |
-| `Report` | `reports` | Per-finding, not per-engagement |
-| `ScanJob` | `scan_jobs` | `depends_on` pipelines, atomic claim |
-| `AuditLog` | `audit_logs` | No FKs by design — survives subject deletion |
-| `EngagementMember` | `engagement_members` | Per-engagement membership |
-| `ReconItem` / `ScanItem` / `Service` | — | Observation precursors |
+`RadarProgram` describes external bounty programmes and is not an engagement.
+API keys and runner heartbeats remain user-bound. Raw API keys are not stored;
+credential references in test cases are resolved in the execution environment.
+Broader organization management, organization-bound runner credentials, signed job
+contracts and running-process cancellation remain distinct future capabilities.
 
-### Designed, not yet built
+## Guidance
 
-**Organization / Team / Membership** (Phase 1b) — the current tenancy anchor is
-a GitHub user id. `owner_github_id` is denormalized across `Client`,
-`ScanJob`, `ScheduledScan`, `Authorization`, `Service`. Consequence: a teammate
-invited to an engagement cannot operate its jobs, and a firm cannot share a
-client record. See `architecture.md` § Tenancy.
-
-**Asset / AssetRelationship / Identity / CredentialReference** (Phase 2) — the
-single largest structural gap. Today a host exists as five unrelated free-text
-columns with no foreign keys between them:
-
-| Table | Column | Type |
-|---|---|---|
-| `ReconItem` | `host`, `url` | `Text` |
-| `Service` | `host` | `String(500)` |
-| `ScanItem` | `asset` | `Text` |
-| `Finding` | `asset` | `String(500)` |
-
-Identity resolution is string comparison (`_dedup_recon`: "url when present,
-else host"). `api.acme.com`, `https://api.acme.com/`, and `api.acme.com:443`
-are three different assets. Nothing can be correlated, aggregated, or diffed
-over time.
-
-**Objective / TestPlan / TestCase**, **Observation** as a first-class entity,
-**Evidence**, **FindingOccurrence**, **Retest**, **Integration** — Phase 2+.
-
-## Finding lifecycle
-
-Current: `new | candidate | triaged | in_progress | closed`
-
-Target:
-
-```
-draft → needs_validation → confirmed → reported → accepted_risk
-     → remediated → retest_pending → verified_fixed
-     → reopened → false_positive
-```
-
-Migrating requires mapping existing values and is scheduled with the Retest
-slice (Phase 2), since `retest_pending` and `verified_fixed` are meaningless
-without a retest entity.
-
-## Lifecycle states and invariants
-
-| Entity | States | Invariant |
-|---|---|---|
-| Engagement | `planned \| active \| reporting \| closed` | CHECK constraint (migration 0014) |
-| Engagement type | `bug_bounty \| pentest \| red_team \| internal` | CHECK constraint (0014) |
-| Authorization | `draft \| pending \| active \| suspended \| expired \| closed` | CHECK constraint (0016) |
-| ScanJob | `pending \| running \| done \| failed` | Atomic claim via conditional UPDATE |
-
-Important invariants live in database constraints, not application code alone.
-No entity relationship is stored only inside an unvalidated JSON blob —
-`ScanJob.config` is tool options only and never carries a relationship.
-
-## Assumptions (conservative, documented)
-
-1. **`programs` stays.** Renaming is a scheduled maintenance-window change.
-2. **Engagement membership stays per-engagement** until Organization lands.
-   Phase 1b converts it, rather than building both.
-3. **Bug bounty engagements have no client and no authorization document.** The
-   programme's public policy is the authority. The policy evaluator therefore
-   treats a missing authorization as unremarkable for `bug_bounty`, and warns
-   (`authorization_missing`) for every other type. Since v0.29.0 that finding is
-   advisory — it does not stop the job. See ADR 0001 § Amendment.
-4. **ScopeItem serves ScopeRule, ScopeTarget, and Exclusion.** Three tables
-   where one discriminated table suffices would be a speculative abstraction.
+The original versioned API playbook catalog is served by Map and read by both the
+case builder and Runner MCP. It stores guidance, not progress or evidence of coverage.
+Saving reviewed cases, recording retests and committing client deliverable revisions
+remain operator decisions. See [API playbooks](api-playbooks.md).

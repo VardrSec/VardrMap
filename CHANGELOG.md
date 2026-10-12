@@ -2,8 +2,75 @@
 
 All notable changes to VardrMap. Full release notes live in [`changelog/`](changelog/).
 
+## Unreleased
+
+- Record the proposed remote MCP authorization ADR, updated for current organization
+  access, grant-binding/revocation requirements and the traffic caused by queue
+  permissions. Documentation only; OAuth implementation and design acceptance remain pending.
+
+- Refresh README, domain/workflow documentation and contributor instructions for
+  implemented assessments, execution provenance, shared playbooks and current
+  security boundaries; distinguish historical plans from the current backlog.
+
+- Separate Gate assessment completeness from job lifecycle, with per-identity
+  evaluated/inconclusive/missing/skipped outcomes and legitimate-baseline checks.
+- Bind results to a claim-time case snapshot using a SHA-256 from Runner; legacy
+  uploads remain usable evidence with an inconclusive assessment.
+- Preserve structured job/case/identity provenance in Gate evidence, finding
+  activity and new client report revisions; expose evidence filters and linking
+  in the job UI. Additive migration 0027 leaves historical provenance unknown.
+- Serve three original versioned API playbooks from one backend catalog to the
+  case builder and Runner MCP. Reading guidance records no coverage or progress.
+- Run CI for stacked PRs as well as PRs targeting main.
+
+- Add real browser acceptance against a disposable backend and run it in CI;
+  expand Map → Runner → Gate fixtures for denial conventions, stale sessions,
+  pagination, parameter integrity and inconclusive HTTP outcomes.
+- Record the current ars0n/Vardr lineup comparison and original starter API
+  playbooks, with priorities for guidance, assessment outcomes and provenance.
+
+- Preserve Unix virtualenv interpreter paths in the integration launcher instead
+  of resolving them to the base Python, and report redacted worker startup errors.
+
+
+- Preserve ampersands and literal entity syntax in newly sanitized text, keeping
+  the existing HTML-removal and identifier rejection rules. Existing stored rows
+  are not rewritten; historical recon auditing keeps its frozen transformation.
+- Order ORM observation-link deletions before target deletions, removing duplicate
+  PostgreSQL cascade deletes without suppressing warnings or adding a migration.
+- Use the declared HTTP client
+  in the integration harness so clean CI environments need no undeclared requests dependency.
+
+
+- Require expiry and identity claims in backend JWTs; deny shared client writes by organization viewers.
+- Pin webhook connections to validated public IPs while preserving TLS identity;
+  reject malformed URLs and avoid logging webhook secrets.
+- Bound import reads before size rejection; redact AI inputs and hide provider exception details.
+- Reconcile frontend request flow, tenancy, domain model and roadmap documentation with implemented features.
+- Update compatible frontend transitive packages, removing the critical Handlebars
+  advisory; pin urllib3 2.8.0 to protect Sentry's transitive HTTP dependency.
+
+- Fresh PostgreSQL installs now create the frozen historical baseline before
+  applying incremental migrations. Already-versioned databases keep their normal
+  upgrade path; nonempty unstamped databases require explicit schema inspection.
+- PostgreSQL application and migration connections use UTC, preventing date
+  shifts and false offline runner status on databases with non-UTC defaults.
+  TLS remains required unless `sslmode` is explicitly supplied in the URL.
+- Add PostgreSQL migration, backend and three-product integration checks to CI;
+  make the read-only audit assertion portable across SQLite and PostgreSQL.
+- Accept legacy VardrGate `findings: null` as an empty list; other malformed
+  shapes remain errors. Validate Gate job timeouts at queue time.
+- Persist runner `target_stats`, `target_warning`, and `blocked` events.
+- Add an explicit evidence-to-finding link endpoint with member-write checks,
+  an audit entry, and unchanged evidence identity, content and provenance.
+  Existing links cannot be moved to a different finding. No migration.
+
 | Version | Date | Summary |
 |---|---|---|
+| [v0.43.0](changelog/v0.43.0.md) | 2026-10-10 | **Bug fix** - new recon and nuclei imports store URLs exactly as reported. The importers ran them through `strip_html`, which encoded `&` (`?a=1&b=2` became `?a=1&amp;b=2`); recon URLs are read back as scan targets, so runners scanned a URL whose second parameter was named `amp;b`. Existing rows are **not** rewritten (a blind decode is a guess: five originals collapsed to one value); a read-only audit and a recovery plan are provided for review. No migration |
+| [v0.42.0](changelog/v0.42.0.md) | 2026-10-10 | **Behaviour change** - stop-work now pauses a stopped engagement's schedules: they are skipped and left untouched, so release fires one catch-up job instead of a backlog (previously one job per interval queued behind the refused claim and all became claimable on release). No migration |
+| [v0.41.0](changelog/v0.41.0.md) | 2026-10-09 | **dalfox** queueable, with its verification signal preserved — tier in `type`, plus new `detection_method` and `confidence` columns, never folded into severity. Imports land as **candidates** (`status: "new"`); no tier maps to confirmed. dalfox imports are deduplicated on the query-less URL + context/parameter + tier, excluding the per-run payload marker. Fix: `/scans?job_id=` now includes observed rows, matching `/recon` and `/services`, so a deduplicated re-scan no longer looks empty. Pairs with VardrRunner v0.46.0. Migration 0026 (additive) |
+| [v0.40.0](changelog/v0.40.0.md) | 2026-10-09 | **ffuf** is a queueable job type and Composer tool (its output was already importable). `config.wordlist` is a wordlist *name*, never a path — a path would let a job name any file the runner can read for ffuf to replay at a target; `config.rate` is a load cap with a ceiling and no "unlimited" value. Accepted config *types* mirror VardrRunner's exactly, so a job cannot clear queue validation and then fail locally. Pipelines unchanged. Pairs with VardrRunner v0.43.0. No migration |
 | [v0.39.0](changelog/v0.39.0.md) | 2026-10-09 | **Behavior change** - `job_id` on imports/services must be a job of the same engagement. Execution provenance (what each run observed), finding history with remediation and retest tracking, immutable client report revisions, and reviewed VardrGate case authoring; job/event paging and recon `source` filter. Migration 0025 (additive) |
 | [v0.38.0](changelog/v0.38.0.md) | 2026-10-08 | "Content Discovery" composer pipeline — subfinder → httpx → katana → gau |
 | [v0.37.0](changelog/v0.37.0.md) | 2026-10-08 | **katana** (crawler) and **gau** (archived URLs) as queueable job types and recon imports, with queue-time config validation; composer and import UI entries. Fix: URL recon imports no longer store duplicates from within one upload |
