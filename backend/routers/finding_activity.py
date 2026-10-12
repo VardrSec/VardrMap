@@ -55,7 +55,7 @@ def add_activity(program_id: str, finding_id: str, body: ActivityCreate, current
         raise HTTPException(status_code=404, detail="Evidence not found on this finding")
     finding_history.capture_baseline(db, finding, current_user["github_id"])
     # Keep evidence identity and integrity even if retention later removes its body.
-    references = [{"id": e.id, "title": e.title, "content_hash": e.content_hash} for e in evidence]
+    references = [{"id": e.id, "title": e.title, "content_hash": e.content_hash, "job_id": e.job_id, "case_id": e.case_id, "case_ref": e.case_ref, "identity_id": e.identity_id, "observed_outcome": e.observed_outcome, "expected_decision": e.expected_decision} for e in evidence]
     entry = finding_history.record(db, finding, current_user["github_id"], body.kind, notes, body.outcome, references)
     db.flush()
     log_action(db, current_user["github_id"], "create", "finding_activity", entry.id, program_id)

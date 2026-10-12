@@ -5,6 +5,10 @@
 > [current domain model](domain-model.md). Signed contracts, process cancellation
 > and organization-bound runner credentials remain future work.
 
+> The current unreleased update adds claim-bound Gate assessments, structured
+> job/case/identity evidence and shared UI/MCP API playbooks. Actual Map → Runner →
+> Gate execution is verified by the [disposable acceptance harness](../scripts/integration/README.md).
+
 # VardrMap — Implementation Roadmap
 
 Tied to the actual repository. Baseline recorded 2026-08-12 on `main` @ `793ad79`:
@@ -122,17 +126,14 @@ end to end, with **no VardrRunner change required**.
       mirror the engine's execution-critical validation before they reach a
       runner.
 
-**Not yet built.** Authoring is still "store the JSON VardrGate produced".
-VardrGate's `discover` command and `internal/scaffold` generate cases from an
-OpenAPI spec or a Postman collection, so wiring `discover` in as its own job
-type — turning a spec upload into a set of stored cases — is the natural next
-iteration.
+**Authoring update.** Reviewed case authoring and read-only draft previews are now
+implemented. Saving declares human review; drafts do not queue work or infer access
+expectations. Exposing `discover` as an autonomous save-and-run job remains deferred.
 
-**Validated against the Go structs, not a live run.** The result mapping was
-built by reading `engine.Result` and `model.Finding` in the VardrGate repo. The
-shape should be confirmed against one real VardrGate invocation; `severity` is
-the field most worth checking, since an unrecognised value deliberately falls
-back to `info` rather than being guessed upward.
+**Validation update.** The [acceptance harness](../scripts/integration/README.md)
+now runs the real Gate binary through Runner against a disposable Map backend and
+loopback API fixture, on SQLite and migrated PostgreSQL. This replaces the original
+struct-only validation; it does not establish hosted OAuth or production readiness.
 
 ### Burp-assisted API Surface ✅ (v0.34.0 – v0.34.1)
 

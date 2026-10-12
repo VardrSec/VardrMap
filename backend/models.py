@@ -420,7 +420,13 @@ class Evidence(Base):
     body = Column(Text, default="")            # already redacted
     content_hash = Column(String(64), default="")   # sha256 of the stored body
 
-    # Provenance and handling.
+    # Provenance and handling. Never inferred for historical or manual evidence.
+    job_id = Column(String, ForeignKey("scan_jobs.id", ondelete="SET NULL"), nullable=True, index=True)
+    case_id = Column(String, ForeignKey("authorization_test_cases.id", ondelete="SET NULL"), nullable=True, index=True)
+    case_ref = Column(String(200), nullable=True)
+    identity_id = Column(String(200), nullable=True, index=True)
+    observed_outcome = Column(String(30), nullable=True)
+    expected_decision = Column(String(10), nullable=True)
     collector = Column(String(100), default="")     # analyst login, tool, or runner id
     source = Column(String(60), default="")
     sensitivity = Column(String(20), default="internal")   # public|internal|confidential|restricted
@@ -511,6 +517,8 @@ class ScanJob(Base):
     tool_type = Column(String(20), nullable=False)          # see routers/jobs.py _VALID_TOOLS
     target_source = Column(String(20), nullable=False)      # "scope" or "recon"
     config = Column(JSON, nullable=True)                    # tool-specific options
+    case_snapshot = Column(JSON, nullable=True)             # spec frozen at claim
+    assessment = Column(JSON, nullable=True)                # independent of lifecycle
     status = Column(String(20), default="pending")          # pending | running | done | failed
     # Soft ref to the scan_job this stage waits on. A dependent job stays out of
     # GET /jobs/pending until its parent is "done"; if the parent "failed" the child

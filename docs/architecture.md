@@ -449,3 +449,30 @@ by inserting raw HTML. Existing stored text is not decoded or rewritten.
 Observation links declare their recon/scan/service relationships so the ORM
 orders their deletion before deleting observed targets. Job deletion continues
 to remove its links while retaining observations. No database migration is needed.
+
+## Gate assessment records and shared guidance
+
+`ScanJob.case_snapshot` (nullable JSON) freezes the unresolved reviewed spec in the
+atomic claim transition; `ScanJob.assessment` (nullable JSON) is computed on upload
+against this snapshot and stored in the same transaction as evidence, candidates
+and the idempotency receipt. Lifecycle `done` means execution finished. Assessment
+`conclusive` means the declared identities have definite reported outcomes and a
+working legitimate baseline, not that the API is secure or the candidates verified.
+
+Runner adds a canonical SHA-256 of its unresolved case to the retained result
+artifact. A conflicting hash is refused; a missing binding remains inconclusive.
+This is correlation, not a signed attestation of an uncompromised runner. Historical
+assessments remain null. Migration 0027 is additive, with one successor to 0026.
+
+Evidence has nullable indexed `job_id`, `case_id`, `identity_id`, plus `case_ref`,
+`observed_outcome` and `expected_decision`. Job/case FKs use SET NULL so deleting
+one preserves retained proof and logical identity metadata. Engagement/finding
+retention rules remain unchanged. The stored evidence body and hash include the
+case binding signal; report revisions and finding activity snapshot provenance.
+Manual evidence cannot set execution metadata. Queries remain engagement-scoped.
+
+`backend/api_playbooks.json` is the sole original v1.0 guidance catalog, validated
+at startup by `playbooks.py` (extra fields forbidden, unique ids). Full-scope read
+endpoints serve summaries and individual guides. Map's case builder and Runner
+MCP read that same catalog on demand; no duplicate data bundle, progress fields,
+automatic permission decisions or automatic human sign-off are introduced.

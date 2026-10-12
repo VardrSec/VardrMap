@@ -182,6 +182,7 @@ def job_row(jid):
             "status": j.status,
             "error": j.error_message,
             "config": copy.deepcopy(j.config),
+            "assessment": copy.deepcopy(j.assessment),
         }
 
 
@@ -425,6 +426,9 @@ try:
         job_row(jid)["status"] == "done",
         job_row(jid)["error"] or "",
     )
+    check("Completed vulnerable scan has a complete reported assessment, not a clean verdict",
+          job_row(jid)["assessment"]["status"] == "conclusive"
+          and job_row(jid)["assessment"]["candidate_findings"] > 0)
     artifact = outputs(jid)
     assert artifact, "Gate did not produce a result"
     result = artifact[1]
@@ -478,6 +482,15 @@ try:
         "Structural response evidence survives upload",
         any("response_profile" in x["body"] for x in evidence),
     )
+    check("Execution evidence has structured job, case and identity provenance",
+          all(x["job_id"] == jid and x["case_id"] == caseid and x["identity_id"] for x in evidence))
+    filtered = req("GET", base + "/evidence?job_id=" + jid + "&identity_id=peer")
+    check("Evidence filters select the exact execution without parsing titles",
+          filtered["total"] == 1 and filtered["evidence"][0]["identity_id"] == "peer")
+    catalog = req("GET", base + "/playbooks")
+    guide = req("GET", base + "/playbooks/API-01")
+    check("Shared playbook catalog retains version and manual testing guidance",
+          catalog["total"] == 3 and guide["version"] == "1.0" and bool(guide["manual_remainder"]))
     replay = req("POST", "/jobs/" + jid + "/upload", result)
     check(
         "Repeated upload is idempotent",
@@ -498,7 +511,7 @@ try:
             "remediation": "Enforce object ownership.",
         },
     )["id"]
-    evidence_ids = [x["id"] for x in evidence if "peer" in x["title"]]
+    evidence_ids = [x["id"] for x in evidence if x["identity_id"] == "peer"]
     for eid in evidence_ids:
         linked = req("POST", base + "/evidence/" + eid + "/link", {"finding_id": fid})
         original = next(x for x in evidence if x["id"] == eid)
@@ -735,6 +748,10 @@ try:
         check(mode + " preserves inconclusive outcomes in uploaded evidence",
               len(stored_evidence) == 5
               and all(outcome in x["body"] for x in stored_evidence))
+        a = job_row(job)["assessment"]
+        check(mode + " completion remains an inconclusive assessment",
+              job_row(job)["status"] == "done" and a["status"] == "inconclusive"
+              and a["inconclusive"] == 5 and not a["baseline_valid"])
         results["observations"].append({"name": mode, "job": job_row(job),
             "outcomes": [x["observed_outcome"] for x in result["executions"]],
             "interpretation": "Job completion records execution, not a clean authorization assessment."})

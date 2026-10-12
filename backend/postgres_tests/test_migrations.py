@@ -115,6 +115,32 @@ def test_existing_baseline_upgrade_preserves_records(database):
         )
 
 
+def test_assessment_migration_roundtrip_and_provenance_retention(database):
+    engine, url = database
+    migrate(url, "upgrade", "0026dalfox")
+    with engine.begin() as conn:
+        conn.execute(text("INSERT INTO users (github_id, username) VALUES ('fixture', 'fixture')"))
+        conn.execute(text("INSERT INTO programs (id, owner_github_id, name) VALUES ('eng', 'fixture', 'Fixture')"))
+        conn.execute(text("INSERT INTO authorization_test_cases (id, program_id, owner_github_id, name, test_case_id, spec, created_at) VALUES ('case', 'eng', 'fixture', 'Fixture', 'logical-case', '{}', NOW())"))
+        conn.execute(text("INSERT INTO scan_jobs (id, program_id, owner_github_id, tool_type, target_source, created_at) VALUES ('job', 'eng', 'fixture', 'vardrgate_api_test', 'scope', NOW())"))
+        conn.execute(text("INSERT INTO evidence (id, program_id, kind, body, created_at) VALUES ('proof', 'eng', 'tool_result', 'original retained evidence', NOW())"))
+    migrate(url, "upgrade", "head")
+    with engine.begin() as conn:
+        assert conn.scalar(text("SELECT job_id FROM evidence WHERE id='proof'")) is None
+        assert conn.scalar(text("SELECT assessment FROM scan_jobs WHERE id='job'")) is None
+        conn.execute(text("UPDATE evidence SET job_id='job', case_id='case', case_ref='logical-case', identity_id='OwnerA' WHERE id='proof'"))
+        # Deleting a job/case preserves the retained proof and logical provenance.
+        conn.execute(text("DELETE FROM scan_jobs WHERE id='job'"))
+        conn.execute(text("DELETE FROM authorization_test_cases WHERE id='case'"))
+        row = conn.execute(text("SELECT job_id, case_id, case_ref, identity_id, body FROM evidence WHERE id='proof'")).one()
+        assert tuple(row) == (None, None, 'logical-case', 'OwnerA', 'original retained evidence')
+    migrate(url, "downgrade", "0026dalfox")
+    with engine.connect() as conn:
+        assert conn.scalar(text("SELECT body FROM evidence WHERE id='proof'")) == "original retained evidence"
+    migrate(url, "upgrade", "head")
+    assert "job_id" in {c["name"] for c in inspect(engine).get_columns("evidence")}
+
+
 def test_unstamped_nonempty_database_is_refused(database):
     engine, url = database
     with engine.begin() as conn:

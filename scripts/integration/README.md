@@ -49,6 +49,9 @@ The target serves only loopback and the run asserts a 100-request ceiling. The
 parameter injection canary is a transport check, not an injection detection claim.
 Ambiguous HTTP outcomes retain evidence even when the command job completes;
 `done` and zero findings are not proof of a clean authorization assessment.
+Checks also assert conclusive/partial/inconclusive assessment states, claim-time case
+binding, and structured job/case/identity provenance. The real Runner adds the hash
+to Gate's artifact; legacy unbound uploads cannot establish a conclusive assessment.
 
 This supplements the repositories' normal suites. The separate
 [browser suite](../../docs/development.md#browser-acceptance) exercises real UI

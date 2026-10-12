@@ -20,6 +20,10 @@ Preview drafts are separate from saving reviewed cases and queue no work.
 
 `ScanJob` represents execution; `JobResultLink` preserves observations when deduplication
 reuses an existing recon, scan or service row. `JobResultReceipt` supports idempotent uploads.
+Gate jobs freeze the unresolved reviewed case in `case_snapshot` at claim and store a
+separate `assessment` on upload. Runner's `case_hash` binds the artifact to that snapshot;
+legacy unbound uploads remain usable but inconclusive. Lifecycle `done` is not an
+assessment verdict, and conclusive completeness can still contain violation candidates.
 `ScheduledScan` materializes jobs during runner polling, not through a backend cron.
 Stop-work skips materialization; release produces one catch-up execution for a due schedule.
 Per-execution limits do not create an engagement-wide traffic budget.
@@ -29,6 +33,9 @@ as reported; raw evidence requires safe rendering, not destructive HTML sanitiza
 A `Finding` is an operator-managed issue. `FindingActivity` records snapshots,
 remediation notes and retest outcomes; finding status alone does not prove remediation.
 `Evidence` has content hashes, collection provenance, redaction and sensitivity/retention metadata.
+Gate evidence also records job/case references, logical case id, identity, expected
+decision and observed outcome. Deleting a job or case clears its foreign-key reference
+without deleting retained evidence; historical/manual provenance is not inferred.
 Retention metadata does not mean automatic deletion is enforced.
 
 `Report` is a finding write-up. `EngagementDeliverable` and `DeliverableRevision`
@@ -49,3 +56,10 @@ API keys and runner heartbeats remain user-bound. Raw API keys are not stored;
 credential references in test cases are resolved in the execution environment.
 Broader organization management, organization-bound runner credentials, signed job
 contracts and running-process cancellation remain distinct future capabilities.
+
+## Guidance
+
+The original versioned API playbook catalog is served by Map and read by both the
+case builder and Runner MCP. It stores guidance, not progress or evidence of coverage.
+Saving reviewed cases, recording retests and committing client deliverable revisions
+remain operator decisions. See [API playbooks](api-playbooks.md).

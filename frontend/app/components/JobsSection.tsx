@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AuthorizationTestCase, JobPreview, PipelineStage, PolicyWarning, RunnerStatus, ScanJob, ScanJobUI, ScanProfile, ScheduledScan } from "../types";
+import GateAssessmentPanel from "./jobs/GateAssessmentPanel";
 import { useAppContext } from "../context/AppContext";
 import { TOOLS } from "./jobs/mockData";
 import Bridge from "./jobs/Bridge";
@@ -55,6 +56,7 @@ function mapToUI(job: ScanJob): ScanJobUI {
     tool:      job.tool_type,
     source:    job.target_source,
     config:    job.config,
+    assessment: job.assessment,
     status:    job.status as ScanJobUI["status"],
     targets:   0,
     progress,
@@ -534,6 +536,8 @@ export default function JobsSection({
               autoRun={autoRun}
             />
           )}
+
+          {!loading && activeJob?.tool === "vardrgate_api_test" && <GateAssessmentPanel key={activeJob.id} engagementId={engagementId} job={activeJob} />}
 
           {!loading && (prefs.showTerminal ? (
             <Terminal

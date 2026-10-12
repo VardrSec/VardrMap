@@ -331,3 +331,17 @@ Browser queueing does not execute a scanner; the separate
 [integration harness](../scripts/integration/README.md) runs the actual Runner
 and Gate. Never point these fixtures at production. Playwright traces/screenshots
 and reports are ignored by Git; CI retains failed browser artifacts for seven days.
+
+## API assessment/playbook compatibility
+
+Apply the additive 0027 migration before deploying this frontend or serving new
+Runner playbook tools. Use Runner's matching result-binding release for assessments:
+older runners can upload evidence, but their missing case hash stays inconclusive.
+No new environment variables or dependency packages are required. Downgrading 0027
+removes its new assessment/provenance columns (losing that metadata) while retaining
+existing job/case/evidence rows; export before a deliberate rollback.
+
+Backend regression tests cover unknown/partial decisions and case edit races.
+PostgreSQL checks include upgrade/downgrade and SET NULL retention. Browser
+acceptance exercises playbook guidance, partial assessments and evidence linking;
+the loopback three-repository harness exercises actual Gate execution.

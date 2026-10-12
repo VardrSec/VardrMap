@@ -25,6 +25,9 @@ Dashboard and Review are tab containers. Their children provide the job composer
 imports, reconnaissance, services, scanner review and manual testing.
 Findings hold reviewed issues; scanner matches remain candidates until verified.
 Reports include finding write-ups and engagement deliverables as separate workflows.
+The API case builder reads Map's versioned playbook catalog on demand. Gate jobs show
+assessment completeness separately from lifecycle and expose filtered execution
+evidence for operator review and finding linkage. These views do not certify coverage.
 Settings contains API key, notification and client configuration.
 
 ## Verification

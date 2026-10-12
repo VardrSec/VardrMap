@@ -139,11 +139,21 @@ export type PipelineDef = {
   stages: PipelineStage[];
 };
 
+export type JobAssessment = {
+  status: "conclusive" | "partial" | "inconclusive";
+  evaluated: number; inconclusive: number; missing: number; skipped: number; unexpected: number;
+  baseline_valid: boolean; candidate_findings: number; reasons: string[];
+  case_id: string | null; case_ref: string | null; case_hash: string | null;
+  case_snapshot_verified: boolean;
+  identities: { identity_id: string; expected_decision: string; observed_outcome: string; state: string; reason: string }[];
+};
+
 export type ScanJob = {
   id: string; program_id: string; tool_type: string; target_source: string;
   config: Record<string, unknown>; status: string;
   created_at: string | null; started_at: string | null; completed_at: string | null;
   error_message: string;
+  assessment?: JobAssessment | null;
   /** Present on create/claim/PATCH-to-running responses; empty when nothing is flagged. */
   warnings?: PolicyWarning[];
 };
@@ -187,6 +197,7 @@ export type ScanJobUI = {
   startedAt: string | null;
   endedAt: string | null;
   durationMs: number | null;
+  assessment?: JobAssessment | null;
   error?: string;
   log: LogLine[];
   _full?: LogLine[];

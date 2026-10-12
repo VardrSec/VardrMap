@@ -291,7 +291,14 @@ Structure is preserved deliberately: `Authorization: Bearer [REDACTED]` still pr
 **Errors** — `400` invalid enum or foreign `finding_id`; `422` body too large; `404` engagement not accessible.
 
 ### `GET /engagements/{program_id}/evidence`
-Filter with `finding_id`; paginate with `limit` (max 200) and `offset`.
+Filter with `finding_id`, `job_id`, `case_id` (stored case UUID), and/or `identity_id`
+(case-sensitive). Filters combine and remain scoped to this engagement. Paginate
+with `limit` (max 200) and `offset`. Each row includes nullable `job_id`, `case_id`,
+`case_ref` (logical Gate case id), `identity_id`, `observed_outcome`, and
+`expected_decision`. These are set by Gate upload, not accepted by manual evidence
+creation. Historical/manual rows keep null provenance; it is never inferred. Overlong identity
+ids (above 200 characters) retain their redacted text in the body and use null
+identity metadata, never a truncated identifier that names a different identity.
 
 ### `DELETE /engagements/{program_id}/evidence/{evidence_id}`
 
@@ -1933,3 +1940,50 @@ by inserting raw HTML. Existing stored text is not decoded or rewritten.
 Observation links declare their recon/scan/service relationships so the ORM
 orders their deletion before deleting observed targets. Job deletion continues
 to remove its links while retaining observations. No database migration is needed.
+
+## API playbook guidance and Gate assessments
+
+`GET /engagements/{id}/playbooks` returns `{playbooks, total}` with three summaries
+(`id`, `title`, `version`, `use_when`). `GET /engagements/{id}/playbooks/{playbook_id}`
+returns a guide plus `prerequisites`, `expected_artifacts`, `steps`, `common_traps`
+and `manual_remainder`. The original v1.0 catalog is API-01 ownership/tenant
+separation, API-02 privileged functions, API-03 evidence/retest/handoff. Reads need
+full-scope credentials or a browser JWT; viewers can read. Unowned engagements and
+unknown guide ids return 404. Neither endpoint stores progress or queues work.
+
+`POST /jobs/{id}/claim` freezes a Gate case snapshot and returns its exact spec
+in `config.test_case`. Pending polls still reflect edits before claim. The snapshot
+is separate from stored `config`, which continues to hold only a case UUID.
+Legacy PATCH-to-running also freezes the snapshot. Runner refuses a changed spec
+between poll and claim so it cannot execute a target set the operator did not see.
+
+`POST /jobs/{id}/upload` accepts optional `case_hash` (64 lowercase hex chars): SHA-256
+of the unresolved case spec serialized with Python JSON `sort_keys=True`,
+`separators=(",", ":")`, UTF-8 and default `ensure_ascii=True`. Secrets resolved on
+Runner must not enter this hash. A supplied hash conflicting with the claim snapshot
+returns 400. A missing hash or snapshot is accepted for legacy compatibility, but
+cannot establish a conclusive assessment. Existing receipt hashes remain replayable.
+
+Job responses include nullable `assessment`, independent of `status`. Its fields:
+
+| Field | Meaning |
+| --- | --- |
+| `status` | `conclusive` when every declared identity has one definite reported decision and a valid baseline; `partial` when some are evaluated; otherwise `inconclusive` |
+| `evaluated`, `inconclusive`, `missing`, `skipped` | Identity counts; absent/duplicate expectations are skipped rather than guessed |
+| `unexpected` | Execution rows whose identity is absent from the case |
+| `baseline_valid` | At least one reviewed allow identity reports a valid allowed response, with a bound case snapshot |
+| `candidate_findings` | Number of uploaded triage candidates, not confirmed findings |
+| `case_id`, `case_ref`, `case_hash`, `case_snapshot_verified` | Stored case UUID, logical id, claimed spec hash and whether the uploaded hash matches |
+| `identities`, `reasons` | Each identity's expectation, reported outcome, assessment state and machine-readable reasons |
+
+Definite decisions follow reported allow/deny and reviewed denial conventions.
+429/503, redirects, errors, missing responses, duplicate executions and stale/denied
+legitimate baselines cannot establish a clean authorization result. Even a
+`conclusive` assessment can contain violation candidates: it describes completeness
+of runner-reported outcomes, not independent verification or security coverage.
+Old jobs have `assessment: null`; their results are unrecorded, not retrospectively
+classified. Evidence for an unbound result retains an unknown expected decision.
+
+New finding activity references and client report revisions retain structured
+execution provenance along with evidence IDs and hashes. Existing immutable
+revisions remain untouched.
