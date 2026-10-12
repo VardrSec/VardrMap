@@ -19,6 +19,7 @@ VardrGate owns that schema; this module validates only what it must:
 import json
 from datetime import datetime, timezone
 from typing import Any, Optional
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
@@ -38,6 +39,93 @@ _CREDENTIAL_TYPES = {"bearer", "api_key_header", "static_header"}
 _SECRET_REFS = ("value_env", "value_keychain")
 
 _MAX_SPEC_BYTES = 256_000
+
+
+def _preflight_origin(raw: Any) -> tuple[str, str, int]:
+    if not isinstance(raw, str) or len(raw.encode()) > 2000:
+        raise ValueError("invalid preflight URL")
+    parsed = urlsplit(raw)
+    if (
+        parsed.scheme not in {"http", "https"}
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.fragment
+    ):
+        raise ValueError("invalid preflight URL")
+    port = parsed.port
+    if port == 0:
+        raise ValueError("invalid preflight port")
+    return (
+        parsed.scheme,
+        parsed.hostname.lower(),
+        port if port is not None else (443 if parsed.scheme == "https" else 80),
+    )
+
+
+def _validate_preflight(spec: dict) -> None:
+    for i, identity in enumerate(spec["identities"]):
+        p = identity.get("preflight")
+        if p is None:
+            continue
+        label = f"identities[{i}].preflight"
+        if not isinstance(p, dict) or set(p) != {
+            "url",
+            "expected_status",
+            "json_fields",
+        }:
+            raise HTTPException(
+                status_code=400,
+                detail=f"{label} requires only url, expected_status and json_fields",
+            )
+        try:
+            if not isinstance(p["url"], str) or any(
+                x in p["url"] for x in ("{{", "${")
+            ):
+                raise ValueError("preflight variables are not allowed")
+            if _preflight_origin(p["url"]) != _preflight_origin(spec["request"]["url"]):
+                raise ValueError("origin differs")
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail=f"{label} needs an absolute HTTP URL on the request's origin, without userinfo, fragment or variables",
+            ) from None
+        code = p["expected_status"]
+        if type(code) is not int or not 200 <= code < 300:
+            raise HTTPException(
+                status_code=400, detail=f"{label}.expected_status must be a 2xx integer"
+            )
+        fields = p["json_fields"]
+        if (
+            not isinstance(fields, dict)
+            or not 1 <= len(fields) <= 8
+            or any(
+                not isinstance(path, str)
+                or len(path.encode()) > 200
+                or any(not part.strip() for part in path.split("."))
+                or not isinstance(value, str)
+                or not value.strip()
+                or len(value.encode()) > 200
+                for path, value in fields.items()
+            )
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail=f"{label}.json_fields needs 1 to 8 nonempty scalar matches, at most 200 UTF-8 bytes per path/value",
+            )
+        cred = identity["credential"]
+        if (
+            not isinstance(identity["id"], str)
+            or not 1 <= len(identity["id"].encode()) <= 200
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail=f"{label} identity id must be a string of at most 200 UTF-8 bytes",
+            )
+        if not any(str(cred.get(ref) or "").strip() for ref in _SECRET_REFS):
+            raise HTTPException(
+                status_code=400,
+                detail=f"{label} requires an authenticated local credential reference",
+            )
 
 
 class TestCaseCreate(BaseModel):
@@ -221,6 +309,7 @@ def _validate_spec(spec: Any) -> dict:
             raise HTTPException(status_code=400, detail=f"setup[{i}] capture entries require a name and path")
 
     _reject_literal_credentials(spec)
+    _validate_preflight(spec)
     return spec
 
 

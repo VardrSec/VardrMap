@@ -68,6 +68,12 @@ viewer/member permissions, production-style CORS and webhook delivery there.
 The existing loopback checks cover the execution/evidence/report path without
 requiring production accounts or targets.
 
+Identity preflight fixtures also verify valid sessions before authorization traffic,
+credential rejection, wrong principals, login HTML and redirects. Failed checks
+send no authorization requests, preserve safe bound evidence, fail the job and
+leave its assessment inconclusive. The request ceiling remains 100. See
+[identity preflight](../../docs/identity-preflight.md) for authoring and rollout.
+
 On Unix, pass the virtualenv's `bin/python` path. The launcher preserves that path
 rather than following its symlink to the base Python, so installed Runner
 packages remain available. Worker failures report redacted stderr and stop the

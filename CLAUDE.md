@@ -155,7 +155,9 @@ Clients (`routers/clients.py`) track the organisation being tested — required 
   and Runner MCP. Its schema rejects undeclared fields; guidance stores no progress
   or coverage and queues no work. Viewers may read; only writers may link evidence.
 - Saving cases declares human review; retest recording and client deliverable
-  revisions stay explicit operator actions. Session/login refresh, signed
+  revisions stay explicit operator actions. Optional identity preflight checks
+  reviewed session metadata before resource testing and stores safe diagnostics;
+  missing/failed checks remain inconclusive. Automatic login refresh, signed
   execution contracts and cancellation of running processes remain future work.
 - Deploy the matching backend migration/endpoints before publishing the companion
   Runner feature. Unreleased branch content is not proof of a production deployment.
@@ -169,7 +171,7 @@ using inspected code and clearly dated evidence; no weekly polling is requested.
 ## Roadmap
 See `docs/roadmap.md` for the current backlog: physical table rename and legacy alias
 retirement, organization administration, organization-bound runner credentials,
-identity/session preflight, broader API guidance, engagement-wide execution budgets,
+reviewed login/refresh, broader API guidance, engagement-wide execution budgets,
 signed contracts, running-process cancellation, retention policy and remote MCP OAuth.
 RBAC, finding activity/retests and reviewed case authoring are implemented.
 

@@ -334,6 +334,12 @@ and reports are ignored by Git; CI retains failed browser artifacts for seven da
 
 ## API assessment/playbook compatibility
 
+Identity preflight additionally needs the matching Gate/Runner pair. Deploy Map
+before using these cases, upgrade both executors, and run the expanded disposable
+acceptance harness. New Runner refuses older Gate binaries through a required CLI
+flag; older Runner versions lack that guard. No new environment variable or hosted
+test account is needed. See [identity preflight](identity-preflight.md).
+
 Apply the additive 0027 migration before deploying this frontend or serving new
 Runner playbook tools. Use Runner's matching result-binding release for assessments:
 older runners can upload evidence, but their missing case hash stays inconclusive.

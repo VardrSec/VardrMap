@@ -471,6 +471,16 @@ retention rules remain unchanged. The stored evidence body and hash include the
 case binding signal; report revisions and finding activity snapshot provenance.
 Manual evidence cannot set execution metadata. Queries remain engagement-scoped.
 
+Optional `identities[].preflight` lives in the reviewed JSON spec and its claim-time
+snapshot. Gate checks session metadata after setup and before authorization traffic;
+Runner's CLI guard rejects older Gate binaries and retains exit-3 diagnostics for
+upload before marking the job failed. Crash recovery preserves failed finalization.
+Map computes `assessment.preflight` against the same snapshot and stores safe
+per-identity probe evidence with `phase: identity_preflight`; probes never establish
+resource decisions. This uses existing JSON/evidence fields and needs no migration.
+Raw session responses and credentials remain on the operator's machine. See
+[identity preflight](identity-preflight.md) for the compatibility boundary.
+
 `backend/api_playbooks.json` is the sole original v1.0 guidance catalog, validated
 at startup by `playbooks.py` (extra fields forbidden, unique ids). Full-scope read
 endpoints serve summaries and individual guides. Map's case builder and Runner

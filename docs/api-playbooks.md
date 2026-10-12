@@ -1,5 +1,9 @@
 # API engagement playbooks
 
+For authenticated callers, add reviewed [identity preflight](identity-preflight.md)
+checks before running a case. A passed session check establishes matching principal
+metadata at that moment; the resource still needs its own legitimate allow baseline.
+
 Edition 1, 2026-10-11. Original Vardr guidance, tested against the controlled
 fixtures in [integration acceptance](../scripts/integration/README.md).
 These are operator runbooks; reading them queues nothing and grants no access.

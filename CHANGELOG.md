@@ -4,6 +4,13 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Add reviewed, optional identity/session preflight for Gate cases. Match a
+  known-good session response before authorization requests; failed checks stop
+  the case, retain bound diagnostics and remain inconclusive. Show session results
+  separately in the job panel and explain authoring in the case builder. No
+  automatic login/refresh, scope enforcement or schema migration is introduced.
+- Expand the real three-product loopback acceptance fixture with session checks.
+
 - Record the proposed remote MCP authorization ADR, updated for current organization
   access, grant-binding/revocation requirements and the traffic caused by queue
   permissions. Documentation only; OAuth implementation and design acceptance remain pending.

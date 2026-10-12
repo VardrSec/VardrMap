@@ -23,8 +23,10 @@ deliverable work. Shipped history lives in [CHANGELOG](../CHANGELOG.md).
 - Extend the original shared UI/MCP API playbooks and execution-backed assessment
   view beyond the initial ownership, roles and handoff guides. Claim-bound
   job/case/identity evidence and inconclusive outcomes are implemented.
-- Improve identity setup and credential/session preflight. Current assessments
-  expose missing/denied legitimate baselines; automatic login/refresh is not implemented.
+- Extend identity setup with reviewed login/refresh support. Optional declared
+  session preflight now checks principal metadata before authorization requests
+  and retains bound failure diagnostics; automatic login/refresh is not implemented.
+  See [identity preflight](identity-preflight.md).
   See [the platform comparison](platform-comparison-2026-10-11.md) and
   [starter API playbooks](api-playbooks.md) for priorities and acceptance criteria.
 - Settle the [proposed remote MCP authorization design](adr/0002-remote-mcp-authorization.md)

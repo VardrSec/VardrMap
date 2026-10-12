@@ -140,6 +140,7 @@ export type PipelineDef = {
 };
 
 export type JobAssessment = {
+  preflight?: { status: "passed" | "failed" | "inconclusive" | "not_configured"; unexpected: number; identities: { identity_id: string; status: string; reason: string; status_code: number | null }[] };
   status: "conclusive" | "partial" | "inconclusive";
   evaluated: number; inconclusive: number; missing: number; skipped: number; unexpected: number;
   baseline_valid: boolean; candidate_findings: number; reasons: string[];

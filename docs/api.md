@@ -1975,6 +1975,7 @@ Job responses include nullable `assessment`, independent of `status`. Its fields
 | `candidate_findings` | Number of uploaded triage candidates, not confirmed findings |
 | `case_id`, `case_ref`, `case_hash`, `case_snapshot_verified` | Stored case UUID, logical id, claimed spec hash and whether the uploaded hash matches |
 | `identities`, `reasons` | Each identity's expectation, reported outcome, assessment state and machine-readable reasons |
+| `preflight` | Session check status (`not_configured`, `passed`, `failed`, `inconclusive`), per-identity diagnostics and unexpected row count; optional on older assessments |
 
 Definite decisions follow reported allow/deny and reviewed denial conventions.
 429/503, redirects, errors, missing responses, duplicate executions and stale/denied
@@ -1987,3 +1988,25 @@ classified. Evidence for an unbound result retains an unknown expected decision.
 New finding activity references and client report revisions retain structured
 execution provenance along with evidence IDs and hashes. Existing immutable
 revisions remain untouched.
+
+### Identity/session preflight
+
+Stored case identities may declare `preflight: {url, expected_status, json_fields}`.
+The URL must be absolute HTTP(S) on the tested request's origin, without userinfo,
+fragment or variable references; maximum 2000 UTF-8 bytes. `expected_status` must
+be a 2xx integer. `json_fields` contains 1–8 nonempty case-sensitive dotted paths
+mapped to expected scalar strings (200 UTF-8 bytes per path/value). An authenticated
+local credential reference and identity id of at most 200 UTF-8 bytes are required.
+Malformed declarations return 400 on normal/reviewed saves and updates. No new
+auth permission is granted; existing writer/viewer and ownership rules apply.
+
+`POST /jobs/{id}/upload` also accepts optional `preflight`, at most 100 records:
+`{identity_id, status, reason, status_code}`. Status is `passed` or `failed`; reasons
+are `identity_verified`, `credential_rejected`, `identity_mismatch`,
+`unexpected_status`, `execution_error`. Status code is an integer 0–599 (0 for no
+HTTP response). Extra response data is discarded; safe diagnostic evidence is
+persisted with `phase: identity_preflight` and unknown expected/observed resource
+decisions. Empty/absent preflight does not alter legacy receipt fingerprints.
+Required missing/duplicate/inconsistent/unbound checks prevent a conclusive
+assessment. A passed session check cannot substitute for a working allow baseline
+against the tested resource. See [authoring and rollout](identity-preflight.md).
