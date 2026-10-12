@@ -180,3 +180,8 @@ Case/report drafting and methodology checklists are implemented; the shared play
 and evidence reads use Map endpoints. Remote MCP remains a joint design requiring
 backend OAuth. See `docs/roadmap.md` for current gaps rather than treating these
 implemented features as future work.
+
+Remote MCP has a [proposed authorization design](docs/adr/0002-remote-mcp-authorization.md),
+not an accepted implementation plan. Merging that ADR does not settle its provider,
+grant binding, remote writes, consent or token-lifecycle decisions. Do not start
+OAuth implementation until those decisions are explicitly accepted.

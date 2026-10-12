@@ -4,6 +4,10 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Record the proposed remote MCP authorization ADR, updated for current organization
+  access, grant-binding/revocation requirements and the traffic caused by queue
+  permissions. Documentation only; OAuth implementation and design acceptance remain pending.
+
 - Refresh README, domain/workflow documentation and contributor instructions for
   implemented assessments, execution provenance, shared playbooks and current
   security boundaries; distinguish historical plans from the current backlog.
