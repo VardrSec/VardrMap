@@ -25,19 +25,23 @@ Bug bounty work is one `engagement_type` among four (`bug_bounty`, `pentest`, `r
 - Clients — the organisation the work is performed for; deleting one detaches its engagements rather than deleting the testing record
 - Authorization records — who granted permission, the reference (SOW, ticket, policy URL), and the window it covers. `GET /engagements/{id}/authorization/active` answers "is there permission right now?"
 - Organizations — tenancy sits on an org, so a teammate can operate an engagement's jobs and share a runner fleet
-- Stop-work — an emergency brake per engagement that halts every execution until released
+- Stop-work — prevents new execution and pauses schedule materialization until released; already running processes are not cancelled
 
 **Testing workflow**
 - Track in-scope and out-of-scope assets with kind and notes; subdomain coverage requires an explicit wildcard
 - Asset graph — canonical identity for hosts, with relationships and provenance, linking recon, services, scans, and findings
-- Import tool output — ffuf, httpx, and nuclei (JSON/JSONL)
+- Import tool output — httpx, nuclei, katana, gau, ffuf and dalfox; supported formats depend on the tool
 - Browse recon results and scan findings; update status individually or in bulk
 - Log manual test cases with hypothesis, payload, evidence, and status
 - Evidence with content hash, sensitivity, and retention — secrets redacted on write
 - **Burp-assisted API Surface** — explicitly promote selected Proxy, Repeater, Intruder, Scanner, or Organizer exchanges into a canonical operation inventory with identity/status coverage and retained redacted request/response evidence. Passive capture remains off.
 - **API authorization testing** via [VardrGate](https://github.com/VardrSec/VardrGate) — store a test case describing one request replayed as several identities, queue it, and get BOLA / BFLA / cross-tenant / privilege-escalation findings back as triageable results. Credentials are referenced (`value_env` / `value_keychain`), never stored.
+- **API assessment outcomes** — distinguish completed commands from conclusive, partial or inconclusive assessments. Claim-time case snapshots and result hashes bind evidence to the reviewed case; conclusive does not mean secure or independently verified.
+- **Execution evidence** — retain job, case and identity provenance, inspect redacted records in the job panel, and link selected evidence to findings. Historical or manual provenance remains unknown.
+- **API playbooks** — three original versioned guides shared by the case builder and Runner MCP: ownership/tenant separation, privileged functions, and evidence/retest/handoff. Guidance records no coverage and queues no work.
 - Track findings with severity, asset, status, and full write-up fields
 - Draft structured vulnerability reports linked to findings; preview as markdown and export as PDF
+- Produce engagement-level client deliverables with immutable content revisions, evidence references and hashes; keep them separate from per-finding write-ups
 - Generate personal API keys (`vmap_` tokens) for external tool access (e.g. Burp Suite)
 - Write operations logged to an append-only audit log
 
@@ -52,7 +56,7 @@ Bug bounty work is one `engagement_type` among four (`bug_bounty`, `pentest`, `r
 - Authenticate with `vardrrunner login vardrmap` using a `vmap_` API key
 - `vardrrunner status` — verify config, API connectivity, and local tool availability
 - `vardrrunner heartbeat` — report hostname, OS, version, and per-tool availability to VardrMap; auto-sent at start of `jobs run`
-- Run httpx, nuclei, and subfinder locally; results uploaded automatically; lifecycle events posted at each stage
+- Run the ten supported recon/scanner tools locally, or execute queued VardrGate authorization cases; results uploaded automatically and lifecycle events posted at each stage
 - Queue scan jobs from the UI; VardrRunner polls and executes them with `vardrrunner jobs run`
 - Wildcard scope entries (`*.example.com`) handled via subfinder enumeration
 
@@ -72,9 +76,9 @@ Rationale in [docs/adr/0001-central-policy-engine.md](docs/adr/0001-central-poli
 
 ## Security Controls
 
-- JWT authentication on all protected routes — HS256, `aud`/`iss`/`exp` validated
+- JWT authentication on all protected routes — HS256; `sub`, `aud`, `iss` and `exp` required, with signature, audience, issuer and expiry validated
 - Personal API key authentication — opaque token, SHA-256 hash stored only
-- BOLA enforcement — all queries scoped to the authenticated user at the database level; cross-tenant access returns `404`, never `403`
+- BOLA enforcement — database access combines ownership, organization membership and engagement invitations; inaccessible resources return `404`, and viewers cannot write
 - Secret redaction — auth headers, cookies, tokens, and URL credentials stripped from evidence on write
 - Input sanitization — injection detection on identifier fields; `nh3` strip on long-form fields
 - Rate limiting — 200 requests/minute per IP (slowapi)
@@ -119,7 +123,10 @@ npm run dev
 | [docs/security-model.md](docs/security-model.md) | Threat model, scope-matching rules, tenant isolation |
 | [docs/api.md](docs/api.md) | Full API endpoint reference |
 | [docs/development.md](docs/development.md) | Local setup, env vars, migrations, tests |
-| [docs/implementation-roadmap.md](docs/implementation-roadmap.md) | Phased delivery plan tied to the repository |
+| [docs/api-playbooks.md](docs/api-playbooks.md) | Original versioned API engagement guidance and human review boundaries |
+| [scripts/integration/README.md](scripts/integration/README.md) | Disposable Map → Runner → Gate acceptance and hosted staging boundaries |
+| [docs/platform-comparison-2026-10-11.md](docs/platform-comparison-2026-10-11.md) | Dated ars0n comparison, implementation update and validation limits |
+| [docs/implementation-roadmap.md](docs/implementation-roadmap.md) | Historical phased delivery plan; current backlog lives in roadmap.md |
 | [docs/adr/](docs/adr/) | Architecture decision records |
 | [docs/security-testing.md](docs/security-testing.md) | Manual security testing record — BOLA, XSS, SQLi |
 | [docs/roadmap.md](docs/roadmap.md) | Forward-looking backlog (next milestone) |
@@ -129,16 +136,9 @@ npm run dev
 
 ## Roadmap
 
-See [docs/implementation-roadmap.md](docs/implementation-roadmap.md) for the phased plan. Headline items still open:
+See [docs/roadmap.md](docs/roadmap.md) for the current backlog. Remaining work includes identity/session preflight, broader API guidance, organization administration and organization-bound runner credentials, engagement-wide execution budgets, signed contracts, running-process cancellation, remote MCP OAuth, and the physical table rename.
 
-- **Client-facing deliverable generation** — an engagement-level report, not just per-finding write-ups
-- **Finding lifecycle and Retest** — test → report → remediate → retest → verify closed
-- **Objectives, TestPlan, TestCase** mapped to WSTG / API Top 10 / ATT&CK
-- **Observation** as a first-class entity, distinct from a finding
-- Runner API keys scoped to an organization rather than a user
-- DB table rename (`programs` → `engagements`) and retirement of the legacy path middleware
-
-Shipped: policy evaluation and stop-work (v0.24), organizations (v0.25), asset graph (v0.26), evidence with redaction (v0.27), advisory scope (v0.29). VardrRunner lives in [its own repo](https://github.com/VardrSec/VardrRunner).
+Organization access, finding activity/retest records, reviewed case authoring and client deliverable revisions are implemented. Assessment outcomes, structured execution evidence and shared playbooks are recorded under **Unreleased**; their presence in this branch does not establish a production deployment. Deploy the matching backend migration before releasing the companion Runner changes.
 
 ---
 

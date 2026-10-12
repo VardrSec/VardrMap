@@ -4,6 +4,10 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Refresh README, domain/workflow documentation and contributor instructions for
+  implemented assessments, execution provenance, shared playbooks and current
+  security boundaries; distinguish historical plans from the current backlog.
+
 - Separate Gate assessment completeness from job lifecycle, with per-identity
   evaluated/inconclusive/missing/skipped outcomes and legitimate-baseline checks.
 - Bind results to a claim-time case snapshot using a SHA-256 from Runner; legacy

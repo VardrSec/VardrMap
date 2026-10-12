@@ -48,8 +48,10 @@ Deliberately still named "program":
 
 ## Security
 - **Scope is advisory, not enforced.** `policy.py` evaluates every job against authorization, testing window and scope; findings ride back as a `warnings` array and the job still runs. Staying in scope is the operator's responsibility — Burp and nmap don't police their users either. Do not add blocking behaviour to this path. The one exception is stop-work (`403`), the operator's own halt switch. See ADR 0001 § Amendment.
-- BOLA/IDOR: every engagement-owned resource scoped by authenticated `github_id` at the DB query level
+- BOLA/IDOR: use the shared database access predicates in `deps.py`, combining direct ownership, organization membership and engagement invitations. A direct owner-only filter can wrongly exclude authorized teammates.
 - Cross-user access → `404`, not `403` (never reveal existence of another user's object)
+- Viewers can read shared resources but cannot write; apply `require_member_write` and the client-specific organization role checks on mutations.
+- Browser JWTs require `exp`, `sub`, `aud`, `iss`; preserve signature, expiry, audience and issuer verification. Runner-only keys cannot read full engagement evidence or playbooks.
 - Store only hashes of API keys/secrets, never raw values
 - New auth behavior needs tests: unauthorized, wrong-user, revoked/invalid token, success
 
@@ -61,11 +63,16 @@ Behavior-changing = adds, removes, or modifies an endpoint, field, model, env va
 - New env var or setup step → `docs/development.md`
 - Any feature/fix/behavior change → `CHANGELOG.md`
 
-Docs-only, test-only, pure-refactor commits may note "No user-facing docs change needed."
+Docs-only or test-only changes and pure refactors may note "No user-facing docs change needed." Check changed Markdown links and `git diff --check` for docs-only work; do not rerun application suites solely for prose edits.
 
 ## Verification
 Backend: `cd backend && .\venv\Scripts\pytest.exe tests -v`
 Frontend: `cd frontend && npm run lint && npm run typecheck && npm test && npm run build`
+
+Use focused checks while changing code, then run the relevant full suites before review.
+PostgreSQL migration/integration checks and real browser acceptance run in CI.
+See `docs/development.md` and `scripts/integration/README.md` for disposable local
+validation. Local/browser fixtures do not verify hosted OAuth or production deployment.
 
 `npm run typecheck` (`tsc --noEmit`) is the only thing that type-checks test files —
 `next build` only reaches what the app graph imports, and ts-jest transpiles
@@ -117,9 +124,9 @@ query-less URL + `template_id` + tier; never key that on the payload or PoC URL,
 carry a fresh per-run marker class.
 **Scanner payload, evidence and PoC URL are stored exactly as reported** (`payload`,
 `match_evidence`, `asset`): never run them through `strip_html`, which deletes anything
-tag-shaped and encodes `&` — for an XSS scanner that deletes the evidence. Sanitise prose,
+tag-shaped — for an XSS scanner that deletes the evidence. Sanitise prose,
 not data. They are untrusted text: render only as text. **The same goes for recon URLs**
-(`url`/`host`/`path` via `_url_field`): `strip_html` turned `?a=1&b=2` into `?a=1&amp;b=2`,
+(`url`/`host`/`path` via `_url_field`): the previous sanitizer turned `?a=1&b=2` into `?a=1&amp;b=2`,
 and recon URLs are read back as scan targets. Existing rows were not rewritten — read
 `docs/recon-url-recovery-plan.md` before touching them; a blind decode is wrong.
 
@@ -131,11 +138,45 @@ New engagements default to `bug_bounty` / `active` so existing API callers are u
 Authorization records (`routers/authorizations.py`) track the permission-to-test window — required for pentest/red_team; optional for bug bounty.
 Clients (`routers/clients.py`) track the organisation being tested — required for pentest/internal; not applicable for bug bounty.
 
+## API assessments, evidence and guidance
+
+- Job lifecycle and assessment completeness are separate. `done` means execution
+  finished; `conclusive` means the declared identities have definite reported
+  outcomes and a working legitimate baseline, not that the API is secure.
+- Gate claims freeze an unresolved `ScanJob.case_snapshot`. Runner hashes that
+  spec as `case_hash`; never hash resolved secrets. A conflicting upload hash
+  fails; a missing binding remains inconclusive. Do not evaluate against a later edit.
+- Migration `0027assessments` adds nullable assessment/provenance fields after
+  `0026dalfox`. Historical/manual metadata stays unknown; do not infer or rewrite it.
+- Gate evidence carries job/case/identity and expected/observed decisions. Job/case
+  deletion uses SET NULL and retains evidence; preserve receipt replay compatibility
+  and immutable report/activity snapshots.
+- `backend/api_playbooks.json` is the original versioned catalog shared by the UI
+  and Runner MCP. Its schema rejects undeclared fields; guidance stores no progress
+  or coverage and queues no work. Viewers may read; only writers may link evidence.
+- Saving cases declares human review; retest recording and client deliverable
+  revisions stay explicit operator actions. Session/login refresh, signed
+  execution contracts and cancellation of running processes remain future work.
+- Deploy the matching backend migration/endpoints before publishing the companion
+  Runner feature. Unreleased branch content is not proof of a production deployment.
+
+## Communication
+
+Report major results, blockers and required decisions. Omit routine command-by-command
+updates to conserve tokens. Revisit the ars0n comparison when the platform changes,
+using inspected code and clearly dated evidence; no weekly polling is requested.
+
 ## Roadmap
-Remaining: DB table rename (`programs` → `engagements`, retire legacy path middleware), organization administration / team UI and organization-scoped runner credentials (RBAC is implemented).
+See `docs/roadmap.md` for the current backlog: physical table rename and legacy alias
+retirement, organization administration, organization-bound runner credentials,
+identity/session preflight, broader API guidance, engagement-wide execution budgets,
+signed contracts, running-process cancellation, retention policy and remote MCP OAuth.
+RBAC, finding activity/retests and reviewed case authoring are implemented.
 
 Client-facing deliverable generation shipped in v0.39.0 (immutable client report revisions).
 
-Agent-facing work lives in VardrRunner's MCP server, not here: case-drafting and
-report-drafting tools, methodology checklists, and a remote MCP for claude.ai — the last of
-which is the only one needing a VardrMap change (backend OAuth).
+Agent-facing tools and instruction-only prompts live in VardrRunner's MCP server.
+Case/report drafting and methodology checklists are implemented; the shared playbook
+and evidence reads use Map endpoints. Remote MCP remains a joint design requiring
+backend OAuth. See `docs/roadmap.md` for current gaps rather than treating these
+implemented features as future work.

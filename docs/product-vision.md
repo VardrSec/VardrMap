@@ -62,9 +62,10 @@ evidence. That bridge is intentionally explicit: VardrMap visualizes and
 correlates the work without cloning Proxy history or turning passive browsing
 into uncontrolled data collection.
 
-The control plane never links against a security tool. It emits versioned JSON
-job envelopes and consumes versioned JSON results. VardrGate is one executor
-behind that contract, not a dependency.
+The control plane never links against a security tool. It exchanges validated JSON
+job and result payloads with Runner; Gate executes behind that wire boundary. Signed,
+versioned execution contracts remain roadmap work. Current case hashes bind results
+to a claimed spec and are correlation, not signed attestation.
 
 ## The thesis
 
@@ -77,7 +78,8 @@ VardrMap models the **target** and the **authority to test it**:
    target falls outside what was agreed. VardrMap does not refuse the work:
    staying in scope is the operator's responsibility, as it is with every other
    tool in the kit. The exception is stop-work, the operator's own halt switch,
-   which is honoured absolutely.
+   which prevents new starts and schedule materialization. Cancellation of already
+   running processes remains future work.
 2. **Assets are a graph, not rows.** A finding correlates to the service that
    exposed it, which correlates to the host, which correlates to the domain.
    That chain is what makes risk aggregation, retest, and attack-path analysis
