@@ -1,21 +1,50 @@
 """Local acceptance test: actual HTTP backend, actual runner worker, actual Gate binary."""
 
-import copy, hashlib, json, os, socket, sqlite3, subprocess, sys, threading, time, traceback
+import copy
+import hashlib
+import json
+import os
+import socket
+import sqlite3
+import subprocess
+import sys
+import threading
+import time
+import traceback
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import urlsplit
+from pathlib import Path
+from urllib.parse import parse_qs, quote, urlsplit
 
 root = Path(sys.argv[1]).resolve()
-os.environ["DATABASE_URL"] = "sqlite:///" + str(
-    root / ("acceptance-" + str(time.time_ns()) + ".db")
-)
-os.environ["ENV"] = "test"
+postgres = os.getenv("INTEGRATION_POSTGRES") == "1"
+if postgres:
+    from sqlalchemy.engine import make_url
+    database_url = os.environ["INTEGRATION_DATABASE_URL"]
+    parsed = make_url(database_url)
+    if parsed.get_backend_name() != "postgresql" or not (parsed.database or "").startswith("vardrmap_test"):
+        raise ValueError("Integration requires an empty disposable vardrmap_test* PostgreSQL database")
+    os.environ["DATABASE_URL"] = database_url
+else:
+    os.environ["DATABASE_URL"] = "sqlite:///" + str(
+        root / ("acceptance-" + str(time.time_ns()) + ".db")
+    )
+os.environ["ENV"] = "staging" if postgres else "test"
 os.environ["BACKEND_JWT_SECRET"] = "local-acceptance-fixture-signing-key-32-characters"
 os.environ["ALLOWED_ORIGINS"] = "http://localhost:3000"
 os.environ["PYTHONDONTWRITEBYTECODE"] = "1"
 sys.path.insert(0, str(root / "map/backend"))
-import jwt, requests, uvicorn
+if postgres:
+    from db import engine
+    from sqlalchemy import inspect
+    if inspect(engine).get_table_names():
+        raise ValueError("Integration PostgreSQL database must be empty")
+    engine.dispose()
+    subprocess.run(
+        [sys.executable, "-m", "alembic", "upgrade", "head"],
+        cwd=root / "map/backend", check=True, timeout=90,
+    )
+import jwt, httpx, uvicorn
 from main import app
 from db import SessionLocal
 from models import ScanJob
@@ -23,7 +52,7 @@ from models import ScanJob
 results = {
     "checks": [],
     "observations": [],
-    "scope": "Loopback HTTP, isolated SQLite, source snapshots; no browser or production deployment.",
+    "scope": f"Loopback HTTP, isolated {'PostgreSQL' if postgres else 'SQLite'}, source snapshots; no browser or production deployment.",
 }
 
 
@@ -51,6 +80,7 @@ def token(user):
 
 tokens = {x: "lab-" + x + "-fixture-token" for x in ["owner", "peer", "cross", "admin"]}
 state = {"mode": "vulnerable", "requests": []}
+REQUEST_CEILING = 100
 
 
 class Fixture(BaseHTTPRequestHandler):
@@ -67,14 +97,31 @@ class Fixture(BaseHTTPRequestHandler):
             {"identity": who, "path": self.path, "client": self.client_address[0]}
         )
         path = urlsplit(self.path).path
-        if state["mode"] == "server-error":
-            status, body = 503, {"error": "temporarily_unavailable"}
-        elif state["mode"] == "fixed" and (
+        denied = (
             who == "anonymous"
             or (path.startswith("/admin") and who != "admin")
             or (not path.startswith("/admin") and who not in ("owner", "admin"))
-        ):
-            status, body = (401 if who == "anonymous" else 403), {"error": "forbidden"}
+        )
+        if len(state["requests"]) > REQUEST_CEILING:
+            status, body = 503, {"error": "fixture_request_ceiling"}
+        elif state["mode"] == "rate-limited":
+            status, body = 429, {"error": "rate_limited"}
+        elif state["mode"] == "login-redirect":
+            status, body = 302, {"error": "login_required"}
+        elif state["mode"] == "server-error":
+            status, body = 503, {"error": "temporarily_unavailable"}
+        elif state["mode"] == "expired-owner" and who == "owner":
+            status, body = 401, {"error": "expired_fixture_token"}
+        elif state["mode"] == "body-denial" and denied:
+            status, body = 200, {"error": {"code": "access_denied"}}
+        elif state["mode"] in ("fixed", "fixed-hidden", "expired-owner") and denied:
+            code = 404 if state["mode"] == "fixed-hidden" else 403
+            status, body = (401 if who == "anonymous" else code), {"error": "forbidden"}
+        elif path == "/users":
+            query = parse_qs(urlsplit(self.path).query)
+            page = query.get("page", ["1"])[0]
+            status, body = 200, {"data": [{"user_id": "42", "tenant_id": "tenant-a"}],
+                                  "page": page, "next": "2" if page == "1" else None}
         else:
             status, body = (
                 200,
@@ -118,7 +165,7 @@ other = {"Authorization": "Bearer " + token("lab_other")}
 
 
 def req(method, path, payload=None, expected=(200,), auth=None):
-    r = requests.request(
+    r = httpx.request(
         method, backend + path, json=payload, headers=auth or headers, timeout=10
     )
     if r.status_code not in expected:
@@ -162,6 +209,10 @@ def run_worker(label, allow=False):
     )
     (root / (label + ".log")).write_text(p.stdout + p.stderr, encoding="utf-8")
     check(label + " worker exited normally", p.returncode == 0)
+    if p.returncode:
+        from redaction import redact_text
+        print(redact_text(p.stderr[-4000:]), flush=True)
+        raise RuntimeError(f"{label} worker failed; see its retained log")
 
 
 def queue(caseid):
@@ -198,6 +249,7 @@ try:
             break
         time.sleep(0.05)
     assert server.started, "backend did not start"
+    req("POST", "/auth/sync")
     client_id = req(
         "POST", "/clients", {"name": "Local Fixture Client"}, expected=(200, 201)
     )["id"]
@@ -316,7 +368,7 @@ try:
     )
     check(
         "Cross-user case access hidden",
-        requests.get(
+        httpx.get(
             backend + base + "/test-cases", headers=other, timeout=5
         ).status_code
         == 404,
@@ -390,6 +442,11 @@ try:
         and all(x["status_code"] == 200 for x in result["executions"]),
     )
     check(
+        "Multi-parameter URL reaches the target unchanged",
+        all(parse_qs(urlsplit(x["path"]).query) == {"view": ["full"], "include": ["roles"]}
+            for x in state["requests"]),
+    )
+    check(
         "Gate artifact contains no credential/body values",
         all(
             x not in json.dumps(result)
@@ -449,7 +506,7 @@ try:
             "Evidence link preserves original record",
             linked == {**original, "finding_id": fid},
         )
-    attach = requests.post(
+    attach = httpx.post(
         backend + base + "/findings/" + fid + "/activity",
         headers=headers,
         json={
@@ -485,7 +542,7 @@ try:
             "title": "Local API assessment",
             "executive_summary": "Ownership failure verified against a controlled fixture.",
             "methodology": "Five-identity authorization replay; explicit local private-target opt-in.",
-            "limitations": "SQLite and loopback; no browser or deployed services.",
+            "limitations": f"Isolated {'PostgreSQL' if postgres else 'SQLite'} and loopback; no browser or deployed services.",
             "finding_ids": [fid],
             "evidence_ids": evidence_ids,
         },
@@ -631,6 +688,90 @@ try:
         "Privilege escalation detected",
         any(x["category"] == "privilege_escalation" for x in admin_result["findings"]),
     )
+    def scenario(name, mode, case):
+        state["mode"] = mode
+        mark = len(state["requests"])
+        stored = req("POST", base + "/test-cases/reviewed", {
+            "reviewed": True, "cases": [{"name": name, "spec": case}],
+        }, expected=(201,))["test_cases"][0]["id"]
+        job = queue(stored)
+        run_worker(name, allow=True)
+        artifact = outputs(job)
+        assert artifact, f"{name}: missing Gate result"
+        result = artifact[1]
+        check(name + " sends exactly one request per identity", len(state["requests"]) == mark + 5)
+        check(name + " avoids false authorization findings", not result["findings"])
+        return job, result
+
+    hidden = copy.deepcopy(spec)
+    hidden["id"] = "lab-hidden-denial"
+    _, hidden_result = scenario("hidden-denial", "fixed-hidden", hidden)
+    check("Declared 404 denials retain intended outcomes", {
+        x["identity_id"]: x["observed_outcome"] for x in hidden_result["executions"]
+    } == {"owner": "allow", "admin": "allow", "peer": "deny", "cross": "deny", "anonymous": "deny"})
+
+    body_denial = copy.deepcopy(spec)
+    body_denial["id"] = "lab-body-denial"
+    body_denial["deny_when"] = {"json_field": {"path": "error.code", "equals": "access_denied"}}
+    body_job, body_result = scenario("body-denial", "body-denial", body_denial)
+    check("HTTP 200 denial is evaluated against the reviewed body convention",
+          all(x["status_code"] == 200 for x in body_result["executions"])
+          and job_row(body_job)["status"] == "done")
+
+    fixed_admin = copy.deepcopy(admin_spec)
+    fixed_admin["id"] = "lab-fixed-admin"
+    fixed_admin_job, _ = scenario("fixed-admin", "fixed", fixed_admin)
+    check("Fixed admin authorization completes without privilege findings", job_row(fixed_admin_job)["status"] == "done")
+
+    for mode, outcome in [("server-error", "server_error"), ("rate-limited", "client_error"), ("login-redirect", "redirect")]:
+        previous_evidence = {x["id"] for x in req("GET", base + "/evidence?limit=200")["evidence"]}
+        case = copy.deepcopy(spec)
+        case["id"] = "lab-" + mode
+        job, result = scenario(mode, mode, case)
+        check(mode + " retains ambiguous execution outcomes rather than allow/deny decisions",
+              all(x["observed_outcome"] == outcome for x in result["executions"]))
+        stored_evidence = [x for x in req("GET", base + "/evidence?limit=200")["evidence"]
+                           if x["id"] not in previous_evidence]
+        check(mode + " preserves inconclusive outcomes in uploaded evidence",
+              len(stored_evidence) == 5
+              and all(outcome in x["body"] for x in stored_evidence))
+        results["observations"].append({"name": mode, "job": job_row(job),
+            "outcomes": [x["observed_outcome"] for x in result["executions"]],
+            "interpretation": "Job completion records execution, not a clean authorization assessment."})
+
+    state["mode"] = "expired-owner"
+    expired_case = copy.deepcopy(spec)
+    expired_case["id"] = "lab-expired-target-session"
+    stored = req("POST", base + "/test-cases/reviewed", {
+        "reviewed": True, "cases": [{"name": "Expired target session", "spec": expired_case}],
+    }, expected=(201,))["test_cases"][0]["id"]
+    expired_job = queue(stored)
+    run_worker("expired-target-session", allow=True)
+    expired_result = outputs(expired_job)[1]
+    check("Expired owner credential produces an explicit expected-access mismatch",
+          any(x["category"] == "authorization_mismatch" and x["identity_id"] == "owner"
+              for x in expired_result["findings"]))
+
+    for page_number in ("1", "2"):
+        collection = copy.deepcopy(spec)
+        collection["id"] = "lab-page-" + page_number
+        collection["request"]["url"] = target + "/users?page=" + page_number + "&limit=1"
+        scenario("collection-page-" + page_number, "fixed", collection)
+        check("Collection page " + page_number + " reaches the reviewed page without query corruption",
+              all(parse_qs(urlsplit(x["path"]).query) == {"page": [page_number], "limit": ["1"]}
+                  for x in state["requests"][-5:]))
+
+    # A transport canary, not an injection detector: Gate tests authorization.
+    # This proves a reviewed parameter value survives capture, storage and replay.
+    canary = "' OR 1=1--"
+    parameter_case = copy.deepcopy(spec)
+    parameter_case["id"] = "lab-parameter-canary"
+    parameter_case["request"]["url"] = target + "/users/42/profile?q=" + quote(canary) + "&page=2"
+    scenario("parameter-canary", "fixed", parameter_case)
+    check("Injection canary is transported literally; no injection coverage is claimed",
+          all(parse_qs(urlsplit(x["path"]).query) == {"q": [canary], "page": ["2"]}
+              for x in state["requests"][-5:]))
+    check("Fixture request ceiling respected", len(state["requests"]) <= REQUEST_CEILING)
     check(
         "Fixture received loopback requests only",
         all(x["client"] == "127.0.0.1" for x in state["requests"]),

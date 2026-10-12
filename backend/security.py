@@ -1,3 +1,4 @@
+import html
 import re
 import urllib.parse
 
@@ -37,14 +38,16 @@ def strip_html(value: str | None) -> str:
     if not value:
         return value or ""
     value = _remove_null_bytes(value)
-    return nh3.clean(value, tags=set()).strip()
+    # Treat entity syntax as literal user text, then decode only the sanitizer's
+    # output escaping. Decoding existing database rows would be ambiguous.
+    return html.unescape(nh3.clean(value.replace("&", "&amp;"), tags=set())).strip()
 
 
 def sanitize_identifier(value: str | None) -> str:
     """Strict sanitizer for short identifier fields: name, title, asset.
 
     Detection runs on RAW input FIRST — before any stripping — to catch
-    obfuscated payloads like <scr<script>ipt>. After detection, bleach strips
+    obfuscated payloads like <scr<script>ipt>. After detection, nh3 strips
     any remaining tags.
     """
     if not value:
@@ -52,7 +55,7 @@ def sanitize_identifier(value: str | None) -> str:
     raw = _remove_null_bytes(value)
     if _INJECT_RE.search(raw) or _EVENT_HANDLER_RE.search(raw):
         raise ValueError("Invalid characters in field")
-    return nh3.clean(raw, tags=set()).strip()
+    return html.unescape(nh3.clean(raw.replace("&", "&amp;"), tags=set())).strip()
 
 
 _ALLOWED_URL_SCHEMES = {"http", "https"}

@@ -1,71 +1,36 @@
-# VardrMap — Frontend
+# VardrMap frontend
 
-Next.js 16 (App Router, TypeScript) frontend for VardrMap. Deployed on Vercel.
-
----
+Next.js 16 App Router and TypeScript frontend, deployed on Vercel.
 
 ## Setup
 
-```bash
-npm install
-cp .env.example .env.local
-# fill in .env.local values — see docs/development.md for descriptions
-npm run dev
-```
+Run `npm install`, copy `.env.example` to `.env.local`, and run `npm run dev`.
+See [development setup](../docs/development.md) for GitHub OAuth, backend configuration and local testing.
+Required variables are `AUTH_SECRET`, `AUTH_GITHUB_ID`, `AUTH_GITHUB_SECRET`,
+`BACKEND_JWT_SECRET`, and `NEXT_PUBLIC_API_URL`. `AUTH_URL` is optional.
 
-App runs at `http://localhost:3000`.
+## Request and state flow
 
----
+`auth.ts` configures Auth.js v5 and mints short-lived backend JWTs in its callbacks.
+`app/api/auth/[...nextauth]/route.ts` exposes its handlers. `proxy.ts` applies
+Auth.js middleware; it does not proxy backend API requests.
+`app/context/AppContext.tsx` provides `authFetch`, which sends authenticated
+requests directly to `NEXT_PUBLIC_API_URL`. Backend CORS must allow the frontend origin.
+The API URL is public; signing secrets remain server-side.
 
-## Environment Variables
+`app/page.tsx` selects the engagement and section. `app/context/appReducer.ts`
+coordinates global state. `app/types.ts` defines the seven sections:
+Dashboard, Scope, Overview, Review, Findings, Reports and Settings.
+Dashboard and Review are tab containers. Their children provide the job composer,
+imports, reconnaissance, services, scanner review and manual testing.
+Findings hold reviewed issues; scanner matches remain candidates until verified.
+Reports include finding write-ups and engagement deliverables as separate workflows.
+Settings contains API key, notification and client configuration.
 
-See [../docs/development.md](../docs/development.md#environment-variables) for full descriptions. Required values in `.env.local`:
+## Verification
 
-```
-AUTH_SECRET
-AUTH_GITHUB_ID
-AUTH_GITHUB_SECRET
-BACKEND_JWT_SECRET
-NEXT_PUBLIC_API_URL
-```
-
-`AUTH_URL` is optional — Auth.js v5 infers it from the request.
-
----
-
-## Key Files
-
-| Path | Purpose |
-|---|---|
-| `app/page.tsx` | Root client component — program list, nav, section routing, auth state |
-| `app/types.ts` | Shared TypeScript types for all data shapes |
-| `app/components/ui.tsx` | Shared primitives — `Panel`, `Input`, `PrimaryButton`, `DangerButton`, `SectionHeader` |
-| `app/components/DashboardSection.tsx` | Per-program summary cards using aggregate stats |
-| `app/components/FindingsSection.tsx` | Findings list, create/edit/delete, self-fetches |
-| `app/components/ReportsSection.tsx` | Reports list, markdown preview, export, self-fetches |
-| `app/components/ManualSection.tsx` | Manual test log, self-fetches |
-| `app/components/ScanningSection.tsx` | Scan review, status updates, bulk actions, pagination |
-| `app/components/ReconSection.tsx` | Recon browser with client-side search |
-| `app/components/ScopeSection.tsx` | In/out scope management |
-| `app/components/ImportsSection.tsx` | File upload for ffuf, httpx, nuclei output |
-| `app/components/SettingsSection.tsx` | API key management — generate, copy, revoke |
-| `proxy.ts` | Next.js middleware — rewrites `/api/backend/*` to `NEXT_PUBLIC_API_URL/*` |
-| `app/api/auth/[...nextauth]/route.ts` | Auth.js v5 route handler — GitHub OAuth + JWT minting |
-
----
-
-## Auth Pattern
-
-The frontend uses Auth.js v5 for the GitHub OAuth session. After login, `app/api/auth/[...nextauth]/route.ts` mints a short-lived HS256 JWT signed with `BACKEND_JWT_SECRET`. This JWT is attached to every backend request by the `authFetch` helper in `page.tsx`.
-
-`proxy.ts` (Next.js middleware) rewrites all requests from `/api/backend/*` to the backend URL. This means the browser never sends requests directly to the Railway backend — CORS and the backend URL are not exposed to the client.
-
----
-
-## Scripts
-
-```bash
-npm run dev       # development server (Turbopack)
-npm run build     # production build + TypeScript check
-npm run lint      # ESLint
-```
+Run `npm run lint`, `npm run typecheck`, `npm test`, and `npm run build`.
+Typecheck is required separately: tests are not all reachable from the build graph,
+and Jest transpilation does not replace TypeScript checking.
+Tests use the `test-utils/renderWithApp` harness. Inspect its context defaults by
+hand when changing AppContext because its cast bypasses excess-property checks.

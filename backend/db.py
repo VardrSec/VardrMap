@@ -3,6 +3,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
+from database_options import connection_args, normalize_url
 
 ENV_PATH = Path(__file__).resolve().with_name(".env")
 load_dotenv(dotenv_path=ENV_PATH)
@@ -15,12 +16,8 @@ if not DATABASE_URL:
 # maps to psycopg2 by default. We use psycopg3 (psycopg[binary]), so rewrite the
 # scheme to opt into the right driver without touching the rest of the URL.
 # SQLite URLs (used in tests) are left untouched and don't get sslmode.
-_is_postgres = DATABASE_URL.startswith(("postgresql://", "postgres://", "postgresql+psycopg://"))
-if _is_postgres:
-    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg://", 1)
-    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+psycopg://", 1)
-
-_connect_args = {"sslmode": "require"} if _is_postgres else {}
+DATABASE_URL = normalize_url(DATABASE_URL)
+_connect_args = connection_args(DATABASE_URL)
 # pool_pre_ping validates connections before use — Railway closes idle Postgres
 # connections, and without this the first request after a quiet period 500s.
 engine = create_engine(DATABASE_URL, connect_args=_connect_args, pool_pre_ping=True)

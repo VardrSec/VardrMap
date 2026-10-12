@@ -29,11 +29,10 @@ from collections import defaultdict
 from datetime import datetime
 from typing import Any
 
+import nh3
+from models import ReconItem, ScanItem
 from sqlalchemy import text
 from sqlalchemy.orm import Session
-
-from models import ReconItem, ScanItem
-from security import strip_html
 
 # What the old sanitiser leaves behind when it encoded something.
 MARKERS = ("&amp;", "&lt;", "&gt;")
@@ -41,7 +40,9 @@ MARKERS = ("&amp;", "&lt;", "&gt;")
 
 def legacy_form(value: str) -> str:
     """What the old importer would have stored for ``value``."""
-    return strip_html(value)
+    # Freeze the old transformation: current text sanitation preserves entities
+    # and must not change how historical corruption is identified.
+    return nh3.clean(value.replace(chr(0), ""), tags=set()).strip()
 
 
 def _marked(value: str | None) -> bool:

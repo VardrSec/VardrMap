@@ -2,9 +2,9 @@
 
 All endpoints require `Authorization: Bearer <token>` unless noted otherwise. The token is either a browser JWT (minted by the frontend after GitHub OAuth) or a personal API key with the `vmap_` prefix. See [architecture.md](architecture.md) for how each token type is resolved.
 
-All responses are JSON. Timestamps are ISO 8601 UTC strings.
+Responses are JSON unless a streaming endpoint is documented otherwise. Timestamps are ISO 8601 UTC strings.
 
-**Base URL (production):** set by `NEXT_PUBLIC_API_URL` — the frontend proxies `/api/backend/*` to this value.
+**Base URL (production):** set by `NEXT_PUBLIC_API_URL` — the browser sends authenticated requests directly to this value; backend CORS must allow the frontend origin.
 
 ---
 
@@ -110,7 +110,7 @@ Revoke an API key. Returns 404 if the key does not belong to the current user.
 ## Engagements
 
 ### `GET /engagements`
-List all engagements where the current user is the owner **or** an invited member. Each engagement includes aggregate stats — not full arrays of findings, reports, or manual tests.
+List all engagements accessible through ownership, organization membership or an engagement invitation. Each engagement includes aggregate stats — not full arrays of findings, reports, or manual tests.
 
 **Response**
 ```json
@@ -893,7 +893,7 @@ Queue a new scan job.
   **`ffuf.limit` counts recon rows, not hosts.** VardrRunner collapses ffuf's targets to site roots *after* the limit is applied, so 100 recon URLs that all live on one host consume the default limit and fuzz a single root. Raise `limit`, or use `target_source: "scope"`, when a recon table is dense on few hosts. For the same reason `POST /jobs/preview` reports the resolved recon targets rather than the roots ffuf will fuzz, so for `ffuf` its `count` is an **upper bound** on the hosts touched, not the exact execution set.
 
   **`ffuf.rate` is a safety control, not a tuning knob.** It bounds the load a job can put on a client's host, so it has a ceiling and no value meaning "unlimited"; omitting it gives VardrRunner's default of 50/s. ffuf additionally always runs with auto-calibration, so a host that answers every path with `200` cannot flood recon with phantom endpoints.
-- `depends_on` (optional): id of another job (same engagement, same owner) that must reach `done` before this job becomes eligible in `GET /jobs/pending`.
+- `depends_on` (optional): id of another job (same engagement) that must reach `done` before this job becomes eligible in `GET /jobs/pending`.
 
 **Response:** job object with `status: "pending"`.
 
@@ -983,7 +983,7 @@ List jobs for an engagement, newest first.
 `total` counts the jobs matching `status`, regardless of paging.
 
 ### `GET /jobs/pending`
-Return `pending` jobs owned by the authenticated user that are eligible to run now, oldest first. Used by VardrRunner to poll for work. Also materializes any due scheduled scans into pending jobs.
+Return `pending` jobs in engagements accessible with write permission to the authenticated user that are eligible to run now, oldest first. Used by VardrRunner to poll for work. Also materializes any due scheduled scans into pending jobs.
 
 Pipeline stages with an unmet dependency are held back: a job with `depends_on` set is only returned once its parent reaches `done`. If the parent `failed` (or no longer exists), the dependent job is auto-failed with an `"upstream pipeline stage failed"` message so it never hangs the queue.
 
@@ -1429,7 +1429,7 @@ Create a recurring scan.
 **Request body**
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `tool_type` | string | yes | `httpx`, `nuclei`, `subfinder`, `nmap`, `dnsx`, `naabu`, `katana`, `gau`, or `vardrgate_api_test` |
+| `tool_type` | string | yes | `httpx`, `nuclei`, `subfinder`, `nmap`, `dnsx`, `naabu`, `katana`, `gau`, `ffuf`, `dalfox`, or `vardrgate_api_test` |
 | `target_source` | string | yes | `scope` or `recon` |
 | `config` | object | no | Tool config, same validation as job creation |
 | `interval` | string | yes | `hourly`, `daily`, or `weekly` |
@@ -1478,7 +1478,7 @@ Create a saved profile. `201` on success.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `name` | string | yes | 1–100 chars |
-| `tool_type` | string | yes | `httpx`, `nuclei`, `subfinder`, `nmap`, `dnsx`, `naabu`, `katana`, `gau`, or `vardrgate_api_test` |
+| `tool_type` | string | yes | `httpx`, `nuclei`, `subfinder`, `nmap`, `dnsx`, `naabu`, `katana`, `gau`, `ffuf`, `dalfox`, or `vardrgate_api_test` |
 | `target_source` | string | yes | `scope` or `recon` |
 | `config` | object | no | Tool config, same validation as job creation |
 
@@ -1727,12 +1727,13 @@ Now returns a `runners` array — one entry per machine that has sent a heartbea
 An organisation engagements are performed for. Optional: bug bounty work has no
 client, because the programme itself is the counterparty.
 
-Clients are scoped to the user who created them and are **not** shared through
-engagement membership — a collaborator invited to one engagement should not see the
-other engagements a client record covers. Another user's client returns `404`.
+Clients are accessible to their creator and organization members. They are **not**
+shared through engagement invitations alone. Organization viewers can read them;
+PATCH and DELETE require direct ownership or organization member-level write
+access (otherwise `403`). Unrelated users receive `404`.
 
 ### `GET /clients`
-List the calling user's clients, ordered by name.
+List accessible clients, ordered by name.
 
 **Response:** array of client objects
 
@@ -1908,3 +1909,27 @@ scans; the worker still fails unsuccessful Gate processes.
 
 `POST /jobs/{job_id}/events` also accepts `target_stats`, `target_warning`, and
 `blocked`, retaining the existing lifecycle event types and access checks.
+
+## Security audit amendments (2026-10-11)
+
+Signed JWTs require `exp`, `sub`, `aud` and `iss` claims. Shared client PATCH/DELETE
+requires direct ownership or organization member-level write access; organization
+viewers receive 403, unrelated users 404. AI suggestion/triage inputs are redacted
+before provider calls and provider failures return generic 502 details. Redaction
+is heuristic; AI output remains a draft requiring human review.
+Webhook delivery connects to an approved resolved address while preserving the
+original HTTP Host and TLS identity. It disables environment proxies and redirects,
+rejects malformed/credential-bearing URLs and logs error types rather than secret URLs.
+Imports enforce the existing size cap with a bounded read.
+
+## Text preservation and deletion ordering
+
+New sanitized text preserves literal ampersands and entity syntax (`&`, `&amp;`,
+`&#38;`) instead of HTML-encoding or collapsing them. Existing rules still remove
+HTML tags, remove null bytes and reject injection patterns in identifier fields.
+Render the result as text or through the existing safe Markdown renderer, never
+by inserting raw HTML. Existing stored text is not decoded or rewritten.
+
+Observation links declare their recon/scan/service relationships so the ORM
+orders their deletion before deleting observed targets. Job deletion continues
+to remove its links while retaining observations. No database migration is needed.

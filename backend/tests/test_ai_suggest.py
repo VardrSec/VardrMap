@@ -210,4 +210,4 @@ class TestSuggestSuccess:
             else:
                 sys.modules["anthropic"] = original
         assert res.status_code == 502
-        assert "connection refused" in res.json()["detail"]
+        assert res.json()["detail"] == "AI request failed; try again"

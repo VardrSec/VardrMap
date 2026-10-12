@@ -3,14 +3,25 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
-from sqlalchemy.orm import Session
-
 import assets as asset_graph
 import provenance
 from db import get_db
-from deps import get_current_user, get_engagement_or_404, log_action, require_member_write
-from models import ImportRecord, Engagement, ReconItem, ScanItem, User
+from deps import (
+    get_current_user,
+    get_engagement_or_404,
+    log_action,
+    require_member_write,
+)
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    UploadFile,
+)
+from models import Engagement, ImportRecord, ReconItem, ScanItem, User
 from notifications import send_webhook, severity_meets_threshold
 from parsers import (
     normalize_to_list,
@@ -23,7 +34,8 @@ from parsers import (
     parse_nuclei,
 )
 from schemas import ToolType
-from serializers import serialize_import_record, serialize_engagement
+from serializers import serialize_engagement, serialize_import_record
+from sqlalchemy.orm import Session
 
 router = APIRouter()
 
@@ -272,7 +284,9 @@ async def import_results(
     if file.content_type not in ALLOWED_CONTENT_TYPES:
         raise HTTPException(status_code=400, detail="Unsupported file type")
 
-    raw = await file.read()
+    # Read one byte beyond the cap to detect oversize files without loading
+    # their entire spooled contents into application memory.
+    raw = await file.read(MAX_UPLOAD_BYTES + 1)
     if len(raw) > MAX_UPLOAD_BYTES:
         raise HTTPException(status_code=413, detail="File too large")
 

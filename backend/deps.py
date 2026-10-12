@@ -3,11 +3,9 @@ import os
 from datetime import datetime, timezone
 
 import jwt
+from db import get_db
 from fastapi import Depends, Header, HTTPException
 from jwt import PyJWTError
-from sqlalchemy.orm import Session
-
-from db import get_db
 from models import (
     ApiKey,
     AuditLog,
@@ -17,6 +15,7 @@ from models import (
     OrganizationMember,
     User,
 )
+from sqlalchemy.orm import Session
 
 BACKEND_JWT_SECRET = os.getenv("BACKEND_JWT_SECRET", "")
 JWT_ALGORITHM = "HS256"
@@ -69,6 +68,7 @@ def _resolve_jwt(token: str) -> dict[str, str]:
             algorithms=[JWT_ALGORITHM],
             audience="vardrmap-backend",
             issuer="vardrmap-frontend",
+            options={"require": ["exp", "sub", "aud", "iss"]},
         )
     except PyJWTError:
         raise HTTPException(status_code=401, detail="Unauthorized")

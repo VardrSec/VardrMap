@@ -7,6 +7,9 @@ model covers a penetration test, an adversary simulation, a continuous
 assessment, or bug bounty research. The discipline changes what the work looks
 like; it does not change the data model, the interface, or the product.
 
+The vision includes future capabilities; see [domain model](domain-model.md) for
+implemented features and [roadmap](roadmap.md) for remaining work.
+
 ## The unified operating model
 
 Every assessment is an **engagement**. An engagement accumulates structure as
@@ -79,8 +82,10 @@ VardrMap models the **target** and the **authority to test it**:
    exposed it, which correlates to the host, which correlates to the domain.
    That chain is what makes risk aggregation, retest, and attack-path analysis
    possible.
-3. **Evidence is first-class and redacted by construction.** Secrets never reach
-   a finding, an API response, a log, or a report.
+3. **Evidence is first-class, with centralized redaction.** Redaction reduces
+   exposure of recognizable secrets but cannot identify every client-specific value.
+   Raw scanner payload/evidence fields intentionally preserve technical fidelity;
+   operators review sensitivity before external AI calls or client exports.
 
 ## Success criteria
 

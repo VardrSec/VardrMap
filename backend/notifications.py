@@ -24,6 +24,7 @@ attacker-controlled request target. Two layers guard it:
 """
 import ipaddress
 import logging
+import re
 import socket
 import urllib.parse
 from typing import Optional
@@ -53,7 +54,8 @@ def _is_blocked_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
     private ranges, loopback, link-local (incl. the 169.254.169.254 metadata
     address), reserved, multicast, and the unspecified address."""
     return (
-        ip.is_private
+        not ip.is_global
+        or ip.is_private
         or ip.is_loopback
         or ip.is_link_local
         or ip.is_reserved
@@ -71,7 +73,15 @@ def validate_webhook_url(url: str) -> Optional[str]:
     that check is enforced authoritatively at send time by send_webhook(), so it
     cannot be bypassed by DNS rebinding.
     """
-    parsed = urllib.parse.urlparse(url)
+    if re.search(r"[\x00-\x20\x7f]", url):
+        return "webhook_url must not contain whitespace or control characters"
+    try:
+        parsed = urllib.parse.urlparse(url)
+        _ = parsed.port  # validate bracket/port syntax before delivery
+    except ValueError:
+        return "webhook_url is malformed"
+    if parsed.username is not None or parsed.password is not None:
+        return "webhook_url must not contain credentials"
     if parsed.scheme != "https":
         return "webhook_url must use https"
     host = parsed.hostname or ""
@@ -87,36 +97,52 @@ def validate_webhook_url(url: str) -> Optional[str]:
     return None
 
 
-def _host_resolves_safely(host: str) -> bool:
-    """True only if `host` resolves to at least one address and *every* resolved
+def _public_addresses(host: str) -> list[str]:
+    """Return approved addresses only if *every* resolved
     address is public. Resolution failure, or any private/loopback/link-local/
-    reserved address, returns False so the webhook is not sent.
+    reserved address, returns an empty list so the webhook is not sent.
 
     Resolving here — at send time — is what makes the guard rebinding-resistant:
     a name that passed validation can still be blocked if it now points inward.
     """
     if not host:
-        return False
+        return []
     # An IP literal never needs DNS; check it directly so an alternate textual
     # form that slipped past validate_webhook_url is still caught.
     try:
-        return not _is_blocked_ip(ipaddress.ip_address(host))
+        address = ipaddress.ip_address(host)
+        return [] if _is_blocked_ip(address) else [str(address)]
     except ValueError:
         pass  # not a literal — fall through to DNS resolution
     try:
         infos = socket.getaddrinfo(host, None)
     except socket.gaierror:
-        return False
+        return []
     addresses = {info[4][0] for info in infos}
     if not addresses:
-        return False
+        return []
     for address in addresses:
         try:
             if _is_blocked_ip(ipaddress.ip_address(address)):
-                return False
+                return []
         except ValueError:
-            return False  # unparseable resolved address — fail closed
-    return True
+            return []  # unparseable resolved address — fail closed
+    return sorted(addresses)
+
+
+def _post_to_address(url: str, address: str, message: str) -> None:
+    original = httpx.URL(url)
+    # Connect to the validated literal, with the original HTTP host and TLS
+    # identity. No second hostname lookup can rebind the request inward.
+    target = original.copy_with(host=address)
+    with httpx.Client(trust_env=False) as client:
+        response = client.post(
+            target, headers={"Host": original.netloc.decode("ascii")},
+            extensions={"sni_hostname": original.raw_host.decode("ascii")},
+            json={"content": message, "text": message},
+            timeout=_WEBHOOK_TIMEOUT, follow_redirects=False,
+        )
+        response.raise_for_status()
 
 
 def send_webhook(url: str, message: str) -> bool:
@@ -136,19 +162,16 @@ def send_webhook(url: str, message: str) -> bool:
     if error is not None:
         logger.warning("webhook not sent — rejected by validation: %s", error)
         return False
-    host = urllib.parse.urlparse(url).hostname or ""
-    if not _host_resolves_safely(host):
-        logger.warning("webhook not sent — host %r did not resolve to a public address", host)
-        return False
     try:
-        httpx.post(
-            url,
-            json={"content": message, "text": message},
-            timeout=_WEBHOOK_TIMEOUT,
-            follow_redirects=False,
-        )
+        host = urllib.parse.urlparse(url).hostname or ""
+        addresses = _public_addresses(host)
+        if not addresses:
+            logger.warning("webhook not sent — host %r did not resolve to a public address", host)
+            return False
+        _post_to_address(url, addresses[0], message)
         logger.debug("webhook delivered to %s", host)
         return True
     except Exception as exc:
-        logger.warning("webhook delivery to %s failed: %s", host, exc)
+        # HTTP errors may include the complete URL (and its webhook secret).
+        logger.warning("webhook delivery to %s failed: %s", host, type(exc).__name__)
         return False

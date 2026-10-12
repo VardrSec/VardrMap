@@ -1,3 +1,10 @@
+> Historical implementation plan: the dated baseline and unchecked items below
+> are not a current feature inventory. Organization tenancy, asset/evidence models,
+> reviewed test-case authoring, Gate execution integration, retest history and client
+> deliverables are implemented. See [current backlog](roadmap.md) and
+> [current domain model](domain-model.md). Signed contracts, process cancellation
+> and organization-bound runner credentials remain future work.
+
 # VardrMap — Implementation Roadmap
 
 Tied to the actual repository. Baseline recorded 2026-08-12 on `main` @ `793ad79`:
