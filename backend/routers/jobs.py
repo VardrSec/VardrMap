@@ -990,6 +990,16 @@ _VG_SEVERITIES = {"info", "low", "medium", "high", "critical"}
 _MAX_RESULT_BYTES = 512_000
 
 
+class IdentityPreflightResult(BaseModel):
+    identity_id: str = Field(min_length=1, max_length=200)
+    status: Literal["passed", "failed"]
+    reason: Literal[
+        "identity_verified", "credential_rejected", "identity_mismatch",
+        "unexpected_status", "execution_error",
+    ]
+    status_code: int = Field(ge=0, le=599, strict=True)
+
+
 class VardrGateUpload(BaseModel):
     """One `engine.Result` from VardrGate.
 
@@ -1003,6 +1013,7 @@ class VardrGateUpload(BaseModel):
     test_case_id: str = Field(default="", max_length=200)
     executions: list[dict] = Field(default_factory=list, max_length=100)
     findings: list[dict] = Field(default_factory=list, max_length=500)
+    preflight: list[IdentityPreflightResult] = Field(default_factory=list, max_length=100)
 
     @field_validator("findings", mode="before")
     @classmethod
@@ -1074,6 +1085,8 @@ def upload_job_result(
     # Preserve hashes of legacy receipts created before case_hash existed.
     if not body.case_hash:
         receipt_payload.pop("case_hash")
+    if not body.preflight:
+        receipt_payload.pop("preflight")
     canonical_payload = json.dumps(
         receipt_payload, sort_keys=True, separators=(",", ":"), default=str
     ).encode("utf-8")
@@ -1152,7 +1165,10 @@ def upload_job_result(
 
     verified = bool(spec and body.case_hash == assessments.case_hash(spec))
     job.assessment = {
-        **assessments.assess(spec, body.executions, created_items, case_verified=verified),
+        **assessments.assess(
+            spec, body.executions, created_items, case_verified=verified,
+            preflight=[p.model_dump() for p in body.preflight],
+        ),
         "case_id": queued_case or None,
         "case_ref": template_id or None,
     }
@@ -1160,7 +1176,10 @@ def upload_job_result(
         i["identity_id"]: i["expected_decision"] for i in job.assessment["identities"]
     } if verified else {}
     created_evidence = 0
-    for execution in body.executions:
+    records = [(e, False) for e in body.executions] + [
+        (p.model_dump(), True) for p in body.preflight
+    ]
+    for execution, is_preflight in records:
         if not isinstance(execution, dict):
             continue
         identity = redaction.redact_text(str(execution.get("identity_id") or "unknown"))
@@ -1178,6 +1197,11 @@ def upload_job_result(
             "duration_ms": execution.get("duration_ms"),
             "headers": execution.get("headers") or {},
         }
+        if is_preflight:
+            detail = {
+                "phase": "identity_preflight", "case_hash": body.case_hash or None,
+                "case_snapshot_verified": verified, **execution,
+            }
         if execution.get("error"):
             detail["error"] = execution.get("error")
             detail["error_kind"] = execution.get("error_kind")
@@ -1197,9 +1221,9 @@ def upload_job_result(
                 # The redacted body retains it; nullable metadata stays unknown.
                 identity_id=identity if len(identity) <= 200 else None,
                 observed_outcome=outcome,
-                expected_decision=decisions.get(identity, "unknown"),
+                expected_decision="unknown" if is_preflight else decisions.get(identity, "unknown"),
                 kind="tool_result",
-                title=f"vardrgate · {identity} → {execution.get('status_code', '?')}"[:200],
+                title=f"vardrgate · {'session preflight · ' if is_preflight else ''}{identity} → {execution.get('status_code', '?')}"[:200],
                 body=text,
                 content_hash=hashlib.sha256(text.encode("utf-8")).hexdigest(),
                 collector="vardrrunner",

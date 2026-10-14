@@ -104,6 +104,16 @@ class Fixture(BaseHTTPRequestHandler):
         )
         if len(state["requests"]) > REQUEST_CEILING:
             status, body = 503, {"error": "fixture_request_ceiling"}
+        elif path == "/session":
+            if state["mode"] == "expired-owner" and who == "owner":
+                status, body = 401, {"error": "expired_fixture_token"}
+            elif state["mode"] == "session-redirect":
+                status, body = 302, {"error": "login_required"}
+            elif state["mode"] == "session-html":
+                status, body = 200, "<html>Login, no authenticated principal</html>"
+            else:
+                principal = "wrong-principal" if state["mode"] == "session-mismatch" else who
+                status, body = 200, {"user": {"id": principal}, "session_secret": "do-not-retain-session-value"}
         elif state["mode"] == "rate-limited":
             status, body = 429, {"error": "rate_limited"}
         elif state["mode"] == "login-redirect":
@@ -788,6 +798,43 @@ try:
     check("Injection canary is transported literally; no injection coverage is claimed",
           all(parse_qs(urlsplit(x["path"]).query) == {"q": [canary], "page": ["2"]}
               for x in state["requests"][-5:]))
+    # Preflight checks precede every authorization request and retain only safe
+    # diagnostics. Failed session checks spend no authorization traffic.
+    for mode in ("fixed", "expired-owner", "session-mismatch", "session-html", "session-redirect"):
+        case = copy.deepcopy(spec)
+        case["id"] = "lab-preflight-" + mode
+        for identity in case["identities"]:
+            if identity["id"] != "anonymous":
+                identity["preflight"] = {"url": target + "/session", "expected_status": 200,
+                                          "json_fields": {"user.id": identity["id"]}}
+        state["mode"] = mode
+        mark = len(state["requests"])
+        stored = req("POST", base + "/test-cases/reviewed", {
+            "reviewed": True, "cases": [{"name": case["id"], "spec": case}],
+        }, expected=(201,))["test_cases"][0]["id"]
+        job = queue(stored)
+        run_worker(case["id"], allow=True)
+        result = outputs(job)[1]
+        requests = state["requests"][mark:]
+        a = job_row(job)["assessment"]
+        evidence = req("GET", base + f"/evidence?job_id={job}&limit=200")["evidence"]
+        if mode == "fixed":
+            check("Valid sessions are verified before authorization testing", len(requests) == 9
+                  and all(x["path"] == "/session" for x in requests[:4])
+                  and len(result["executions"]) == 5 and not result["findings"]
+                  and job_row(job)["status"] == "done" and a["preflight"]["status"] == "passed"
+                  and a["status"] == "conclusive")
+        else:
+            check(mode + " preflight stops authorization traffic and fails the job", len(requests) == 4
+                  and all(x["path"] == "/session" for x in requests)
+                  and result["executions"] == result["findings"] == []
+                  and job_row(job)["status"] == "failed" and a["status"] == "inconclusive"
+                  and a["preflight"]["status"] == "failed")
+        check(mode + " preflight retains bound diagnostics without response values",
+              len(evidence) == (9 if mode == "fixed" else 4)
+              and all(e["job_id"] == job and e["case_id"] == stored for e in evidence)
+              and "do-not-retain-session-value" not in json.dumps(evidence)
+              and "do-not-retain-session-value" not in json.dumps(result))
     check("Fixture request ceiling respected", len(state["requests"]) <= REQUEST_CEILING)
     check(
         "Fixture received loopback requests only",

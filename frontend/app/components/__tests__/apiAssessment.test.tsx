@@ -72,3 +72,12 @@ it("historical completion without an assessment stays unrecorded", () => {
   renderWithApp(<AssessmentBadge job={{ ...job, assessment: null }} />);
   expect(screen.getByText("Assessment: not recorded")).toBeVisible();
 });
+
+it("shows a failed session preflight separately from authorization outcomes", async () => {
+  const failed = { ...job, status: "failed" as const, assessment: { ...job.assessment!, preflight: { status: "failed" as const, unexpected: 0, identities: [{ identity_id: "OwnerA", status: "failed", reason: "credential_rejected", status_code: 401 }] } } };
+  renderWithApp(<GateAssessmentPanel engagementId="eng" job={failed} />, { routes: { [evidencePath]: { body: { evidence: [], total: 0 } } } });
+  expect(screen.getByText(/Identity preflight: failed/)).toBeVisible();
+  expect(screen.getByText("Session OwnerA: failed (credential rejected) · HTTP 401")).toBeVisible();
+  expect(screen.getByText(/Legitimate baseline: not established/)).toBeVisible();
+  await screen.findByText("No execution evidence recorded for this job.");
+});

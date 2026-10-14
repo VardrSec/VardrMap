@@ -54,6 +54,8 @@ export default function GateAssessmentPanel({ engagementId, job }: { engagementI
     {a && <><p>{a.evaluated} evaluated · {a.inconclusive} inconclusive · {a.missing} missing · {a.skipped} skipped · {a.unexpected} unexpected executions</p><p>Legitimate baseline: {a.baseline_valid ? "reported working" : "not established"}. Scanner findings remain candidates.</p>
       <p>Case: {a.case_ref ?? "unknown"} · {a.case_id ?? "unknown"}</p><p className="break-all text-xs">Case SHA-256: {a.case_hash ?? "not recorded"}</p>
       <p>Result matches claimed case snapshot: {a.case_snapshot_verified ? "reported hash matches" : "not confirmed"}.</p>
+      <p>Identity preflight: {a.preflight?.status.replaceAll("_", " ") ?? "not recorded"}. A session check does not establish authorization to the resource under test.</p>
+      {a.preflight?.identities.map(i => <p key={"preflight-" + i.identity_id}>Session {i.identity_id}: {i.status} ({i.reason.replaceAll("_", " ")}){i.status_code !== null ? ` · HTTP ${i.status_code}` : ""}</p>)}
       {a.identities.map(i => <p key={i.identity_id}>{i.identity_id}: expected {i.expected_decision}, observed {i.observed_outcome} · {i.state} ({i.reason.replaceAll("_", " ")})</p>)}
     </>}
     {error && <p role="alert" className="text-red-400">{error}</p>}

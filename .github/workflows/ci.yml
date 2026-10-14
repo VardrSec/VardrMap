@@ -73,12 +73,12 @@ jobs:
       - uses: actions/checkout@v7
         with:
           repository: VardrSec/VardrRunner
-          ref: 923cb08a40f23a6953eb5999293c393941aaef5d
+          ref: 06caaada060e1458d99ca750aff3c6981936d952
           path: .integration/runner
       - uses: actions/checkout@v7
         with:
           repository: VardrSec/VardrGate
-          ref: bb242589c084e8a40b7b2bcac49643c27372addf
+          ref: 9e4e9df5d497711a69d3070368ccbdb45527a4c5
           path: .integration/gate
       - uses: actions/setup-python@v7
         with:

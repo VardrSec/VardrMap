@@ -17,6 +17,7 @@ def assess(
     candidate_count: int,
     *,
     case_verified: bool = True,
+    preflight: list[dict] | None = None,
 ) -> dict:
     """Derive completeness against the spec captured at claim, never from findings count.
 
@@ -24,6 +25,7 @@ def assess(
     permission, business impact, response bodies or methodology coverage.
     """
     spec = spec or {}
+    session = assess_preflight(spec, preflight or [], case_verified)
     expected = defaultdict(list)
     for item in spec.get("expected_access", []):
         expected[item["identity_id"]].append(item["decision"])
@@ -86,6 +88,12 @@ def assess(
         for item in identities:
             if item["state"] == "evaluated":
                 item.update(state="inconclusive", reason="case_snapshot_unverified")
+    if session["status"] not in {"passed", "not_configured"}:
+        for item in identities:
+            if item["state"] != "skipped":
+                item.update(
+                    state="inconclusive", reason="identity_preflight_not_established"
+                )
     baseline = case_verified and any(
         i["expected_decision"] == "allow" and i["state"] == "evaluated"
         for i in identities
@@ -134,4 +142,65 @@ def assess(
         "reasons": sorted(set(reasons)),
         "case_hash": case_hash(spec) if spec else None,
         "case_snapshot_verified": bool(spec) and case_verified,
+        "preflight": session,
     }
+
+
+def assess_preflight(spec: dict, rows: list[dict], verified: bool) -> dict:
+    declared = {
+        i["id"]: i["preflight"]
+        for i in spec.get("identities", [])
+        if i.get("preflight") is not None
+    }
+    reported = defaultdict(list)
+    for row in rows:
+        reported[str(row.get("identity_id") or "")].append(row)
+    identities = []
+    for identity, config in declared.items():
+        items = reported[identity]
+        status, reason, code = "missing", "preflight_missing", None
+        if len(items) == 1:
+            row = items[0]
+            code = row.get("status_code")
+            status, reason = "inconclusive", "preflight_inconsistent"
+            if (
+                row.get("status") == "passed"
+                and row.get("reason") == "identity_verified"
+                and type(code) is int
+                and code == config["expected_status"]
+            ):
+                status, reason = "passed", "identity_verified"
+            elif row.get("status") == "failed" and row.get("reason") in {
+                "credential_rejected",
+                "identity_mismatch",
+                "unexpected_status",
+                "execution_error",
+            }:
+                status, reason = "failed", row["reason"]
+        elif items:
+            status, reason = "inconclusive", "duplicate_preflight"
+        if not verified:
+            status, reason = "inconclusive", "case_snapshot_unverified"
+        identities.append(
+            {
+                "identity_id": identity,
+                "status": status,
+                "reason": reason,
+                "status_code": code,
+            }
+        )
+    unexpected = sum(
+        len(items) for identity, items in reported.items() if identity not in declared
+    )
+    status = (
+        "not_configured"
+        if not declared
+        else "passed"
+        if all(i["status"] == "passed" for i in identities) and not unexpected
+        else "failed"
+        if any(i["status"] == "failed" for i in identities)
+        else "inconclusive"
+    )
+    if unexpected:
+        status = "inconclusive"
+    return {"status": status, "identities": identities, "unexpected": unexpected}

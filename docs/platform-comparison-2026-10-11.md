@@ -162,3 +162,31 @@ skipped) at 95.80% coverage. PostgreSQL migration checks include the additive
 pass. Local acceptance uses Runner 923cb08 and Gate f756df1; CI pins Runner 923cb08
 and the equivalent merged Gate baseline bb242589. These are tested feature
 branches, not a statement that deployment or release occurred.
+
+## Platform update: identity/session preflight (2026-10-12)
+
+The assessment/provenance/playbook baseline above has since merged. The new
+identity preflight feature checks a reviewed same-origin session endpoint before
+Gate sends resource authorization requests. It matches explicit principal
+metadata, preserves safe job/case/identity diagnostics and aborts the case if any
+declared check fails. Missing checks cannot establish a conclusive assessment.
+Runner requires a supporting Gate binary and preserves failure through recovery.
+
+The local real Map → Runner → Gate runs pass 104 checks each on SQLite and freshly
+migrated PostgreSQL over TLS, with 95 loopback requests per run under the existing
+100-request ceiling. The five Chromium journeys and all three product suites pass.
+Valid sessions proceed; rejected sessions,
+wrong principals, login HTML and redirects stop resource traffic and preserve
+inconclusive failed jobs. Additional Gate tests cover tenant mismatch, rate limits,
+server errors, setup-generated tokens and scalar matching. This is controlled
+validation, not a comparative detection benchmark or hosted OAuth verification.
+
+ars0n's fetched upstream remains 8b3c20561f50998316f98d9c8a1a9ad7d080495f
+(2026-10-10), inspected again without executing scanners. Its session-keeper
+schema and login configuration support operator-configured session maintenance;
+Vardr's new feature verifies a session at one moment and does not refresh it.
+ars0n still leads in session maintenance and breadth of guidance. Vardr now better
+distinguishes identity setup failures from resource authorization outcomes while
+retaining its engagement/report provenance. Reviewed login/refresh, dedicated
+hosted staging, engagement traffic budgets and running-process cancellation remain
+the next substantial gaps. No finding-rate advantage is claimed.
