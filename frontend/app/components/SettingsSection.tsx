@@ -7,29 +7,15 @@ import { Panel, Input, PrimaryButton, DangerButton, SectionHeader } from "./ui";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 const VARDRUNNER_INSTALL_COMMAND = "pipx install vardrrunner";
+const VARDRUNNER_UPGRADE_COMMAND = "pipx upgrade vardrrunner";
+const VARDRGATE_RELEASES_URL = "https://github.com/VardrSec/VardrGate/releases/latest";
 
 const SEVERITIES = ["info", "low", "medium", "high", "critical"] as const;
 
-export function runnerSetupScript(token: string, generatedAt = new Date()): string {
-  return [
-    "# VardrRunner one-time setup",
-    `# Generated ${generatedAt.toISOString()}`,
-    "",
-    "# Install the isolated VardrRunner CLI from PyPI when it is not already available",
-    "if (-not (Get-Command vardrrunner -ErrorAction SilentlyContinue)) {",
-    "  if (-not (Get-Command pipx -ErrorAction SilentlyContinue)) {",
-    '    Write-Error "pipx is required. Install it from https://pipx.pypa.io/stable/installation/, restart PowerShell, and run this script again."',
-    "    exit 1",
-    "  }",
-    `  ${VARDRUNNER_INSTALL_COMMAND}`,
-    "  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }",
-    "}",
-    "",
-    `vardrrunner login vardrmap --url ${API_URL} --key ${token}`,
-    "vardrrunner daemon install",
-    "vardrrunner daemon start",
-    "vardrrunner doctor",
-  ].join("\r\n");
+// The key is deliberately not part of the command: `init` reads it from a hidden prompt, so it
+// never lands in shell history, and stores it in the OS keychain.
+export function runnerInitCommand(apiUrl: string = API_URL): string {
+  return `vardrrunner init --url ${apiUrl} --install-service`;
 }
 
 export default function SettingsSection() {
@@ -153,17 +139,6 @@ export default function SettingsSection() {
     setMessage("Copied.");
   }
 
-  function downloadPs1(token: string) {
-    const script = runnerSetupScript(token);
-    const blob = new Blob([script], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "vardrrunner-connect.ps1";
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
   return (
     <div className="space-y-7">
       <SectionHeader title="Settings" description="Manage personal API keys for external tools like Burp Suite." />
@@ -192,73 +167,49 @@ export default function SettingsSection() {
 
       <Panel title="Connect Runner">
         <p className="mb-4 text-xs text-[#52525b]">
-          Install VardrRunner from PyPI, then generate a runner-scoped key and connect this machine.
+          Install VardrRunner, generate a runner key, then run one setup command on the machine that will run your scans.
         </p>
 
         <div className="mb-4">
           <div className="mb-1 font-mono text-[10px] uppercase tracking-widest text-[#52525b]">1 · Install from PyPI</div>
-          <div className="flex items-center gap-2">
-            <code className="flex-1 overflow-x-auto rounded-md border border-[#2e2e2e] bg-[#161616] px-3 py-2 font-mono text-xs text-[#f1f5f9] whitespace-nowrap">
-              {VARDRUNNER_INSTALL_COMMAND}
-            </code>
-            <button onClick={() => copyCmd(VARDRUNNER_INSTALL_COMMAND)} className="flex-shrink-0 rounded-md border border-[#2e2e2e] px-3 py-2 text-xs text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#94a3b8]">
-              Copy
-            </button>
-          </div>
-          <p className="mt-1.5 text-[10px] text-[#3a3a3a]">Requires Python and pipx. For a one-shot command without installation, use <code>uvx vardrrunner …</code>.</p>
+          <CopyLine text={VARDRUNNER_INSTALL_COMMAND} onCopy={copyCmd} />
+          <p className="mt-1.5 text-[10px] text-[#3a3a3a]">
+            Requires Python 3.10+ and pipx. Already installed? Run <code>{VARDRUNNER_UPGRADE_COMMAND}</code> to get the current version.
+          </p>
         </div>
 
         {!runnerToken ? (
           <PrimaryButton onClick={generateRunnerKey} label="Generate Runner Key" />
         ) : (
           <div className="space-y-4">
-            {/* Commands */}
-            {[
-              {
-                id: "login",
-                label: "2 · Authenticate",
-                cmd: `vardrrunner login vardrmap --url ${API_URL} --key ${runnerToken}`,
-              },
-              {
-                id: "install",
-                label: "3 · Install as startup task (runs on login)",
-                cmd: "vardrrunner daemon install",
-              },
-              {
-                id: "daemon",
-                label: "4 · Start now (without rebooting)",
-                cmd: "vardrrunner daemon start",
-              },
-              {
-                id: "doctor",
-                label: "5 · Verify tools",
-                cmd: "vardrrunner doctor",
-              },
-            ].map(({ id, label, cmd }) => (
-              <div key={id}>
-                <div className="mb-1 font-mono text-[10px] uppercase tracking-widest text-[#52525b]">{label}</div>
-                <div className="flex items-center gap-2">
-                  <code className="flex-1 overflow-x-auto rounded-md border border-[#2e2e2e] bg-[#161616] px-3 py-2 font-mono text-xs text-[#f1f5f9] whitespace-nowrap">
-                    {cmd}
-                  </code>
-                  <button
-                    onClick={() => copyCmd(cmd)}
-                    className="flex-shrink-0 rounded-md border border-[#2e2e2e] px-3 py-2 text-xs text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#94a3b8]"
-                  >
-                    Copy
-                  </button>
-                </div>
-              </div>
-            ))}
+            <div>
+              <div className="mb-1 font-mono text-[10px] uppercase tracking-widest text-[#52525b]">2 · Copy your runner key (shown once)</div>
+              <CopyLine text={runnerToken} onCopy={copyCmd} />
+            </div>
+
+            <div>
+              <div className="mb-1 font-mono text-[10px] uppercase tracking-widest text-[#52525b]">3 · Set up this machine</div>
+              <CopyLine text={runnerInitCommand()} onCopy={copyCmd} />
+              <p className="mt-1.5 text-[10px] text-[#3a3a3a]">
+                Paste the key when prompted; it is stored in your OS keychain, not in shell history. Setup names the runner,
+                offers to install the pinned scan tools, starts the background service and finishes with a health check.
+                Rerunning it is safe.
+              </p>
+            </div>
+
+            <div>
+              <div className="mb-1 font-mono text-[10px] uppercase tracking-widest text-[#52525b]">4 · Optional: VardrGate for API assessments</div>
+              <p className="text-[10px] text-[#52525b]">
+                <code>vardrgate_api_test</code> jobs need the <code>vardrgate</code> binary on your PATH. Download it from the{" "}
+                <a href={VARDRGATE_RELEASES_URL} target="_blank" rel="noopener noreferrer" className="text-[#94a3b8] underline">
+                  VardrGate releases
+                </a>{" "}
+                and check it against <code>SHA256SUMS</code>.
+              </p>
+            </div>
 
             {/* Actions row */}
             <div className="flex flex-wrap items-center gap-3 pt-1">
-              <button
-                onClick={() => downloadPs1(runnerToken)}
-                className="rounded-md border border-[#2e2e2e] px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider text-[#94a3b8] transition hover:border-[#3a3a3a] hover:text-[#f1f5f9]"
-              >
-                Download .ps1
-              </button>
               <button
                 onClick={verifyRunner}
                 disabled={verifyState === "checking"}
@@ -280,6 +231,7 @@ export default function SettingsSection() {
 
             <p className="text-[10px] text-[#3a3a3a]">
               This key is runner-scoped (jobs, imports, heartbeat only). Revoke it from Active Keys below if you need to rotate.
+              If the runner shows offline, run <code>vardrrunner doctor</code> on that machine.
             </p>
           </div>
         )}
@@ -390,6 +342,22 @@ export default function SettingsSection() {
           </div>
         )}
       </Panel>
+    </div>
+  );
+}
+
+function CopyLine({ text, onCopy }: { text: string; onCopy: (text: string) => void }) {
+  return (
+    <div className="flex items-center gap-2">
+      <code className="flex-1 overflow-x-auto rounded-md border border-[#2e2e2e] bg-[#161616] px-3 py-2 font-mono text-xs text-[#f1f5f9] whitespace-nowrap">
+        {text}
+      </code>
+      <button
+        onClick={() => onCopy(text)}
+        className="flex-shrink-0 rounded-md border border-[#2e2e2e] px-3 py-2 text-xs text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#94a3b8]"
+      >
+        Copy
+      </button>
     </div>
   );
 }

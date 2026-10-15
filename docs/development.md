@@ -244,14 +244,34 @@ source-development, and tool-prerequisite instructions are documented there — 
 
 > **Naming:** the CLI command is `vardrrunner`. API keys use the `vmap_` prefix — these are different things.
 
-To connect a runner to this VardrMap instance after installation:
+To connect a runner to this VardrMap instance after installation (this is the same flow
+**Settings → Connect Runner** shows in the app):
 
-1. Create a `vmap_` API key in **Settings → API Keys** (use a `runner`-scoped key for a VPS).
-2. On the runner, run `vardrrunner login vardrmap` and enter your VardrMap URL + the key.
-   Config is saved to `~/.vardrmap/config.json` (plaintext key — restrict with
-   `chmod 600` on Unix).
-3. Run `vardrrunner heartbeat`. The Bridge in the Jobs section shows the runner online
-   (green) for 5 minutes after the last heartbeat.
+1. In **Settings → Connect Runner**, click **Generate Runner Key** and copy the `vmap_` key.
+   It is shown once and is runner-scoped (jobs, imports and heartbeat only).
+2. On the runner machine, run:
+
+   ```bash
+   vardrrunner init --url <your VardrMap API URL> --install-service
+   ```
+
+   Paste the key at the hidden prompt. `init` stores it in the OS keychain (it refuses
+   to write a plaintext key unless you pass `--allow-plaintext-credentials`), sets the
+   runner name, offers to install the pinned scan tools, installs and starts the per-user
+   background service (systemd user unit, launchd agent or Windows scheduled task), and
+   finishes with `doctor`. It is safe to rerun. Avoid `--key` on the command line: it
+   puts the key in shell history.
+3. Optional, for `vardrgate_api_test` jobs: put the `vardrgate` binary on `PATH` from the
+   [VardrGate releases](https://github.com/VardrSec/VardrGate/releases/latest) and check it
+   against `SHA256SUMS`. `vardrrunner tools install --all` does not include it.
+4. Click **Verify connection** in Settings. The runner shows online for 5 minutes after its
+   last heartbeat. If it does not, run `vardrrunner doctor` on the runner machine.
+
+On a headless server with no keychain, set `VARDRMAP_API_KEY` instead, and see the
+VardrRunner [CLI reference](https://github.com/VardrSec/VardrRunner/blob/main/docs/cli.md)
+for `init --production` and the Linux `--env-file` service option. A runner set up with the
+old `vardrrunner login` flow may still hold a plaintext key in `~/.vardrmap/config.json`;
+`vardrrunner credentials` shows where the key is read from.
 
 The runner polls `GET /jobs/pending`, claims jobs atomically, executes tools locally
 (scan traffic always originates from your machine, never Railway), and posts results and
