@@ -50,6 +50,7 @@ class EngagementCreate(BaseModel):
     engagement_status: EngagementStatus = "active"
     starts_at: Optional[str] = Field(default=None, max_length=40)
     ends_at: Optional[str] = Field(default=None, max_length=40)
+    max_request_rate: Optional[int] = Field(default=None, ge=1, le=1000)
 
     @field_validator("name", "platform", mode="before")
     @classmethod
@@ -76,6 +77,7 @@ class EngagementUpdate(BaseModel):
     engagement_status: Optional[EngagementStatus] = None
     starts_at: Optional[str] = Field(default=None, max_length=40)
     ends_at: Optional[str] = Field(default=None, max_length=40)
+    max_request_rate: Optional[int] = Field(default=None, ge=1, le=1000)
 
     @field_validator("name", "platform", mode="before")
     @classmethod
@@ -102,6 +104,18 @@ class ScopeItemCreate(BaseModel):
     @field_validator("notes", mode="before")
     @classmethod
     def sanitize_notes(cls, v): return strip_html(v)
+
+
+class ScopeImportRequest(BaseModel):
+    """Bulk scope import. ``csv`` is the raw text of a program's scope export.
+
+    ``commit`` false (the default) parses and returns a preview without writing;
+    true inserts the new in/out-of-scope items. ``format`` selects the column
+    preset — only HackerOne's scope export today.
+    """
+    csv: str = Field(min_length=1, max_length=400_000)
+    format: Literal["hackerone"] = "hackerone"
+    commit: bool = False
 
 
 class ManualTestCreate(BaseModel):

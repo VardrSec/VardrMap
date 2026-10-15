@@ -64,16 +64,16 @@ _VALID_SOURCES = {"scope", "recon"}
 
 # Per-tool allowed config keys. Keys not in this set are rejected.
 _TOOL_CONFIG_KEYS: dict[str, set[str]] = {
-    "httpx":     {"status_code", "limit"},
-    "nuclei":    {"severity", "templates"},
+    "httpx":     {"status_code", "limit", "rate", "headers"},
+    "nuclei":    {"severity", "templates", "rate", "headers"},
     "subfinder": {"recursive", "sources"},
     "nmap":      {"top_ports", "timing"},
     "dnsx":      {"limit", "timeout"},
     "naabu":     {"top_ports", "limit", "timeout"},
-    "katana":    {"limit", "status_code", "depth", "js_crawl", "timeout"},
+    "katana":    {"limit", "status_code", "depth", "js_crawl", "timeout", "rate", "headers"},
     "gau":       {"subs", "providers", "timeout"},
-    "dalfox":    {"limit", "status_code", "delay", "worker", "mining", "timeout"},
-    "ffuf":      {"wordlist", "extensions", "match_codes", "rate", "limit", "timeout"},
+    "dalfox":    {"limit", "status_code", "delay", "worker", "mining", "timeout", "headers"},
+    "ffuf":      {"wordlist", "extensions", "match_codes", "rate", "limit", "timeout", "headers"},
     # Only the reference. The spec is stored in authorization_test_cases and
     # inlined at hand-off, which keeps this config flat like every other tool's.
     _VARDRGATE:  {"test_case_id", "timeout"},
@@ -118,7 +118,84 @@ _INT_CONFIG_BOUNDS: dict[tuple[str, str], tuple[int, int]] = {
     ("ffuf", "rate"):        (1, 1_000),
     ("ffuf", "limit"):       (1, 1_000_000),
     ("ffuf", "timeout"):     (1, 86_400),
+    # Requests per second for the tools that send live traffic. Mirrors
+    # VardrRunner's RATE_MAX; an engagement may set a lower ceiling (below).
+    ("httpx", "rate"):       (1, 1_000),
+    ("nuclei", "rate"):      (1, 1_000),
+    ("katana", "rate"):      (1, 1_000),
 }
+
+# Custom request headers a job may add (e.g. a program's identification header).
+# Mirrors VardrRunner's _parse_headers so a value refused here can never reach a
+# tool: a name must be an HTTP token and a value may carry no control character,
+# which closes off header- and request-line injection through a job config.
+_HEADER_NAME = re.compile(r"^[A-Za-z0-9!#$%&'*+.^_`|~-]{1,100}$")
+_MAX_HEADERS = 20
+_MAX_HEADER_LEN = 2000
+_HEADER_TOOLS = {"httpx", "nuclei", "katana", "ffuf", "dalfox"}
+
+# Tools whose request rate an engagement-wide ceiling binds, with the per-tool
+# default a tool uses when no rate is set. The ceiling never raises a tool above
+# its own default — it only lowers it — so a job is capped without being sped up.
+_RATE_TOOL_DEFAULTS = {"httpx": 150, "nuclei": 150, "katana": 150, "ffuf": 50}
+
+
+def _validate_headers(config: dict) -> None:
+    raw = config.get("headers")
+    if raw in (None, "", (), []):
+        return
+    if isinstance(raw, dict):
+        pairs = [(str(k), str(v)) for k, v in raw.items()]
+    elif isinstance(raw, list):
+        pairs = []
+        for item in raw:
+            if isinstance(item, str):
+                name, sep, value = item.partition(":")
+                if not sep:
+                    raise HTTPException(status_code=400, detail=f"header {item!r} must be 'Name: value'")
+                pairs.append((name.strip(), value.strip()))
+            else:
+                raise HTTPException(status_code=400, detail=f"invalid header entry {item!r}")
+    else:
+        raise HTTPException(status_code=400, detail="config.headers must be an object or list")
+    if len(pairs) > _MAX_HEADERS:
+        raise HTTPException(status_code=400, detail=f"too many headers; the limit is {_MAX_HEADERS}")
+    seen: set[str] = set()
+    for name, value in pairs:
+        if not _HEADER_NAME.match(name):
+            raise HTTPException(status_code=400, detail=f"invalid header name {name!r}")
+        if any(ord(c) < 32 or ord(c) == 127 for c in value):
+            raise HTTPException(status_code=400, detail=f"header {name!r} has an invalid value")
+        if len(name) + len(value) + 2 > _MAX_HEADER_LEN:
+            raise HTTPException(status_code=400, detail=f"header {name!r} is too long")
+        key = name.lower()
+        if key in seen:
+            raise HTTPException(status_code=400, detail=f"duplicate header {name!r}")
+        seen.add(key)
+
+
+def _enforce_rate_ceiling(ceiling: int | None, tool_type: str, config: dict) -> None:
+    """Cap a job's request rate to the engagement ceiling, mutating ``config``.
+
+    An explicit rate above the ceiling is refused; a job with no rate for a
+    traffic-sending tool has the ceiling applied (never above the tool's default),
+    so the ceiling binds even when the operator did not set a rate.
+    """
+    if ceiling is None or tool_type not in _RATE_TOOL_DEFAULTS:
+        return
+    raw = config.get("rate")
+    if raw not in (None, ""):
+        try:
+            requested = int(raw)
+        except (TypeError, ValueError):
+            return  # the int-bounds check reports the bad value
+        if requested > ceiling:
+            raise HTTPException(
+                status_code=400,
+                detail=f"{tool_type} config.rate {requested} exceeds this engagement's ceiling of {ceiling}",
+            )
+        return
+    config["rate"] = min(_RATE_TOOL_DEFAULTS[tool_type], ceiling)
 
 
 def _validate_test_case_ref(program_id: str, config: dict, db: Session) -> None:
@@ -270,6 +347,8 @@ def _validate_job_config(tool_type: str, config: dict) -> None:
             )
     if tool_type == "ffuf":
         _validate_ffuf_config(config)
+    if tool_type in _HEADER_TOOLS:
+        _validate_headers(config)
     for key, (low, high) in (
         (k, bounds) for (t, k), bounds in _INT_CONFIG_BOUNDS.items() if t == tool_type
     ):
@@ -340,10 +419,12 @@ def create_job(
         raise HTTPException(status_code=400, detail=f"tool_type must be one of {sorted(_VALID_TOOLS)}")
     if body.target_source not in _VALID_SOURCES:
         raise HTTPException(status_code=400, detail="target_source must be scope or recon")
-    if body.config:
-        _validate_job_config(body.tool_type, body.config)
+    config = dict(body.config or {})
+    if config:
+        _validate_job_config(body.tool_type, config)
+    _enforce_rate_ceiling(engagement.max_request_rate, body.tool_type, config)
     if body.tool_type == _VARDRGATE:
-        _validate_test_case_ref(program_id, body.config or {}, db)
+        _validate_test_case_ref(program_id, config, db)
     if body.depends_on:
         _validate_dependency(body.depends_on, program_id, current_user["github_id"], db)
 
@@ -355,7 +436,7 @@ def create_job(
         db,
         engagement,
         capability=body.tool_type,
-        targets=_resolve_targets(program_id, body.target_source, body.config or {}, db),
+        targets=_resolve_targets(program_id, body.target_source, config, db),
     )
 
     job = ScanJob(
@@ -363,7 +444,7 @@ def create_job(
         owner_github_id=current_user["github_id"],
         tool_type=body.tool_type,
         target_source=body.target_source,
-        config=body.config or {},
+        config=config,
         depends_on=body.depends_on,
     )
     db.add(job)
@@ -438,25 +519,29 @@ def create_pipeline(
     """
     engagement = get_engagement_or_404(program_id, current_user, db)
     require_member_write(engagement, current_user, db)
+    stage_configs: list[dict] = []
     for i, stage in enumerate(body.stages):
         if stage.tool_type not in _VALID_TOOLS:
             raise HTTPException(status_code=400, detail=f"stage {i}: tool_type must be one of {sorted(_VALID_TOOLS)}")
         if stage.target_source not in _VALID_SOURCES:
             raise HTTPException(status_code=400, detail=f"stage {i}: target_source must be scope or recon")
-        if stage.config:
-            _validate_job_config(stage.tool_type, stage.config)
+        config = dict(stage.config or {})
+        if config:
+            _validate_job_config(stage.tool_type, config)
+        _enforce_rate_ceiling(engagement.max_request_rate, stage.tool_type, config)
         if stage.tool_type == _VARDRGATE:
-            _validate_test_case_ref(program_id, stage.config or {}, db)
+            _validate_test_case_ref(program_id, config, db)
+        stage_configs.append(config)
 
     created: list[ScanJob] = []
     prev_id: Optional[str] = None
-    for stage in body.stages:
+    for stage, config in zip(body.stages, stage_configs):
         job = ScanJob(
             program_id=program_id,
             owner_github_id=current_user["github_id"],
             tool_type=stage.tool_type,
             target_source=stage.target_source,
-            config=stage.config or {},
+            config=config,
             depends_on=prev_id,
         )
         db.add(job)
