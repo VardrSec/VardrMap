@@ -52,12 +52,12 @@ Bug bounty work is one `engagement_type` among four (`bug_bounty`, `pentest`, `r
 - Job Board + Terminal — three board views (Stream, Pipeline, Table); selecting a job opens a terminal that polls live lifecycle events (started → running → done/failed) every 3 s
 
 **VardrRunner** — local CLI companion ([VardrSec/VardrRunner](https://github.com/VardrSec/VardrRunner), its own repo):
-- Install the isolated CLI from PyPI with `pipx install vardrrunner` (`uvx vardrrunner …` for one-shot use)
-- Authenticate with `vardrrunner login vardrmap` using a `vmap_` API key
-- `vardrrunner status` — verify config, API connectivity, and local tool availability
-- `vardrrunner heartbeat` — report hostname, OS, version, and per-tool availability to VardrMap; auto-sent at start of `jobs run`
+- Install the isolated CLI from PyPI with `pipx install vardrrunner` (`pipx upgrade vardrrunner` to update)
+- Set up a machine with `vardrrunner init --url <api-url> --install-service`: it prompts for a runner-scoped `vmap_` key (stored in the OS keychain), names the runner, starts the background service and runs `doctor`
+- `vardrrunner tools install --all` — install, update or repair the pinned scan tools; safe to rerun
+- `vardrrunner doctor` — check config, API connectivity, service and local tool availability; heartbeats report hostname, OS, version and per-tool status to VardrMap
 - Run the ten supported recon/scanner tools locally, or execute queued VardrGate authorization cases; results uploaded automatically and lifecycle events posted at each stage
-- Queue scan jobs from the UI; VardrRunner polls and executes them with `vardrrunner jobs run`
+- Queue scan jobs from the UI; the runner service picks them up, or run them once with `vardrrunner jobs run`
 - Wildcard scope entries (`*.example.com`) handled via subfinder enumeration
 
 ---

@@ -4,6 +4,17 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Rewrite **Settings → Connect Runner** as six plain steps, each command with a Copy
+  button: install (or upgrade) VardrRunner, get a runner key (shown once), connect the
+  machine with `vardrrunner init --url <api> --install-service --no-install-tools`,
+  install or check tools with `vardrrunner tools install --all`, verify the connection
+  (with `vardrrunner doctor` if offline), and start on an engagement with `scope` and
+  `run httpx --scope`, pre-filled with the open engagement's ID. This fixes the old steps:
+  `vardrrunner daemon install` does not exist in current VardrRunner, `daemon start` runs
+  in the foreground, and the key appeared on the command line and in a downloadable `.ps1`
+  (now removed). The key is never part of a command; `init` prompts for it. The Jobs hints,
+  `docs/development.md` and the README match.
+
 - Add reviewed, optional identity/session preflight for Gate cases. Match a
   known-good session response before authorization requests; failed checks stop
   the case, retain bound diagnostics and remain inconclusive. Show session results

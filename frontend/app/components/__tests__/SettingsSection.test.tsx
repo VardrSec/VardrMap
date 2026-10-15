@@ -8,7 +8,7 @@ jest.mock("react-markdown", () => ({ __esModule: true, default: ({ children }: {
 jest.mock("remark-gfm", () => ({ __esModule: true, default: () => {} }));
 
 import { renderWithApp } from "../../../test-utils/renderWithApp";
-import SettingsSection, { runnerSetupScript } from "../SettingsSection";
+import SettingsSection, { engagementCommands, runnerInitCommand } from "../SettingsSection";
 
 const BASE_ROUTES = {
   "GET /auth/apikeys": { body: { keys: [] } },
@@ -16,18 +16,57 @@ const BASE_ROUTES = {
 };
 
 describe("SettingsSection workflows", () => {
-  it("uses the published PyPI package for runner onboarding", () => {
-    const script = runnerSetupScript("vmap_test", new Date("2026-08-20T00:00:00Z"));
-    expect(script).toContain("pipx install vardrrunner");
-    expect(script).toContain("vardrrunner login vardrmap");
-    expect(script).not.toContain("Documents\\code\\VardrRunner");
-    expect(script).not.toContain("Activate.ps1");
+  it("sets up the runner with the guided init command and no key on the command line", () => {
+    const cmd = runnerInitCommand("https://api.example.test");
+    expect(cmd).toBe("vardrrunner init --url https://api.example.test --install-service --no-install-tools");
+    expect(cmd).not.toContain("--key");
+  });
+
+  it("fills engagement commands with the open engagement, or lists engagements first", () => {
+    expect(engagementCommands("e-123")).toEqual([
+      "vardrrunner scope e-123",
+      "vardrrunner run httpx --engagement e-123 --scope",
+    ]);
+    expect(engagementCommands(null)[0]).toBe("vardrrunner engagements");
+  });
+
+  it("shows every setup step with a copy button before a key exists", async () => {
+    renderWithApp(<SettingsSection />, {
+      routes: BASE_ROUTES,
+      overrides: { selectedEngagement: { id: "e-9", name: "Acme API" } as never },
+    });
+    for (const cmd of [
+      "pipx install vardrrunner",
+      "vardrrunner tools install --all",
+      "vardrrunner doctor",
+      "vardrrunner scope e-9",
+    ]) {
+      expect(await screen.findByText(cmd)).toBeInTheDocument();
+    }
+    expect(screen.getByText(/Ready for Acme API/)).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Copy" }).length).toBeGreaterThanOrEqual(7);
+  });
+
+  it("shows the key once and keeps it out of every setup command", async () => {
+    renderWithApp(<SettingsSection />, {
+      routes: { ...BASE_ROUTES, "POST /auth/apikeys": { body: { id: "r1", token: "vmap_runner_secret", label: "" } } },
+    });
+    await userEvent.click(screen.getByRole("button", { name: "Generate Runner Key" }));
+    expect(await screen.findByText("vmap_runner_secret")).toBeInTheDocument();
+    const commands = Array.from(document.querySelectorAll("code")).map((el) => el.textContent ?? "");
+    const init = commands.find((text) => text.startsWith("vardrrunner init"));
+    expect(init).toContain("--install-service");
+    for (const text of commands.filter((t) => t.startsWith("vardrrunner"))) {
+      expect(text).not.toContain("vmap_runner_secret");
+    }
+    expect(document.body.textContent).not.toContain("daemon install");
+    expect(screen.queryByRole("button", { name: "Download .ps1" })).not.toBeInTheDocument();
   });
 
   it("shows the PyPI install command before a runner key is generated", async () => {
     renderWithApp(<SettingsSection />, { routes: BASE_ROUTES });
     expect(await screen.findByText("pipx install vardrrunner")).toBeInTheDocument();
-    expect(screen.getByText(/uvx vardrrunner/)).toBeInTheDocument();
+    expect(screen.getByText("pipx upgrade vardrrunner")).toBeInTheDocument();
   });
 
   it("loads and renders existing API keys on mount", async () => {

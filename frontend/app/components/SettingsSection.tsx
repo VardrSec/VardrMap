@@ -1,39 +1,33 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { ApiKey } from "../types";
 import { useAppContext } from "../context/AppContext";
 import { Panel, Input, PrimaryButton, DangerButton, SectionHeader } from "./ui";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 const VARDRUNNER_INSTALL_COMMAND = "pipx install vardrrunner";
+const VARDRUNNER_UPGRADE_COMMAND = "pipx upgrade vardrrunner";
+const VARDRGATE_RELEASES_URL = "https://github.com/VardrSec/VardrGate/releases/latest";
 
 const SEVERITIES = ["info", "low", "medium", "high", "critical"] as const;
 
-export function runnerSetupScript(token: string, generatedAt = new Date()): string {
-  return [
-    "# VardrRunner one-time setup",
-    `# Generated ${generatedAt.toISOString()}`,
-    "",
-    "# Install the isolated VardrRunner CLI from PyPI when it is not already available",
-    "if (-not (Get-Command vardrrunner -ErrorAction SilentlyContinue)) {",
-    "  if (-not (Get-Command pipx -ErrorAction SilentlyContinue)) {",
-    '    Write-Error "pipx is required. Install it from https://pipx.pypa.io/stable/installation/, restart PowerShell, and run this script again."',
-    "    exit 1",
-    "  }",
-    `  ${VARDRUNNER_INSTALL_COMMAND}`,
-    "  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }",
-    "}",
-    "",
-    `vardrrunner login vardrmap --url ${API_URL} --key ${token}`,
-    "vardrrunner daemon install",
-    "vardrrunner daemon start",
-    "vardrrunner doctor",
-  ].join("\r\n");
+const VARDRUNNER_TOOLS_COMMAND = "vardrrunner tools install --all";
+
+// The key is deliberately not part of the command: `init` reads it from a hidden prompt, so it
+// never lands in shell history, and stores it in the OS keychain. Tools are their own step.
+export function runnerInitCommand(apiUrl: string = API_URL): string {
+  return `vardrrunner init --url ${apiUrl} --install-service --no-install-tools`;
+}
+
+export function engagementCommands(engagementId: string | null): string[] {
+  const id = engagementId ?? "<engagement-id>";
+  const commands = [`vardrrunner scope ${id}`, `vardrrunner run httpx --engagement ${id} --scope`];
+  return engagementId ? commands : ["vardrrunner engagements", ...commands];
 }
 
 export default function SettingsSection() {
-  const { authFetch, setMessage } = useAppContext();
+  const { authFetch, setMessage, selectedEngagement } = useAppContext();
   const [keys,       setKeys]       = useState<ApiKey[]>([]);
   const [label,      setLabel]      = useState("");
   const [keyScope,   setKeyScope]   = useState<"full" | "runner">("full");
@@ -153,17 +147,6 @@ export default function SettingsSection() {
     setMessage("Copied.");
   }
 
-  function downloadPs1(token: string) {
-    const script = runnerSetupScript(token);
-    const blob = new Blob([script], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "vardrrunner-connect.ps1";
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
   return (
     <div className="space-y-7">
       <SectionHeader title="Settings" description="Manage personal API keys for external tools like Burp Suite." />
@@ -191,98 +174,77 @@ export default function SettingsSection() {
       )}
 
       <Panel title="Connect Runner">
-        <p className="mb-4 text-xs text-[#52525b]">
-          Install VardrRunner from PyPI, then generate a runner-scoped key and connect this machine.
+        <p className="mb-5 text-xs text-[#52525b]">
+          Run these on the computer that will run your scans. Each step has a Copy button.
         </p>
 
-        <div className="mb-4">
-          <div className="mb-1 font-mono text-[10px] uppercase tracking-widest text-[#52525b]">1 · Install from PyPI</div>
-          <div className="flex items-center gap-2">
-            <code className="flex-1 overflow-x-auto rounded-md border border-[#2e2e2e] bg-[#161616] px-3 py-2 font-mono text-xs text-[#f1f5f9] whitespace-nowrap">
-              {VARDRUNNER_INSTALL_COMMAND}
-            </code>
-            <button onClick={() => copyCmd(VARDRUNNER_INSTALL_COMMAND)} className="flex-shrink-0 rounded-md border border-[#2e2e2e] px-3 py-2 text-xs text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#94a3b8]">
-              Copy
-            </button>
-          </div>
-          <p className="mt-1.5 text-[10px] text-[#3a3a3a]">Requires Python and pipx. For a one-shot command without installation, use <code>uvx vardrrunner …</code>.</p>
-        </div>
+        <div className="space-y-5">
+          <Step n={1} title="Install VardrRunner">
+            <CopyLine text={VARDRUNNER_INSTALL_COMMAND} onCopy={copyCmd} />
+            <Hint>Needs Python 3.10+ and pipx. Already installed? Update it instead:</Hint>
+            <CopyLine text={VARDRUNNER_UPGRADE_COMMAND} onCopy={copyCmd} />
+          </Step>
 
-        {!runnerToken ? (
-          <PrimaryButton onClick={generateRunnerKey} label="Generate Runner Key" />
-        ) : (
-          <div className="space-y-4">
-            {/* Commands */}
-            {[
-              {
-                id: "login",
-                label: "2 · Authenticate",
-                cmd: `vardrrunner login vardrmap --url ${API_URL} --key ${runnerToken}`,
-              },
-              {
-                id: "install",
-                label: "3 · Install as startup task (runs on login)",
-                cmd: "vardrrunner daemon install",
-              },
-              {
-                id: "daemon",
-                label: "4 · Start now (without rebooting)",
-                cmd: "vardrrunner daemon start",
-              },
-              {
-                id: "doctor",
-                label: "5 · Verify tools",
-                cmd: "vardrrunner doctor",
-              },
-            ].map(({ id, label, cmd }) => (
-              <div key={id}>
-                <div className="mb-1 font-mono text-[10px] uppercase tracking-widest text-[#52525b]">{label}</div>
-                <div className="flex items-center gap-2">
-                  <code className="flex-1 overflow-x-auto rounded-md border border-[#2e2e2e] bg-[#161616] px-3 py-2 font-mono text-xs text-[#f1f5f9] whitespace-nowrap">
-                    {cmd}
-                  </code>
-                  <button
-                    onClick={() => copyCmd(cmd)}
-                    className="flex-shrink-0 rounded-md border border-[#2e2e2e] px-3 py-2 text-xs text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#94a3b8]"
-                  >
-                    Copy
+          <Step n={2} title="Get your runner key">
+            {!runnerToken ? (
+              <PrimaryButton onClick={generateRunnerKey} label="Generate Runner Key" />
+            ) : (
+              <>
+                <CopyLine text={runnerToken} onCopy={copyCmd} />
+                <Hint>
+                  Shown once. You will paste it in the next step.{" "}
+                  <button onClick={generateRunnerKey} className="underline transition hover:text-[#94a3b8]">
+                    Generate a new one
                   </button>
-                </div>
-              </div>
+                </Hint>
+              </>
+            )}
+          </Step>
+
+          <Step n={3} title="Connect this computer">
+            <CopyLine text={runnerInitCommand()} onCopy={copyCmd} />
+            <Hint>Paste your key when it asks. The runner then starts in the background and starts again whenever you log in.</Hint>
+          </Step>
+
+          <Step n={4} title="Install or check your tools">
+            <CopyLine text={VARDRUNNER_TOOLS_COMMAND} onCopy={copyCmd} />
+            <Hint>
+              Safe to run any time: installs missing tools, updates old ones, repairs broken ones and skips the ones that are
+              fine. It also tells you if nmap or VardrGate is missing. VardrGate is only needed for API assessments:{" "}
+              <a href={VARDRGATE_RELEASES_URL} target="_blank" rel="noopener noreferrer" className="underline hover:text-[#94a3b8]">
+                download it here
+              </a>.
+            </Hint>
+          </Step>
+
+          <Step n={5} title="Check it's connected">
+            <button
+              onClick={verifyRunner}
+              disabled={verifyState === "checking"}
+              className="rounded-md border border-[#2e2e2e] px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider transition"
+              style={{
+                borderColor: verifyState === "online" ? "#a6e3a180" : verifyState === "offline" ? "#f8717180" : "#2e2e2e",
+                color: verifyState === "online" ? "#a6e3a1" : verifyState === "offline" ? "#f87171" : "#94a3b8",
+              }}
+            >
+              {verifyState === "checking" ? "checking…" : verifyState === "online" ? "online ✓" : verifyState === "offline" ? "offline ✗" : "Verify connection"}
+            </button>
+            <Hint>Showing offline? This tells you what is wrong and how to fix it:</Hint>
+            <CopyLine text="vardrrunner doctor" onCopy={copyCmd} />
+          </Step>
+
+          <Step n={6} title="Start on an engagement">
+            <Hint>
+              {selectedEngagement
+                ? `Ready for ${selectedEngagement.name}. Check its scope, then see which in-scope hosts are live:`
+                : "List your engagements to get an ID (or open one here to fill it in), check its scope, then see which in-scope hosts are live:"}
+            </Hint>
+            {engagementCommands(selectedEngagement?.id ?? null).map((cmd) => (
+              <CopyLine key={cmd} text={cmd} onCopy={copyCmd} />
             ))}
-
-            {/* Actions row */}
-            <div className="flex flex-wrap items-center gap-3 pt-1">
-              <button
-                onClick={() => downloadPs1(runnerToken)}
-                className="rounded-md border border-[#2e2e2e] px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider text-[#94a3b8] transition hover:border-[#3a3a3a] hover:text-[#f1f5f9]"
-              >
-                Download .ps1
-              </button>
-              <button
-                onClick={verifyRunner}
-                disabled={verifyState === "checking"}
-                className="rounded-md border border-[#2e2e2e] px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider transition"
-                style={{
-                  borderColor: verifyState === "online" ? "#a6e3a180" : verifyState === "offline" ? "#f8717180" : "#2e2e2e",
-                  color: verifyState === "online" ? "#a6e3a1" : verifyState === "offline" ? "#f87171" : "#94a3b8",
-                }}
-              >
-                {verifyState === "checking" ? "checking…" : verifyState === "online" ? "online ✓" : verifyState === "offline" ? "offline ✗" : "Verify connection"}
-              </button>
-              <button
-                onClick={generateRunnerKey}
-                className="ml-auto text-[10px] font-mono text-[#52525b] transition hover:text-[#94a3b8]"
-              >
-                regenerate key
-              </button>
-            </div>
-
-            <p className="text-[10px] text-[#3a3a3a]">
-              This key is runner-scoped (jobs, imports, heartbeat only). Revoke it from Active Keys below if you need to rotate.
-            </p>
-          </div>
-        )}
+            <Hint>After that, queue scans from the Jobs tab. The runner picks them up on its own.</Hint>
+          </Step>
+        </div>
       </Panel>
 
       <Panel title="Generate API Key">
@@ -392,4 +354,35 @@ export default function SettingsSection() {
       </Panel>
     </div>
   );
+}
+
+function CopyLine({ text, onCopy }: { text: string; onCopy: (text: string) => void }) {
+  return (
+    <div className="flex items-center gap-2">
+      <code className="flex-1 overflow-x-auto rounded-md border border-[#2e2e2e] bg-[#161616] px-3 py-2 font-mono text-xs text-[#f1f5f9] whitespace-nowrap">
+        {text}
+      </code>
+      <button
+        onClick={() => onCopy(text)}
+        className="flex-shrink-0 rounded-md border border-[#2e2e2e] px-3 py-2 text-xs text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#94a3b8]"
+      >
+        Copy
+      </button>
+    </div>
+  );
+}
+
+function Step({ n, title, children }: { n: number; title: string; children: ReactNode }) {
+  return (
+    <div>
+      <div className="mb-1.5 font-mono text-[10px] uppercase tracking-widest text-[#52525b]">
+        {n} · {title}
+      </div>
+      <div className="space-y-1.5">{children}</div>
+    </div>
+  );
+}
+
+function Hint({ children }: { children: ReactNode }) {
+  return <p className="text-[10px] text-[#52525b]">{children}</p>;
 }
