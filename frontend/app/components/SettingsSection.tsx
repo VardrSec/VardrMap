@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { ApiKey } from "../types";
 import { useAppContext } from "../context/AppContext";
 import { Panel, Input, PrimaryButton, DangerButton, SectionHeader } from "./ui";
@@ -12,14 +12,22 @@ const VARDRGATE_RELEASES_URL = "https://github.com/VardrSec/VardrGate/releases/l
 
 const SEVERITIES = ["info", "low", "medium", "high", "critical"] as const;
 
+const VARDRUNNER_TOOLS_COMMAND = "vardrrunner tools install --all";
+
 // The key is deliberately not part of the command: `init` reads it from a hidden prompt, so it
-// never lands in shell history, and stores it in the OS keychain.
+// never lands in shell history, and stores it in the OS keychain. Tools are their own step.
 export function runnerInitCommand(apiUrl: string = API_URL): string {
-  return `vardrrunner init --url ${apiUrl} --install-service`;
+  return `vardrrunner init --url ${apiUrl} --install-service --no-install-tools`;
+}
+
+export function engagementCommands(engagementId: string | null): string[] {
+  const id = engagementId ?? "<engagement-id>";
+  const commands = [`vardrrunner scope ${id}`, `vardrrunner run httpx --engagement ${id} --scope`];
+  return engagementId ? commands : ["vardrrunner engagements", ...commands];
 }
 
 export default function SettingsSection() {
-  const { authFetch, setMessage } = useAppContext();
+  const { authFetch, setMessage, selectedEngagement } = useAppContext();
   const [keys,       setKeys]       = useState<ApiKey[]>([]);
   const [label,      setLabel]      = useState("");
   const [keyScope,   setKeyScope]   = useState<"full" | "runner">("full");
@@ -166,75 +174,77 @@ export default function SettingsSection() {
       )}
 
       <Panel title="Connect Runner">
-        <p className="mb-4 text-xs text-[#52525b]">
-          Install VardrRunner, generate a runner key, then run one setup command on the machine that will run your scans.
+        <p className="mb-5 text-xs text-[#52525b]">
+          Run these on the computer that will run your scans. Each step has a Copy button.
         </p>
 
-        <div className="mb-4">
-          <div className="mb-1 font-mono text-[10px] uppercase tracking-widest text-[#52525b]">1 · Install from PyPI</div>
-          <CopyLine text={VARDRUNNER_INSTALL_COMMAND} onCopy={copyCmd} />
-          <p className="mt-1.5 text-[10px] text-[#3a3a3a]">
-            Requires Python 3.10+ and pipx. Already installed? Run <code>{VARDRUNNER_UPGRADE_COMMAND}</code> to get the current version.
-          </p>
+        <div className="space-y-5">
+          <Step n={1} title="Install VardrRunner">
+            <CopyLine text={VARDRUNNER_INSTALL_COMMAND} onCopy={copyCmd} />
+            <Hint>Needs Python 3.10+ and pipx. Already installed? Update it instead:</Hint>
+            <CopyLine text={VARDRUNNER_UPGRADE_COMMAND} onCopy={copyCmd} />
+          </Step>
+
+          <Step n={2} title="Get your runner key">
+            {!runnerToken ? (
+              <PrimaryButton onClick={generateRunnerKey} label="Generate Runner Key" />
+            ) : (
+              <>
+                <CopyLine text={runnerToken} onCopy={copyCmd} />
+                <Hint>
+                  Shown once. You will paste it in the next step.{" "}
+                  <button onClick={generateRunnerKey} className="underline transition hover:text-[#94a3b8]">
+                    Generate a new one
+                  </button>
+                </Hint>
+              </>
+            )}
+          </Step>
+
+          <Step n={3} title="Connect this computer">
+            <CopyLine text={runnerInitCommand()} onCopy={copyCmd} />
+            <Hint>Paste your key when it asks. The runner then starts in the background and starts again whenever you log in.</Hint>
+          </Step>
+
+          <Step n={4} title="Install or check your tools">
+            <CopyLine text={VARDRUNNER_TOOLS_COMMAND} onCopy={copyCmd} />
+            <Hint>
+              Safe to run any time: installs missing tools, updates old ones, repairs broken ones and skips the ones that are
+              fine. It also tells you if nmap or VardrGate is missing. VardrGate is only needed for API assessments:{" "}
+              <a href={VARDRGATE_RELEASES_URL} target="_blank" rel="noopener noreferrer" className="underline hover:text-[#94a3b8]">
+                download it here
+              </a>.
+            </Hint>
+          </Step>
+
+          <Step n={5} title="Check it's connected">
+            <button
+              onClick={verifyRunner}
+              disabled={verifyState === "checking"}
+              className="rounded-md border border-[#2e2e2e] px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider transition"
+              style={{
+                borderColor: verifyState === "online" ? "#a6e3a180" : verifyState === "offline" ? "#f8717180" : "#2e2e2e",
+                color: verifyState === "online" ? "#a6e3a1" : verifyState === "offline" ? "#f87171" : "#94a3b8",
+              }}
+            >
+              {verifyState === "checking" ? "checking…" : verifyState === "online" ? "online ✓" : verifyState === "offline" ? "offline ✗" : "Verify connection"}
+            </button>
+            <Hint>Showing offline? This tells you what is wrong and how to fix it:</Hint>
+            <CopyLine text="vardrrunner doctor" onCopy={copyCmd} />
+          </Step>
+
+          <Step n={6} title="Start on an engagement">
+            <Hint>
+              {selectedEngagement
+                ? `Ready for ${selectedEngagement.name}. Check its scope, then see which in-scope hosts are live:`
+                : "List your engagements to get an ID (or open one here to fill it in), check its scope, then see which in-scope hosts are live:"}
+            </Hint>
+            {engagementCommands(selectedEngagement?.id ?? null).map((cmd) => (
+              <CopyLine key={cmd} text={cmd} onCopy={copyCmd} />
+            ))}
+            <Hint>After that, queue scans from the Jobs tab. The runner picks them up on its own.</Hint>
+          </Step>
         </div>
-
-        {!runnerToken ? (
-          <PrimaryButton onClick={generateRunnerKey} label="Generate Runner Key" />
-        ) : (
-          <div className="space-y-4">
-            <div>
-              <div className="mb-1 font-mono text-[10px] uppercase tracking-widest text-[#52525b]">2 · Copy your runner key (shown once)</div>
-              <CopyLine text={runnerToken} onCopy={copyCmd} />
-            </div>
-
-            <div>
-              <div className="mb-1 font-mono text-[10px] uppercase tracking-widest text-[#52525b]">3 · Set up this machine</div>
-              <CopyLine text={runnerInitCommand()} onCopy={copyCmd} />
-              <p className="mt-1.5 text-[10px] text-[#3a3a3a]">
-                Paste the key when prompted; it is stored in your OS keychain, not in shell history. Setup names the runner,
-                offers to install the pinned scan tools, starts the background service and finishes with a health check.
-                Rerunning it is safe.
-              </p>
-            </div>
-
-            <div>
-              <div className="mb-1 font-mono text-[10px] uppercase tracking-widest text-[#52525b]">4 · Optional: VardrGate for API assessments</div>
-              <p className="text-[10px] text-[#52525b]">
-                <code>vardrgate_api_test</code> jobs need the <code>vardrgate</code> binary on your PATH. Download it from the{" "}
-                <a href={VARDRGATE_RELEASES_URL} target="_blank" rel="noopener noreferrer" className="text-[#94a3b8] underline">
-                  VardrGate releases
-                </a>{" "}
-                and check it against <code>SHA256SUMS</code>.
-              </p>
-            </div>
-
-            {/* Actions row */}
-            <div className="flex flex-wrap items-center gap-3 pt-1">
-              <button
-                onClick={verifyRunner}
-                disabled={verifyState === "checking"}
-                className="rounded-md border border-[#2e2e2e] px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider transition"
-                style={{
-                  borderColor: verifyState === "online" ? "#a6e3a180" : verifyState === "offline" ? "#f8717180" : "#2e2e2e",
-                  color: verifyState === "online" ? "#a6e3a1" : verifyState === "offline" ? "#f87171" : "#94a3b8",
-                }}
-              >
-                {verifyState === "checking" ? "checking…" : verifyState === "online" ? "online ✓" : verifyState === "offline" ? "offline ✗" : "Verify connection"}
-              </button>
-              <button
-                onClick={generateRunnerKey}
-                className="ml-auto text-[10px] font-mono text-[#52525b] transition hover:text-[#94a3b8]"
-              >
-                regenerate key
-              </button>
-            </div>
-
-            <p className="text-[10px] text-[#3a3a3a]">
-              This key is runner-scoped (jobs, imports, heartbeat only). Revoke it from Active Keys below if you need to rotate.
-              If the runner shows offline, run <code>vardrrunner doctor</code> on that machine.
-            </p>
-          </div>
-        )}
       </Panel>
 
       <Panel title="Generate API Key">
@@ -360,4 +370,19 @@ function CopyLine({ text, onCopy }: { text: string; onCopy: (text: string) => vo
       </button>
     </div>
   );
+}
+
+function Step({ n, title, children }: { n: number; title: string; children: ReactNode }) {
+  return (
+    <div>
+      <div className="mb-1.5 font-mono text-[10px] uppercase tracking-widest text-[#52525b]">
+        {n} · {title}
+      </div>
+      <div className="space-y-1.5">{children}</div>
+    </div>
+  );
+}
+
+function Hint({ children }: { children: ReactNode }) {
+  return <p className="text-[10px] text-[#52525b]">{children}</p>;
 }

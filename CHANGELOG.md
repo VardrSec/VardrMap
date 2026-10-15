@@ -4,14 +4,16 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
-- Fix the Connect Runner setup steps in Settings. They told users to run
-  `vardrrunner daemon install`, which does not exist in current VardrRunner, and
-  `daemon start`, which runs in the foreground. The panel now shows the runner key
-  once and a single `vardrrunner init --url <api> --install-service` command that
-  prompts for the key, so it never appears in a command or shell history. The
-  `.ps1` download, which wrote the live key to a file, is removed. Adds the optional
-  VardrGate step for API assessment jobs and updates the Jobs hints,
-  `docs/development.md` and the README to match.
+- Rewrite **Settings → Connect Runner** as six plain steps, each command with a Copy
+  button: install (or upgrade) VardrRunner, get a runner key (shown once), connect the
+  machine with `vardrrunner init --url <api> --install-service --no-install-tools`,
+  install or check tools with `vardrrunner tools install --all`, verify the connection
+  (with `vardrrunner doctor` if offline), and start on an engagement with `scope` and
+  `run httpx --scope`, pre-filled with the open engagement's ID. This fixes the old steps:
+  `vardrrunner daemon install` does not exist in current VardrRunner, `daemon start` runs
+  in the foreground, and the key appeared on the command line and in a downloadable `.ps1`
+  (now removed). The key is never part of a command; `init` prompts for it. The Jobs hints,
+  `docs/development.md` and the README match.
 
 - Add reviewed, optional identity/session preflight for Gate cases. Match a
   known-good session response before authorization requests; failed checks stop

@@ -244,28 +244,39 @@ source-development, and tool-prerequisite instructions are documented there — 
 
 > **Naming:** the CLI command is `vardrrunner`. API keys use the `vmap_` prefix — these are different things.
 
-To connect a runner to this VardrMap instance after installation (this is the same flow
-**Settings → Connect Runner** shows in the app):
+To connect a runner to this VardrMap instance after installation (the same steps
+**Settings → Connect Runner** shows in the app, each with a Copy button):
 
-1. In **Settings → Connect Runner**, click **Generate Runner Key** and copy the `vmap_` key.
-   It is shown once and is runner-scoped (jobs, imports and heartbeat only).
-2. On the runner machine, run:
+1. **Get a runner key.** In **Settings → Connect Runner**, click **Generate Runner Key** and
+   copy the `vmap_` key. It is shown once and is runner-scoped (jobs, imports and heartbeat only).
+2. **Connect the machine.**
 
    ```bash
-   vardrrunner init --url <your VardrMap API URL> --install-service
+   vardrrunner init --url <your VardrMap API URL> --install-service --no-install-tools
    ```
 
-   Paste the key at the hidden prompt. `init` stores it in the OS keychain (it refuses
-   to write a plaintext key unless you pass `--allow-plaintext-credentials`), sets the
-   runner name, offers to install the pinned scan tools, installs and starts the per-user
-   background service (systemd user unit, launchd agent or Windows scheduled task), and
-   finishes with `doctor`. It is safe to rerun. Avoid `--key` on the command line: it
-   puts the key in shell history.
-3. Optional, for `vardrgate_api_test` jobs: put the `vardrgate` binary on `PATH` from the
-   [VardrGate releases](https://github.com/VardrSec/VardrGate/releases/latest) and check it
-   against `SHA256SUMS`. `vardrrunner tools install --all` does not include it.
-4. Click **Verify connection** in Settings. The runner shows online for 5 minutes after its
-   last heartbeat. If it does not, run `vardrrunner doctor` on the runner machine.
+   Paste the key at the hidden prompt. `init` stores it in the OS keychain (it refuses to
+   write a plaintext key unless you pass `--allow-plaintext-credentials`), sets the runner
+   name, installs and starts the per-user background service (systemd user unit, launchd
+   agent or Windows scheduled task) and finishes with `doctor`. It is safe to rerun. Avoid
+   `--key` on the command line: it puts the key in shell history.
+3. **Install or check the tools.**
+
+   ```bash
+   vardrrunner tools install --all
+   ```
+
+   Safe to rerun: it installs missing tools, updates outdated ones, repairs missing or
+   changed binaries, skips verified ones, and reports whether nmap and vardrgate (which it
+   cannot install) are on `PATH`. VardrGate is only needed for `vardrgate_api_test` jobs; get
+   it from the [VardrGate releases](https://github.com/VardrSec/VardrGate/releases/latest)
+   and check it against `SHA256SUMS`. The per-tool report needs a VardrRunner release newer
+   than 0.47.0; 0.47.0 installs the same way with less detail.
+4. **Check the connection.** Click **Verify connection** in Settings. The runner shows
+   online for 5 minutes after its last heartbeat. If it does not, run `vardrrunner doctor`.
+5. **Start on an engagement.** `vardrrunner engagements` lists IDs, `vardrrunner scope <id>`
+   shows what is in scope, and `vardrrunner run httpx --engagement <id> --scope` checks which
+   in-scope hosts are live. After that, queue scans from the Jobs tab; the service runs them.
 
 On a headless server with no keychain, set `VARDRMAP_API_KEY` instead, and see the
 VardrRunner [CLI reference](https://github.com/VardrSec/VardrRunner/blob/main/docs/cli.md)

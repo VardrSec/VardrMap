@@ -8,7 +8,7 @@ jest.mock("react-markdown", () => ({ __esModule: true, default: ({ children }: {
 jest.mock("remark-gfm", () => ({ __esModule: true, default: () => {} }));
 
 import { renderWithApp } from "../../../test-utils/renderWithApp";
-import SettingsSection, { runnerInitCommand } from "../SettingsSection";
+import SettingsSection, { engagementCommands, runnerInitCommand } from "../SettingsSection";
 
 const BASE_ROUTES = {
   "GET /auth/apikeys": { body: { keys: [] } },
@@ -18,8 +18,33 @@ const BASE_ROUTES = {
 describe("SettingsSection workflows", () => {
   it("sets up the runner with the guided init command and no key on the command line", () => {
     const cmd = runnerInitCommand("https://api.example.test");
-    expect(cmd).toBe("vardrrunner init --url https://api.example.test --install-service");
+    expect(cmd).toBe("vardrrunner init --url https://api.example.test --install-service --no-install-tools");
     expect(cmd).not.toContain("--key");
+  });
+
+  it("fills engagement commands with the open engagement, or lists engagements first", () => {
+    expect(engagementCommands("e-123")).toEqual([
+      "vardrrunner scope e-123",
+      "vardrrunner run httpx --engagement e-123 --scope",
+    ]);
+    expect(engagementCommands(null)[0]).toBe("vardrrunner engagements");
+  });
+
+  it("shows every setup step with a copy button before a key exists", async () => {
+    renderWithApp(<SettingsSection />, {
+      routes: BASE_ROUTES,
+      overrides: { selectedEngagement: { id: "e-9", name: "Acme API" } as never },
+    });
+    for (const cmd of [
+      "pipx install vardrrunner",
+      "vardrrunner tools install --all",
+      "vardrrunner doctor",
+      "vardrrunner scope e-9",
+    ]) {
+      expect(await screen.findByText(cmd)).toBeInTheDocument();
+    }
+    expect(screen.getByText(/Ready for Acme API/)).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Copy" }).length).toBeGreaterThanOrEqual(7);
   });
 
   it("shows the key once and keeps it out of every setup command", async () => {

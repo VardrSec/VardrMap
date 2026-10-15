@@ -53,7 +53,8 @@ Bug bounty work is one `engagement_type` among four (`bug_bounty`, `pentest`, `r
 
 **VardrRunner** — local CLI companion ([VardrSec/VardrRunner](https://github.com/VardrSec/VardrRunner), its own repo):
 - Install the isolated CLI from PyPI with `pipx install vardrrunner` (`pipx upgrade vardrrunner` to update)
-- Set up a machine with `vardrrunner init --url <api-url> --install-service`: it prompts for a runner-scoped `vmap_` key (stored in the OS keychain), names the runner, offers to install pinned scan tools, starts the background service and runs `doctor`
+- Set up a machine with `vardrrunner init --url <api-url> --install-service`: it prompts for a runner-scoped `vmap_` key (stored in the OS keychain), names the runner, starts the background service and runs `doctor`
+- `vardrrunner tools install --all` — install, update or repair the pinned scan tools; safe to rerun
 - `vardrrunner doctor` — check config, API connectivity, service and local tool availability; heartbeats report hostname, OS, version and per-tool status to VardrMap
 - Run the ten supported recon/scanner tools locally, or execute queued VardrGate authorization cases; results uploaded automatically and lifecycle events posted at each stage
 - Queue scan jobs from the UI; the runner service picks them up, or run them once with `vardrrunner jobs run`
