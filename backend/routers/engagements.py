@@ -119,6 +119,7 @@ def create_engagement(
         engagement_status=payload.engagement_status,
         starts_at=parse_iso_datetime(payload.starts_at, "starts_at"),
         ends_at=parse_iso_datetime(payload.ends_at, "ends_at"),
+        max_request_rate=payload.max_request_rate,
     )
     db.add(engagement)
     db.flush()

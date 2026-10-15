@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from db import get_db
 from deps import get_current_user, get_engagement_or_404, log_action, require_member_write
 from models import ScheduledScan
-from routers.jobs import _validate_job_config, _VALID_SOURCES, _VALID_TOOLS, SCHEDULE_INTERVALS as INTERVALS
+from routers.jobs import _enforce_rate_ceiling, _validate_job_config, _VALID_SOURCES, _VALID_TOOLS, SCHEDULE_INTERVALS as INTERVALS
 
 router = APIRouter(tags=["schedules"])
 
@@ -82,15 +82,17 @@ def create_schedule(
         raise HTTPException(status_code=400, detail="target_source must be scope or recon")
     if body.interval not in INTERVALS:
         raise HTTPException(status_code=400, detail=f"interval must be one of {sorted(INTERVALS)}")
-    if body.config:
-        _validate_job_config(body.tool_type, body.config)
+    config = dict(body.config or {})
+    if config:
+        _validate_job_config(body.tool_type, config)
+    _enforce_rate_ceiling(engagement.max_request_rate, body.tool_type, config)
 
     schedule = ScheduledScan(
         program_id=program_id,
         owner_github_id=engagement.owner_github_id,
         tool_type=body.tool_type,
         target_source=body.target_source,
-        config=body.config or {},
+        config=config,
         interval=body.interval,
         # Due immediately — the first job materializes on the runner's next poll
         next_run_at=datetime.now(timezone.utc),

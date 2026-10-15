@@ -1,4 +1,4 @@
-export type ScopeItem = { id: string; value: string; kind: string; notes: string };
+export type ScopeItem = { id: string; value: string; kind: string; notes: string; max_severity?: string };
 export type ImportRecord = { id: string; tool_type: string; filename: string; imported_count: number };
 export type ReconItem = {
   id: string; source: string; url?: string; path?: string; host?: string;
@@ -67,6 +67,8 @@ export type Engagement = {
    */
   stop_work_at?: string;
   stop_work_reason?: string;
+  /** Max requests/second a scan job may send; null means no ceiling. */
+  max_request_rate?: number | null;
   scope: { in: ScopeItem[]; out: ScopeItem[] };
   imports: ImportRecord[];
   recon_count: number;

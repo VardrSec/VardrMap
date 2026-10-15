@@ -192,6 +192,10 @@ class Engagement(Base):
     # that must work when everything else is misconfigured.
     stop_work_at = Column(DateTime, nullable=True)
     stop_work_reason = Column(String(500), default="")
+    # Most requests per second a scan job for this engagement may send. NULL means
+    # no ceiling. When set, the job API caps a job's rate for the tools that send
+    # live traffic (httpx/nuclei/katana/ffuf) so a program's rate limit is honored.
+    max_request_rate = Column(Integer, nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     owner = relationship("User", back_populates="engagements")
@@ -261,6 +265,9 @@ class ScopeItem(Base):
     value = Column(String(500), nullable=False)
     kind = Column(String(20), default="domain")
     notes = Column(Text, default="")
+    # Advisory per-asset severity cap a program publishes (HackerOne max_severity).
+    # "" when none; one of info/low/medium/high/critical otherwise.
+    max_severity = Column(String(20), default="")
     created_at = Column(DateTime, nullable=True, default=lambda: datetime.now(timezone.utc))
 
     engagement = relationship("Engagement", back_populates="scope_items")

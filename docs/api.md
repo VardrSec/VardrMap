@@ -133,7 +133,7 @@ Create a new engagement.
   "safe_harbor_notes": "No physical testing"
 }
 ```
-Only `name` is required. All other fields default to empty string.
+Only `name` is required. All other fields default to empty string. `max_request_rate` (optional, 1–1000) is a per-engagement ceiling on scan-job request rate; when set, the job API caps a job's `rate` for the traffic-sending tools to it, and `null` means no ceiling.
 
 **Response:** full engagement object
 
@@ -362,6 +362,32 @@ Remove a scope item. `scope_type` must be `in` or `out`.
 ```json
 { "message": "Scope item deleted" }
 ```
+
+### `POST /engagements/{program_id}/scope/import`
+Import many scope items from a program's scope CSV, instead of adding them one at a time.
+
+**Request body**
+```json
+{ "csv": "identifier,asset_type,...\nacme.com,URL,...", "format": "hackerone", "commit": false }
+```
+- `csv` — the raw text of the export (HackerOne scope CSV; it must have an `identifier` column).
+- `format` — `hackerone` (the only preset today).
+- `commit` — `false` (default) returns a preview and writes nothing; `true` inserts the new items.
+
+Each row maps to a scope item: `asset_type` picks the `kind` (URL by shape, `WILDCARD`→domain, `API`→api, `CIDR`→cidr, the app-id types→mobile; the original type is kept in the note), `eligible_for_submission: false` makes it out-of-scope, and `max_severity` becomes the item's advisory severity cap. Rows whose identifier is empty are ignored; rows with invalid characters or an over-long identifier are reported under `skipped`. Nothing is ever deleted, so re-importing an updated export only adds what is new.
+
+**Response**
+```json
+{
+  "format": "hackerone", "committed": true, "created": 5,
+  "summary": { "in": 4, "out": 1, "duplicates": 2, "skipped": 1, "total_rows": 8 },
+  "new_items": [ { "value": "acme.com", "kind": "domain", "scope_type": "in", "max_severity": "critical", "notes": "HackerOne URL" } ],
+  "duplicates": [],
+  "skipped": [ { "line": 7, "identifier": "...", "reason": "invalid characters" } ]
+}
+```
+
+- `400` — the CSV has no `identifier` column, or exceeds the row limit.
 
 ---
 
@@ -881,19 +907,23 @@ Queue a new scan job.
 
   | Tool | Config keys |
   |---|---|
-  | `httpx` | `status_code`, `limit` |
-  | `nuclei` | `severity`, `templates` |
+  | `httpx` | `status_code`, `limit`, `rate` (1–1000, requests/sec), `headers` |
+  | `nuclei` | `severity`, `templates`, `rate` (1–1000, requests/sec), `headers` |
   | `subfinder` | `recursive`, `sources` |
   | `nmap` | `top_ports` (1–65535), `timing` (0–4) |
   | `dnsx` | `limit` (1–1000000), `timeout` (1–86400 s) |
   | `naabu` | `top_ports` (1–65535), `limit` (1–1000000), `timeout` (1–86400 s) |
-  | `katana` | `depth` (1–10), `js_crawl` (`true`/`false`), `limit` (1–1000000), `status_code`, `timeout` (1–86400 s) |
+  | `katana` | `depth` (1–10), `js_crawl` (`true`/`false`), `limit` (1–1000000), `status_code`, `timeout` (1–86400 s), `rate` (1–1000, requests/sec), `headers` |
   | `gau` | `subs` (`true`/`false`), `providers` (any of `wayback`, `commoncrawl`, `otx`, `urlscan`; comma string or list), `timeout` (1–86400 s) |
-  | `ffuf` | `wordlist` (a **name**, see below), `extensions` (`.php,.bak`; comma string or list, a bare `php` gains its dot), `match_codes` (three-digit statuses, or `all`), `rate` (1–1000, requests/sec **per target**), `limit` (1–1000000), `timeout` (1–86400 s) |
-  | `dalfox` | `limit` (1–1000000), `status_code`, `worker` (1–100, concurrency), `delay` (0–10000 ms between requests), `mining` (`true`/`false`, discover parameters), `timeout` (1–86400 s) |
+  | `ffuf` | `wordlist` (a **name**, see below), `extensions` (`.php,.bak`; comma string or list, a bare `php` gains its dot), `match_codes` (three-digit statuses, or `all`), `rate` (1–1000, requests/sec **per target**), `limit` (1–1000000), `timeout` (1–86400 s), `headers` |
+  | `dalfox` | `limit` (1–1000000), `status_code`, `worker` (1–100, concurrency), `delay` (0–10000 ms between requests), `mining` (`true`/`false`, discover parameters), `timeout` (1–86400 s), `headers` |
   | `vardrgate_api_test` | `test_case_id` (required), `timeout` |
 
   Integer bounds mirror the ones VardrRunner enforces, so an out-of-range value is refused at queue time rather than failing on the operator's machine after the job is claimed.
+
+  **`rate` caps requests per second** for the tools that send live traffic to a target. Omitting it keeps the tool's own default. When the engagement sets `max_request_rate`, an explicit `rate` above it is refused and a job with no `rate` has the ceiling applied (never above the tool's default), so the ceiling binds either way. `ffuf` keeps its separate always-on rate cap.
+
+  **`headers` adds custom request headers** — the identification header some programs ask researchers to send — as an object `{"Name": "value"}` or a list `["Name: value", …]`, up to 20. A name must be an HTTP token and a value may not contain a control character, so a job config cannot inject a second header or a request line. Accepted for `httpx`, `nuclei`, `katana`, `ffuf` and `dalfox`.
 
   **`ffuf.wordlist` is a name, never a path.** It must match `[a-z0-9][a-z0-9_-]{0,39}` — `common`, `api-paths`. VardrRunner resolves that name against `~/.vardrmap/wordlists` on the machine running the scan. A path, a traversal, or a drive letter returns `400`. This is deliberate: were a path accepted, this API could name any file the runner can read, and ffuf would read it and replay its lines at a target. The runner refuses a path too, so accepting one here would only queue a job that cannot run.
 

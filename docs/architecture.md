@@ -123,9 +123,9 @@ test cases and deliverables. SQL constraints and column types are defined in
 | `Asset` / `assets` | `id`, `program_id`, `canonical_key`, `asset_type`, `label`, `hostname`, `ip`, `port`, `scheme`, `environment`, `criticality`, `exposure`, `owner_note`, `tags`, `source`, `confidence`, `first_seen_at`, `last_seen_at`, `created_at` |
 | `AssetRelationship` / `asset_relationships` | `id`, `program_id`, `src_asset_id`, `dst_asset_id`, `relationship`, `source`, `confidence`, `first_seen_at`, `last_seen_at`, `created_at` |
 | `Client` / `clients` | `id`, `owner_github_id`, `org_id`, `name`, `contact_name`, `contact_email`, `notes`, `created_at` |
-| `Engagement` / `programs` | `id`, `owner_github_id`, `name`, `platform`, `program_url`, `scope_summary`, `severity_guidance`, `safe_harbor_notes`, `client_id`, `org_id`, `engagement_type`, `engagement_status`, `starts_at`, `ends_at`, `stop_work_at`, `stop_work_reason`, `created_at` |
+| `Engagement` / `programs` | `id`, `owner_github_id`, `name`, `platform`, `program_url`, `scope_summary`, `severity_guidance`, `safe_harbor_notes`, `client_id`, `org_id`, `engagement_type`, `engagement_status`, `starts_at`, `ends_at`, `stop_work_at`, `stop_work_reason`, `max_request_rate`, `created_at` |
 | `Authorization` / `authorizations` | `id`, `program_id`, `owner_github_id`, `permits`, `authorized_by`, `authorized_at`, `reference`, `window_start`, `window_end`, `status`, `notes`, `created_at` |
-| `ScopeItem` / `scope_items` | `id`, `program_id`, `scope_type`, `value`, `kind`, `notes`, `created_at` |
+| `ScopeItem` / `scope_items` | `id`, `program_id`, `scope_type`, `value`, `kind`, `notes`, `max_severity`, `created_at` |
 | `ManualTest` / `manual_tests` | `id`, `program_id`, `title`, `hypothesis`, `payload`, `evidence`, `status`, `created_at` |
 | `Finding` / `findings` | `id`, `program_id`, `title`, `severity`, `asset`, `asset_id`, `status`, `summary`, `steps`, `impact`, `remediation`, `created_at` |
 | `Report` / `reports` | `id`, `program_id`, `finding_id`, `title`, `summary`, `steps`, `impact`, `remediation`, `cwe`, `cvss`, `status`, `created_at` |

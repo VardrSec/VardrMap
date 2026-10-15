@@ -10,6 +10,7 @@ def serialize_scope_item(item: ScopeItem) -> dict:
         "value": item.value,
         "kind": item.kind,
         "notes": item.notes or "",
+        "max_severity": item.max_severity or "",
     }
 
 
@@ -302,6 +303,7 @@ def _engagement_dict(
         "org_id":            p.org_id or "",
         "stop_work_at":      _iso(p.stop_work_at),
         "stop_work_reason":  p.stop_work_reason or "",
+        "max_request_rate":  p.max_request_rate,
         "scope": {
             "in":  [serialize_scope_item(i) for i in p.scope_items if i.scope_type == "in"],
             "out": [serialize_scope_item(i) for i in p.scope_items if i.scope_type == "out"],

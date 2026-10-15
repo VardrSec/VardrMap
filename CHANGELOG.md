@@ -4,6 +4,24 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Add bulk scope import: `POST /engagements/{id}/scope/import` parses a HackerOne scope CSV
+  and, with `commit: false`, returns a preview (what each row maps to, which rows are already
+  present, which were skipped and why) without writing; `commit: true` inserts only the new
+  items. Asset types map to scope kinds, `eligible_for_submission: false` rows become
+  out-of-scope, and `max_severity` is stored as a per-asset advisory cap. Re-importing an
+  updated export only adds what changed. A Scope → "Import from a scope CSV" panel drives it
+  with a preview-before-save step. Adds `scope_items.max_severity` (migration 0028).
+- Add `rate` and `headers` to scan-job config for the tools that send live traffic (`rate`
+  on httpx/nuclei/katana; `headers` on those plus ffuf and dalfox), validated at queue time:
+  `rate` 1–1000, and headers with HTTP-token names and no control characters in values so a
+  job config cannot inject a header or request line. **Pairs with VardrRunner**, which passes
+  them to the tools.
+- Add a per-engagement request-rate ceiling, `programs.max_request_rate` (migration 0028,
+  nullable). When set, a job's `rate` for httpx/nuclei/katana/ffuf is capped to it — an
+  explicit rate above the ceiling is refused, and a job with no rate has the ceiling applied
+  (never above the tool's own default) — so a program's rate limit binds. Settable on
+  engagement create/update; `null` clears it. Applies to jobs, pipeline stages and schedules
+  at creation; changing the ceiling does not retroactively re-cap existing schedules.
 - Rewrite **Settings → Connect Runner** as six plain steps, each command with a Copy
   button: install (or upgrade) VardrRunner, get a runner key (shown once), connect the
   machine with `vardrrunner init --url <api> --install-service --no-install-tools`,
