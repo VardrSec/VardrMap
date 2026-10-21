@@ -4,6 +4,14 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Fix **Settings → Connect Runner** for VardrRunner's manual-invocation release (Runner
+  PR #60): the connect command is now `vardrrunner init --url <api> --no-install-tools`,
+  because Runner now rejects `--install-service` and installs no startup service. Step 5 adds
+  `vardrrunner heartbeat` before **Verify connection** (nothing heartbeats in the background
+  any more), and step 6 shows `vardrrunner jobs run` for executing queued jobs. The Jobs
+  tab's queued/pending messages no longer mention a runner service. README and
+  `docs/development.md` match. Works with Runner 0.47.0, which still asks whether to install
+  a service (answer no).
 - Add bulk scope import: `POST /engagements/{id}/scope/import` parses a HackerOne scope CSV
   and, with `commit: false`, returns a preview (what each row maps to, which rows are already
   present, which were skipped and why) without writing; `commit: true` inserts only the new

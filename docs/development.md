@@ -235,9 +235,8 @@ pipx install vardrrunner
 ```
 
 `pip install vardrrunner` is also supported. For a one-shot command without a
-persistent installation, use `uvx vardrrunner <command>`; use the pipx install
-for daemon operation. The source lives in
-[VardrSec/VardrRunner](https://github.com/VardrSec/VardrRunner). CLI, daemon,
+persistent installation, use `uvx vardrrunner <command>`. The source lives in
+[VardrSec/VardrRunner](https://github.com/VardrSec/VardrRunner). CLI,
 source-development, and tool-prerequisite instructions are documented there — see its
 [README](https://github.com/VardrSec/VardrRunner#readme) and
 [docs/](https://github.com/VardrSec/VardrRunner/tree/main/docs).
@@ -252,14 +251,16 @@ To connect a runner to this VardrMap instance after installation (the same steps
 2. **Connect the machine.**
 
    ```bash
-   vardrrunner init --url <your VardrMap API URL> --install-service --no-install-tools
+   vardrrunner init --url <your VardrMap API URL> --no-install-tools
    ```
 
    Paste the key at the hidden prompt. `init` stores it in the OS keychain (it refuses to
    write a plaintext key unless you pass `--allow-plaintext-credentials`), sets the runner
-   name, installs and starts the per-user background service (systemd user unit, launchd
-   agent or Windows scheduled task) and finishes with `doctor`. It is safe to rerun. Avoid
-   `--key` on the command line: it puts the key in shell history.
+   name and finishes with `doctor`. It is safe to rerun. Avoid `--key` on the command line:
+   it puts the key in shell history. VardrRunner runs only when invoked: since the release
+   after 0.47.0 it installs no startup service and rejects `--install-service`. (0.47.0
+   still asks whether to install a background service; answer no, and run
+   `vardrrunner service uninstall` on a machine that has one.)
 3. **Install or check the tools.**
 
    ```bash
@@ -272,15 +273,18 @@ To connect a runner to this VardrMap instance after installation (the same steps
    it from the [VardrGate releases](https://github.com/VardrSec/VardrGate/releases/latest)
    and check it against `SHA256SUMS`. The per-tool report needs a VardrRunner release newer
    than 0.47.0; 0.47.0 installs the same way with less detail.
-4. **Check the connection.** Click **Verify connection** in Settings. The runner shows
-   online for 5 minutes after its last heartbeat. If it does not, run `vardrrunner doctor`.
+4. **Check the connection.** Run `vardrrunner heartbeat`, then click **Verify connection** in
+   Settings. The runner shows online for 5 minutes after its last heartbeat (`jobs run` also
+   sends one). If it does not, run `vardrrunner doctor`.
 5. **Start on an engagement.** `vardrrunner engagements` lists IDs, `vardrrunner scope <id>`
    shows what is in scope, and `vardrrunner run httpx --engagement <id> --scope` checks which
-   in-scope hosts are live. After that, queue scans from the Jobs tab; the service runs them.
+   in-scope hosts are live. After that, queue scans from the Jobs tab. Queued jobs wait on the
+   backend until you run `vardrrunner jobs run` on the runner machine; nothing executes them
+   in the background.
 
 On a headless server with no keychain, set `VARDRMAP_API_KEY` instead, and see the
 VardrRunner [CLI reference](https://github.com/VardrSec/VardrRunner/blob/main/docs/cli.md)
-for `init --production` and the Linux `--env-file` service option. A runner set up with the
+for `init --production`. A runner set up with the
 old `vardrrunner login` flow may still hold a plaintext key in `~/.vardrmap/config.json`;
 `vardrrunner credentials` shows where the key is read from.
 

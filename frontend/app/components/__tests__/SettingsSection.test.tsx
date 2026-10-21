@@ -18,7 +18,8 @@ const BASE_ROUTES = {
 describe("SettingsSection workflows", () => {
   it("sets up the runner with the guided init command and no key on the command line", () => {
     const cmd = runnerInitCommand("https://api.example.test");
-    expect(cmd).toBe("vardrrunner init --url https://api.example.test --install-service --no-install-tools");
+    expect(cmd).toBe("vardrrunner init --url https://api.example.test --no-install-tools");
+    expect(cmd).not.toContain("--install-service");
     expect(cmd).not.toContain("--key");
   });
 
@@ -38,8 +39,10 @@ describe("SettingsSection workflows", () => {
     for (const cmd of [
       "pipx install vardrrunner",
       "vardrrunner tools install --all",
+      "vardrrunner heartbeat",
       "vardrrunner doctor",
       "vardrrunner scope e-9",
+      "vardrrunner jobs run",
     ]) {
       expect(await screen.findByText(cmd)).toBeInTheDocument();
     }
@@ -55,11 +58,14 @@ describe("SettingsSection workflows", () => {
     expect(await screen.findByText("vmap_runner_secret")).toBeInTheDocument();
     const commands = Array.from(document.querySelectorAll("code")).map((el) => el.textContent ?? "");
     const init = commands.find((text) => text.startsWith("vardrrunner init"));
-    expect(init).toContain("--install-service");
+    expect(init).toBeDefined();
+    expect(init).not.toContain("--install-service");
     for (const text of commands.filter((t) => t.startsWith("vardrrunner"))) {
       expect(text).not.toContain("vmap_runner_secret");
     }
     expect(document.body.textContent).not.toContain("daemon install");
+    expect(document.body.textContent).not.toContain("daemon start");
+    expect(document.body.textContent).not.toMatch(/whenever you log in|picks them up on its own/);
     expect(screen.queryByRole("button", { name: "Download .ps1" })).not.toBeInTheDocument();
   });
 
