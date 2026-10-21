@@ -13,11 +13,14 @@ const VARDRGATE_RELEASES_URL = "https://github.com/VardrSec/VardrGate/releases/l
 const SEVERITIES = ["info", "low", "medium", "high", "critical"] as const;
 
 const VARDRUNNER_TOOLS_COMMAND = "vardrrunner tools install --all";
+const VARDRUNNER_HEARTBEAT_COMMAND = "vardrrunner heartbeat";
+const VARDRUNNER_JOBS_COMMAND = "vardrrunner jobs run";
 
 // The key is deliberately not part of the command: `init` reads it from a hidden prompt, so it
 // never lands in shell history, and stores it in the OS keychain. Tools are their own step.
+// No startup service: VardrRunner runs only when invoked, and rejects `--install-service`.
 export function runnerInitCommand(apiUrl: string = API_URL): string {
-  return `vardrrunner init --url ${apiUrl} --install-service --no-install-tools`;
+  return `vardrrunner init --url ${apiUrl} --no-install-tools`;
 }
 
 export function engagementCommands(engagementId: string | null): string[] {
@@ -203,7 +206,7 @@ export default function SettingsSection() {
 
           <Step n={3} title="Connect this computer">
             <CopyLine text={runnerInitCommand()} onCopy={copyCmd} />
-            <Hint>Paste your key when it asks. The runner then starts in the background and starts again whenever you log in.</Hint>
+            <Hint>Paste your key when it asks. Nothing starts in the background or at sign-in: the runner only runs when you run it.</Hint>
           </Step>
 
           <Step n={4} title="Install or check your tools">
@@ -218,6 +221,8 @@ export default function SettingsSection() {
           </Step>
 
           <Step n={5} title="Check it's connected">
+            <Hint>Report in once, then click Verify within five minutes:</Hint>
+            <CopyLine text={VARDRUNNER_HEARTBEAT_COMMAND} onCopy={copyCmd} />
             <button
               onClick={verifyRunner}
               disabled={verifyState === "checking"}
@@ -242,7 +247,8 @@ export default function SettingsSection() {
             {engagementCommands(selectedEngagement?.id ?? null).map((cmd) => (
               <CopyLine key={cmd} text={cmd} onCopy={copyCmd} />
             ))}
-            <Hint>After that, queue scans from the Jobs tab. The runner picks them up on its own.</Hint>
+            <Hint>After that, queue scans from the Jobs tab. They wait until you run them on this computer:</Hint>
+            <CopyLine text={VARDRUNNER_JOBS_COMMAND} onCopy={copyCmd} />
           </Step>
         </div>
       </Panel>

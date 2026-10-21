@@ -290,7 +290,7 @@ export default function JobsSection({
       flash(
         created.warnings?.length
           ? `Job queued with warnings: ${created.warnings.map((w) => w.message).join(" ")}`
-          : "Job queued. A running VardrRunner service picks it up; otherwise run `vardrrunner jobs run`.",
+          : "Job queued. Run `vardrrunner jobs run` on your runner machine to execute it.",
       );
     } catch { flash("Failed to queue job."); }
   }
@@ -443,7 +443,7 @@ export default function JobsSection({
 
   function runPending() {
     if (pendingCount === 0) { flash("No pending jobs."); return; }
-    flash(`${pendingCount} job${pendingCount > 1 ? "s" : ""} pending. A running VardrRunner service picks them up; otherwise run \`vardrrunner jobs run\`.`);
+    flash(`${pendingCount} job${pendingCount > 1 ? "s" : ""} pending. Run \`vardrrunner jobs run\` on your runner machine to execute them.`);
   }
 
   const sorted       = [...jobs].sort((a, b) => new Date(b.queuedAt).getTime() - new Date(a.queuedAt).getTime());
