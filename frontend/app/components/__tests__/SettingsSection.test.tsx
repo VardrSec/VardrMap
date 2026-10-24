@@ -84,7 +84,15 @@ describe("SettingsSection workflows", () => {
   it("shows the PyPI install command before a runner key is generated", async () => {
     renderWithApp(<SettingsSection />, { routes: BASE_ROUTES });
     expect(await screen.findByText("pipx install vardrrunner")).toBeInTheDocument();
-    expect(screen.getByText("pipx upgrade vardrrunner")).toBeInTheDocument();
+  });
+
+  it("offers `vardrrunner update`, with the one-time pipx upgrade for older runners", async () => {
+    renderWithApp(<SettingsSection />, { routes: BASE_ROUTES });
+    const update = await screen.findByText("vardrrunner update", { selector: "code" });
+    const pipx = screen.getByText("pipx upgrade vardrrunner");
+    // The self-update command comes first; pipx is the fallback for 0.49 and older.
+    expect(update.compareDocumentPosition(pipx) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByText(/On VardrRunner 0.49 or older/)).toBeInTheDocument();
   });
 
   it("loads and renders existing API keys on mount", async () => {

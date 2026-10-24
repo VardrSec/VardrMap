@@ -4,6 +4,10 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- **Settings → Connect Runner** step 1 offers `vardrrunner update` to update an installed
+  runner (VardrRunner 0.50.0+, which runs the pipx upgrade and confirms the version), with
+  `pipx upgrade vardrrunner` kept as the one-time step for 0.49 and older. README and
+  development docs match.
 - Make the composer's **tool list collapsible**, collapsed by default and remembered: it shows
   only the chosen tool, so its settings and Request Controls sit right under the pipelines;
   picking from the open list closes it. Pipelines are unchanged and always visible.

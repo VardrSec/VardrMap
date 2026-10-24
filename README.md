@@ -52,7 +52,7 @@ Bug bounty work is one `engagement_type` among four (`bug_bounty`, `pentest`, `r
 - Job Board + Terminal — three board views (Stream, Pipeline, Table); selecting a job opens a terminal that polls live lifecycle events (started → running → done/failed) every 3 s
 
 **VardrRunner** — local CLI companion ([VardrSec/VardrRunner](https://github.com/VardrSec/VardrRunner), its own repo):
-- Install the isolated CLI from PyPI with `pipx install vardrrunner` (`pipx upgrade vardrrunner` to update)
+- Install the isolated CLI from PyPI with `pipx install vardrrunner`; update it with `vardrrunner update` (0.50.0+; older copies run `pipx upgrade vardrrunner` once)
 - Set up a machine with `vardrrunner init --url <api-url>`: it prompts for a runner-scoped `vmap_` key (stored in the OS keychain), names the runner and runs `doctor`. VardrRunner runs only when invoked — no startup service or background worker
 - `vardrrunner tools install --all` — install, update or repair the pinned scan tools; safe to rerun
 - `vardrrunner doctor` — check config, API connectivity and local tool availability; heartbeats report hostname, OS, version and per-tool status to VardrMap

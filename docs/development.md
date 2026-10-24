@@ -234,6 +234,11 @@ VardrMap. Install the published package in an isolated environment:
 pipx install vardrrunner
 ```
 
+Update it with `vardrrunner update` (VardrRunner 0.50.0 or later), which runs
+`pipx upgrade vardrrunner` and confirms the new version; `vardrrunner doctor` says when an
+update exists. A copy on 0.49.0 or older needs one `pipx upgrade vardrrunner` first. For uv or
+a plain virtualenv install, `vardrrunner update` prints that installer's command instead.
+
 `pip install vardrrunner` is also supported. For a one-shot command without a
 persistent installation, use `uvx vardrrunner <command>`. The source lives in
 [VardrSec/VardrRunner](https://github.com/VardrSec/VardrRunner). CLI,
