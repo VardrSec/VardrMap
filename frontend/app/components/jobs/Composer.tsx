@@ -5,6 +5,10 @@ import { PIPELINES, TOOLS } from "./mockData";
 import type {
   AuthorizationTestCase, JobPreview, PipelineStage, ScanProfile, ToolDef,
 } from "../../types";
+import {
+  HEADER_TOOLS, RATE_MAX, RATE_MIN, RATE_TOOLS, formatHeaders, parseHeaders, rateError, withRequestControls,
+  type RequestControls,
+} from "../../lib/requestControls";
 
 // Self-contained: the request under test lives in the stored case, so this tool
 // resolves no scope/recon targets and needs a case reference instead of config.
@@ -16,10 +20,7 @@ type QueueSpec = {
   config: Record<string, unknown>;
   targets: number;
   yieldKind: string;
-  interval?: string; // "hourly" | "daily" | "weekly" — undefined = run once
 };
-
-const RECURRENCE = ["once", "hourly", "daily", "weekly"] as const;
 
 type ComposerProps = {
   accent: string;
@@ -30,7 +31,8 @@ type ComposerProps = {
   testCases: AuthorizationTestCase[];
   onSaveProfile: (spec: { tool: string; source: string; config: Record<string, unknown> }, name: string) => void;
   onDeleteProfile: (id: string) => void;
-  runnerOnline: boolean;
+  /** The engagement's request-rate ceiling, or null for none. */
+  maxRequestRate: number | null;
   scopeCount: number;
   reconCount: number;
   programName: string;
@@ -101,7 +103,7 @@ function TestCasePicker({ cases, value, onChange, accent }: {
 
 type ComposerPropsWithTool = ComposerProps & { initialTool?: string };
 
-export default function Composer({ accent, onQueue, onPipeline, onPreview, profiles, testCases, onSaveProfile, onDeleteProfile, runnerOnline, scopeCount, reconCount, programName, initialTool }: ComposerPropsWithTool) {
+export default function Composer({ accent, onQueue, onPipeline, onPreview, profiles, testCases, onSaveProfile, onDeleteProfile, maxRequestRate, scopeCount, reconCount, programName, initialTool }: ComposerPropsWithTool) {
   // Which stored case a vardrgate job runs. Shared by the standalone tool and
   // the API Assessment pipeline, since both queue the same job type.
   const [caseId, setCaseId] = useState("");
@@ -123,7 +125,9 @@ export default function Composer({ accent, onQueue, onPipeline, onPreview, profi
     return t.sources[0];
   });
   const [cfg, setCfg] = useState<Record<string, unknown>>({ severity: "high,critical", templates: "cves,exposures" });
-  const [recurrence, setRecurrence] = useState<(typeof RECURRENCE)[number]>("once");
+  // Kept across tool and pipeline changes: a program's rate limit and identification
+  // header apply to every job, not to one tool.
+  const [controls, setControls] = useState<RequestControls>({ rate: "", headers: "" });
   const [preview, setPreview] = useState<JobPreview | null>(null);
   const [previewing, setPreviewing] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
@@ -144,10 +148,6 @@ export default function Composer({ accent, onQueue, onPipeline, onPreview, profi
 
   function pickPipeline(id: string) {
     setPipelineId(id);
-    // Stages carry their own source and config, and /schedules is single-tool
-    // only, so a pipeline can only run once. Reset it rather than showing a
-    // recurrence that would be silently dropped.
-    setRecurrence("once");
     setPreview(null);
   }
 
@@ -176,16 +176,26 @@ export default function Composer({ accent, onQueue, onPipeline, onPreview, profi
     (pipeline ? activeStages.some((s) => s.tool_type === VARDRGATE) : toolId === VARDRGATE);
   const caseMissing = needsCase && !caseId;
 
-  /** Stages as posted: the vardrgate stage carries the chosen case reference. */
+  const toolTypes = pipeline ? activeStages.map((s) => s.tool_type) : [toolId];
+  const takesRate = toolTypes.some((t) => RATE_TOOLS.includes(t));
+  const takesHeaders = toolTypes.some((t) => HEADER_TOOLS.includes(t));
+  const rateProblem = takesRate ? rateError(controls.rate, maxRequestRate) : null;
+  const headerProblem = takesHeaders ? parseHeaders(controls.headers).error : null;
+  const controlsInvalid = !!rateProblem || !!headerProblem;
+  const configFor = (toolType: string, config: Record<string, unknown>) =>
+    withRequestControls(toolType, config, controls);
+
+  /** Stages as posted: the vardrgate stage carries the chosen case reference, and every
+   *  stage that sends traffic carries the request controls. */
   const stagesToQueue = (): PipelineStage[] =>
     activeStages.map((s) =>
       s.tool_type === VARDRGATE
         ? { ...s, config: { ...s.config, test_case_id: caseId } }
-        : s,
+        : { ...s, config: configFor(s.tool_type, s.config) },
     );
 
   function submit() {
-    if (caseMissing) return;
+    if (caseMissing || controlsInvalid) return;
     if (pipeline) {
       if (activeStages.length === 0) return;
       const stages = stagesToQueue();
@@ -195,17 +205,14 @@ export default function Composer({ accent, onQueue, onPipeline, onPreview, profi
       onPipeline(stages);
       return;
     }
-    const config = toolId === VARDRGATE ? { test_case_id: caseId } : { ...cfg };
-    onQueue({
-      tool: toolId, source, config, targets: sourceCount, yieldKind: tool.yields,
-      interval: recurrence === "once" ? undefined : recurrence,
-    });
+    const config = toolId === VARDRGATE ? { test_case_id: caseId } : configFor(toolId, cfg);
+    onQueue({ tool: toolId, source, config, targets: sourceCount, yieldKind: tool.yields });
   }
 
   async function runPreview() {
     setPreviewing(true);
     try {
-      const result = await onPreview({ tool: toolId, source, config: { ...cfg } });
+      const result = await onPreview({ tool: toolId, source, config: configFor(toolId, cfg) });
       setPreview(result);
     } finally {
       setPreviewing(false);
@@ -217,7 +224,12 @@ export default function Composer({ accent, onQueue, onPipeline, onPreview, profi
       setPipelineId(null);
       setToolId(p.tool_type);
       setSource(p.target_source);
-      setCfg({ ...p.config });
+      const { rate, headers, ...rest } = p.config;
+      setCfg(rest);
+      // A profile's own rate/headers win; one saved without them keeps what is typed.
+      if (rate != null || headers != null) {
+        setControls({ rate: rate != null ? String(rate) : "", headers: formatHeaders(headers) });
+      }
       setPreview(null);
     }
   }
@@ -225,7 +237,7 @@ export default function Composer({ accent, onQueue, onPipeline, onPreview, profi
   function saveProfile() {
     const name = profileName.trim();
     if (!name) return;
-    onSaveProfile({ tool: toolId, source, config: { ...cfg } }, name);
+    onSaveProfile({ tool: toolId, source, config: configFor(toolId, cfg) }, name);
     setProfileName("");
     setSavingProfile(false);
   }
@@ -387,24 +399,45 @@ export default function Composer({ accent, onQueue, onPipeline, onPreview, profi
         </div>
         )}
 
-        {/* Recurrence is single-tool only — /schedules stores one tool_type, so a
-            recurring pipeline would silently drop its later stages. */}
-        {!pipeline && (
-        <Field label="Recurrence">
-          <div className="flex gap-1.5">
-            {RECURRENCE.map((r) => (
-              <button key={r} onClick={() => setRecurrence(r)}
-                className="flex-1 rounded-md border px-2 py-1.5 font-mono text-[11px] transition"
-                style={{
-                  borderColor: recurrence === r ? `${accent}80` : "#2e2e2e",
-                  color: recurrence === r ? accent : "#94a3b8",
-                  backgroundColor: recurrence === r ? `${accent}12` : "#161616",
-                }}>
-                {r}
-              </button>
-            ))}
-          </div>
-        </Field>
+        {(takesRate || takesHeaders) && (
+          <Field label="Request Controls">
+            <div className="space-y-2">
+              {takesRate && (
+                <div>
+                  <input
+                    className={inputCls}
+                    aria-label="Requests per second"
+                    type="number" min={RATE_MIN} max={maxRequestRate ?? RATE_MAX}
+                    placeholder={maxRequestRate != null ? `requests/sec (engagement max ${maxRequestRate})` : "requests/sec (tool default)"}
+                    value={controls.rate}
+                    onChange={(e) => setControls({ ...controls, rate: e.target.value })}
+                    onFocus={(e) => { e.target.style.borderColor = accent; }}
+                    onBlur={(e) => { e.target.style.borderColor = "#2e2e2e"; }}
+                  />
+                  {rateProblem && <p className="mt-1 font-mono text-[10px] text-[#f87171]">{rateProblem}</p>}
+                </div>
+              )}
+              {takesHeaders && (
+                <div>
+                  <textarea
+                    className={`${inputCls} min-h-[64px] font-mono text-xs`}
+                    aria-label="Custom headers"
+                    placeholder={"X-Bug-Bounty: your-handle\nX-Request-Purpose: pentest"}
+                    value={controls.headers}
+                    onChange={(e) => setControls({ ...controls, headers: e.target.value })}
+                    onFocus={(e) => { e.target.style.borderColor = accent; }}
+                    onBlur={(e) => { e.target.style.borderColor = "#2e2e2e"; }}
+                  />
+                  {headerProblem
+                    ? <p className="mt-1 font-mono text-[10px] text-[#f87171]">{headerProblem}</p>
+                    : <p className="mt-1 text-[10px] text-muted">One <span className="font-mono">Name: value</span> per line, sent with every request.</p>}
+                </div>
+              )}
+              {pipeline && (
+                <p className="text-[10px] text-muted">Applied to each stage that supports it.</p>
+              )}
+            </div>
+          </Field>
         )}
 
         {/* Saved profiles: load config in one click, or save the current config.
@@ -468,7 +501,6 @@ export default function Composer({ accent, onQueue, onPipeline, onPreview, profi
               <span className="text-[#94a3b8]">{tool.label}</span>{" on "}
               <span className="text-[#94a3b8]">{sourceCount}</span>{" "}{source} targets → yields{" "}
               <span style={{ color: accent }}>{tool.yields}</span>
-              {recurrence !== "once" && <>{" · repeats "}<span style={{ color: accent }}>{recurrence}</span></>}
             </p>
           )}
         </div>
@@ -497,19 +529,17 @@ export default function Composer({ accent, onQueue, onPipeline, onPreview, profi
             {previewing ? "…" : "Preview"}
           </button>
           <button onClick={submit}
-            disabled={(!!pipeline && activeStages.length === 0) || caseMissing}
-            title={caseMissing ? "Select an authorization test case first" : undefined}
+            disabled={(!!pipeline && activeStages.length === 0) || caseMissing || controlsInvalid}
+            title={caseMissing ? "Select an authorization test case first" : controlsInvalid ? "Fix the request controls first" : undefined}
             className="flex-1 rounded-md px-4 py-2.5 text-sm font-semibold text-[#161616] transition active:scale-[0.98] disabled:opacity-50"
             style={{ backgroundColor: accent }}>
-            {pipeline ? "Queue Pipeline" : recurrence === "once" ? "Queue Job" : `Schedule ${recurrence}`}
+            {pipeline ? "Queue Pipeline" : "Queue Job"}
           </button>
         </div>
 
-        {!runnerOnline && (
-          <p className="text-center font-mono text-[10px] text-[#f59e0b]">
-            runner offline — job will hold in queue until reconnect
-          </p>
-        )}
+        <p className="text-center text-[10px] text-muted">
+          Queued jobs run when you run <span className="font-mono">vardrrunner jobs run</span> on your runner machine.
+        </p>
       </div>
     </div>
   );

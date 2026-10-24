@@ -58,8 +58,8 @@ function LinkWire({ online, accent, busy, pulseKey }: {
   );
 }
 
-function Node({ label, sub, glyph, glyphColor, active, children }: {
-  label: string; sub: string; glyph: string; glyphColor: string;
+function Node({ label, version, sub, glyph, glyphColor, active, children }: {
+  label: string; version?: string | null; sub: string; glyph: string; glyphColor: string;
   active: boolean; children?: React.ReactNode;
 }) {
   return (
@@ -68,7 +68,10 @@ function Node({ label, sub, glyph, glyphColor, active, children }: {
         <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg border border-[#2e2e2e] bg-[#1a1a1a] font-mono text-base"
           style={{ color: glyphColor }}>{glyph}</div>
         <div className="min-w-0">
-          <div className="truncate text-sm font-semibold text-[#f1f5f9]">{label}</div>
+          <div className="truncate text-sm font-semibold text-[#f1f5f9]">
+            {label}
+            {version && <span className="ml-1.5 font-mono text-[10px] font-normal text-muted">v{version}</span>}
+          </div>
           <div className="truncate font-mono text-[10px] text-muted">{sub}</div>
         </div>
         <span className="ml-auto h-1.5 w-1.5 flex-shrink-0 rounded-full"
@@ -93,8 +96,8 @@ function ToolChip({ name, ok, version }: { name: string; ok: boolean; version: s
   );
 }
 
-function BridgeStrip({ accent, runnerOnline, autoRun, queueDepth, runningCount, busy, onExpand }: {
-  accent: string; runnerOnline: boolean; autoRun: boolean; queueDepth: number;
+function BridgeStrip({ accent, runnerOnline, runnerVersion, queueDepth, runningCount, busy, onExpand }: {
+  accent: string; runnerOnline: boolean; runnerVersion: string | null; queueDepth: number;
   runningCount: number; busy: boolean; onExpand: () => void;
 }) {
   const linkColor = runnerOnline ? (busy ? accent : "#a6e3a1") : "#52525b";
@@ -113,18 +116,15 @@ function BridgeStrip({ accent, runnerOnline, autoRun, queueDepth, runningCount, 
       </span>
       <span className="flex items-center gap-1.5">
         <span className="font-mono text-xs" style={{ color: runnerOnline ? "#a6e3a1" : "var(--color-muted)" }}>▣</span>
-        <span className="hidden font-mono text-[11px] text-[#94a3b8] sm:inline">VardrRunner</span>
+        <span className="hidden font-mono text-[11px] text-[#94a3b8] sm:inline">
+          VardrRunner{runnerVersion && <span className="ml-1 text-[9px] text-muted">v{runnerVersion}</span>}
+        </span>
       </span>
       <span className="font-mono text-[10px] uppercase tracking-widest" style={{ color: linkColor }}>
         {runnerOnline ? (busy ? "streaming" : "linked") : "offline"}
       </span>
       <span className="ml-auto flex items-center gap-3">
         <span className="hidden font-mono text-[10px] text-muted md:inline">{queueDepth} queued · {runningCount} running</span>
-        {autoRun && (
-          <span className="hidden items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider lg:flex" style={{ color: accent }}>
-            <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: accent }} />auto-run
-          </span>
-        )}
         <span className="flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-muted transition group-hover:text-muted-hover">
           expand
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -140,7 +140,6 @@ export type BridgeProps = {
   accent: string;
   runnerOnline: boolean;
   runnerStatus: RunnerStatus | null;
-  autoRun: boolean;
   lastPoll: string;
   queueDepth: number;
   runningCount: number;
@@ -148,19 +147,18 @@ export type BridgeProps = {
   pulseKey: number;
   collapsed: boolean;
   onRefreshRunner: () => void;
-  onToggleAuto: () => void;
   onToggleCollapse: () => void;
   onSetupRunner: () => void;
 };
 
 export default function Bridge({
-  accent, runnerOnline, runnerStatus, autoRun, lastPoll, queueDepth, runningCount,
-  busy, pulseKey, collapsed, onRefreshRunner, onToggleAuto, onToggleCollapse, onSetupRunner,
+  accent, runnerOnline, runnerStatus, lastPoll, queueDepth, runningCount,
+  busy, pulseKey, collapsed, onRefreshRunner, onToggleCollapse, onSetupRunner,
 }: BridgeProps) {
   if (collapsed) {
     return (
       <BridgeStrip
-        accent={accent} runnerOnline={runnerOnline} autoRun={autoRun}
+        accent={accent} runnerOnline={runnerOnline} runnerVersion={runnerStatus?.version ?? null}
         queueDepth={queueDepth} runningCount={runningCount} busy={busy}
         onExpand={onToggleCollapse}
       />
@@ -182,16 +180,6 @@ export default function Bridge({
       <div className="mb-4 flex items-center justify-between">
         <span className="text-[10px] font-semibold uppercase tracking-widest text-muted">Execution Link</span>
         <div className="flex items-center gap-2">
-          <button onClick={onToggleAuto}
-            className="flex items-center gap-1.5 rounded-md border px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider transition"
-            style={{
-              borderColor: autoRun ? `${accent}66` : "#2e2e2e",
-              color: autoRun ? accent : "var(--color-muted)",
-              backgroundColor: autoRun ? `${accent}14` : "transparent",
-            }}>
-            <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: autoRun ? accent : "#3a3a3a" }} />
-            auto-run {autoRun ? "on" : "off"}
-          </button>
           <button onClick={onRefreshRunner}
             className="flex items-center gap-1.5 rounded-md border border-[#2e2e2e] px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-[#94a3b8] transition hover:border-[#3a3a3a] hover:text-[#f1f5f9]">
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -230,6 +218,7 @@ export default function Bridge({
         {/* Runner node */}
         <Node
           label="VardrRunner"
+          version={runnerStatus?.version}
           sub={runnerSub}
           glyph="▣"
           glyphColor={runnerOnline ? "#a6e3a1" : "#52525b"}
@@ -238,9 +227,6 @@ export default function Bridge({
           {runnerOnline ? (
             <div className="mt-3 space-y-2">
               <div className="flex items-center justify-between font-mono text-[10px]">
-                {runnerStatus?.version && (
-                  <span className="text-muted">v{runnerStatus.version}</span>
-                )}
                 <span className="ml-auto flex items-center gap-1.5 text-muted">
                   <span className="h-1 w-1 animate-pulse rounded-full bg-[#a6e3a1]" />
                   seen {seenAgo}

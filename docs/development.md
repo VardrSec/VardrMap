@@ -257,8 +257,8 @@ To connect a runner to this VardrMap instance after installation (the same steps
    Paste the key at the hidden prompt. `init` stores it in the OS keychain (it refuses to
    write a plaintext key unless you pass `--allow-plaintext-credentials`), sets the runner
    name and finishes with `doctor`. It is safe to rerun. Avoid `--key` on the command line:
-   it puts the key in shell history. VardrRunner runs only when invoked: since the release
-   after 0.47.0 it installs no startup service and rejects `--install-service`. (0.47.0
+   it puts the key in shell history. VardrRunner runs only when invoked: since 0.48.0 it installs no startup service and
+   rejects `--install-service`. (0.47.0
    still asks whether to install a background service; answer no, and run
    `vardrrunner service uninstall` on a machine that has one.)
 3. **Install or check the tools.**
@@ -278,8 +278,8 @@ To connect a runner to this VardrMap instance after installation (the same steps
    releases. Or get it from the
    [VardrGate releases](https://github.com/VardrSec/VardrGate/releases/latest) and check it
    against `SHA256SUMS` by hand. Keep it out of `~/.vardrmap/tools`: VardrRunner refuses any
-   binary there that it did not install. The per-tool report needs a VardrRunner release newer
-   than 0.47.0; 0.47.0 installs the same way with less detail.
+   binary there that it did not install. The per-tool report needs VardrRunner 0.48.0 or later;
+   0.47.0 installs the same way with less detail.
 4. **Check the connection.** Run `vardrrunner heartbeat`, then click **Verify connection** in
    Settings. The runner shows online for 5 minutes after its last heartbeat (`jobs run` also
    sends one). If it does not, run `vardrrunner doctor`.
@@ -295,7 +295,7 @@ for `init --production`. A runner set up with the
 old `vardrrunner login` flow may still hold a plaintext key in `~/.vardrmap/config.json`;
 `vardrrunner credentials` shows where the key is read from.
 
-The runner polls `GET /jobs/pending`, claims jobs atomically, executes tools locally
+`vardrrunner jobs run` fetches `GET /jobs/pending` once, claims jobs atomically, executes tools locally
 (scan traffic always originates from your machine, never Railway), and posts results and
 lifecycle events back over HTTP. See [architecture.md](architecture.md#job-queue-flow) for
 the full integration contract.

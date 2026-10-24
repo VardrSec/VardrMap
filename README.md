@@ -25,7 +25,7 @@ Bug bounty work is one `engagement_type` among four (`bug_bounty`, `pentest`, `r
 - Clients — the organisation the work is performed for; deleting one detaches its engagements rather than deleting the testing record
 - Authorization records — who granted permission, the reference (SOW, ticket, policy URL), and the window it covers. `GET /engagements/{id}/authorization/active` answers "is there permission right now?"
 - Organizations — tenancy sits on an org, so a teammate can operate an engagement's jobs and share a runner fleet
-- Stop-work — prevents new execution and pauses schedule materialization until released; already running processes are not cancelled
+- Stop-work — prevents new execution until released; already running processes are not cancelled
 
 **Testing workflow**
 - Track in-scope and out-of-scope assets with kind and notes; subdomain coverage requires an explicit wildcard
@@ -68,7 +68,7 @@ VardrMap evaluates every job against the engagement's authorization, testing win
 
 Staying inside scope is the operator's responsibility, the same as it is with every other tool in the kit — Burp proxies any host you point it at, and nmap scans any range you hand it. A platform that blocks on its own reading of a scope rule interrupts legitimate work, and scope in the field is messier than any rule set.
 
-The one exception is **stop-work**, which returns `403` to prevent new execution and skips schedule materialization; it does not cancel already running local processes. That is not the platform second-guessing the operator: it is the operator's own emergency brake, and a brake that can be ignored is not a brake.
+The one exception is **stop-work**, which returns `403` to prevent new execution; it does not cancel already running local processes. That is not the platform second-guessing the operator: it is the operator's own emergency brake, and a brake that can be ignored is not a brake.
 
 Rationale in [docs/adr/0001-central-policy-engine.md](docs/adr/0001-central-policy-engine.md) § Amendment.
 

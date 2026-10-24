@@ -244,12 +244,10 @@ type JobBoardProps = {
   onDelete: (id: string) => void;
   onRunPending: () => void;
   pendingCount: number;
-  runnerOnline: boolean;
-  autoRun: boolean;
 };
 
 export default function JobBoard({
-  jobs, accent, view, onViewChange, activeId, onSelect, onDelete, onRunPending, pendingCount, runnerOnline, autoRun,
+  jobs, accent, view, onViewChange, activeId, onSelect, onDelete, onRunPending, pendingCount,
 }: JobBoardProps) {
   const views = { stream: StreamView, pipeline: PipelineView, table: TableView };
   const View = views[view] ?? StreamView;
@@ -262,18 +260,12 @@ export default function JobBoard({
           <span className="rounded bg-[#2e2e2e] px-1.5 py-0.5 font-mono text-[9px] text-[#94a3b8]">{jobs.length}</span>
         </div>
         <div className="flex items-center gap-3">
-          {pendingCount > 0 && !autoRun && (
-            <button onClick={onRunPending} disabled={!runnerOnline}
-              className="flex items-center gap-2 rounded-md px-3 py-1.5 font-mono text-[11px] font-semibold text-[#161616] transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
+          {pendingCount > 0 && (
+            <button onClick={onRunPending} title="Copy the command that runs queued jobs"
+              className="flex items-center gap-2 rounded-md px-3 py-1.5 font-mono text-[11px] font-semibold text-[#161616] transition active:scale-[0.98]"
               style={{ backgroundColor: accent }}>
               <span className="font-sans">▸</span> vardrrunner jobs run · {pendingCount}
             </button>
-          )}
-          {autoRun && pendingCount > 0 && (
-            <span className="flex items-center gap-1.5 font-mono text-[10px] text-muted">
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full" style={{ backgroundColor: accent }} />
-              auto-running queue
-            </span>
           )}
           <div className="flex rounded-lg border border-[#2e2e2e] bg-[#161616] p-0.5">
             {(["stream", "pipeline", "table"] as const).map((v) => (

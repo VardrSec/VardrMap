@@ -31,7 +31,7 @@ def viewer_program(client, auth_headers):
 
 @pytest.mark.parametrize("path", [
     "", "/findings", "/scans", "/recon", "/manual-tests", "/reports",
-    "/schedules", "/scan-profiles", "/services", "/jobs", "/members",
+    "/scan-profiles", "/services", "/jobs", "/members",
 ])
 def test_viewer_can_read(client, other_headers, viewer_program, path):
     res = client.get(f"/programs/{viewer_program}{path}", headers=other_headers)
@@ -88,12 +88,6 @@ def test_viewer_cannot_update_finding(client, other_headers, viewer_program):
 
 def test_viewer_cannot_suggest_finding(client, other_headers, viewer_program):
     res = _post(client, other_headers, f"/programs/{viewer_program}/findings/any/suggest", {})
-    assert res.status_code == 403
-
-
-def test_viewer_cannot_create_schedule(client, other_headers, viewer_program):
-    res = _post(client, other_headers, f"/programs/{viewer_program}/schedules",
-                {"tool_type": "nuclei", "target_source": "scope", "interval": "daily"})
     assert res.status_code == 403
 
 

@@ -24,8 +24,7 @@ Gate jobs freeze the unresolved reviewed case in `case_snapshot` at claim and st
 separate `assessment` on upload. Runner's `case_hash` binds the artifact to that snapshot;
 legacy unbound uploads remain usable but inconclusive. Lifecycle `done` is not an
 assessment verdict, and conclusive completeness can still contain violation candidates.
-`ScheduledScan` materializes jobs during runner polling, not through a backend cron.
-Stop-work skips materialization; release produces one catch-up execution for a due schedule.
+There are no recurring scans: each job runs once, when an operator runs `vardrrunner jobs run`.
 Per-execution limits do not create an engagement-wide traffic budget.
 
 `ScanItem` is a scanner candidate. Dalfox payload and match evidence are preserved

@@ -15,7 +15,7 @@ deliverable work. Shipped history lives in [CHANGELOG](../CHANGELOG.md).
 - Design organization-bound runner credentials and explicit credential permissions.
   Current API keys authenticate a user and may have runner-only scope.
 - Specify signed/versioned execution contracts and cancellation of already running
-  processes. Stop-work currently prevents starting work and skips schedules.
+  processes. Stop-work currently prevents starting work.
 - Add engagement-wide concurrency/rate budgets; current tool limits apply per execution.
 - Define automated evidence retention and export sensitivity rules. Metadata and
   redaction exist, but metadata alone is not a deletion or disclosure policy.

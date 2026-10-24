@@ -106,7 +106,7 @@ which returns **404 rather than 403** for a non-member — never revealing that
 another user's object exists.
 
 Organization membership, legacy ownership and engagement invitations are combined
-at the database access predicate. Jobs and schedules follow engagement access;
+at the database access predicate. Jobs follow engagement access;
 clients follow organization membership or direct ownership. Viewers cannot mutate
 shared clients. API keys remain user-bound rather than organization-bound.
 JWTs must carry expiry, subject, audience and issuer; HS256 signature, expiry,
@@ -140,7 +140,7 @@ because that is a deliberate operator action with an incident behind it. The
 - AI suggestion and triage inputs use the shared heuristic redactor. Provider errors are generic. This is not a guarantee that every client secret is detected; do not send restricted evidence to an external provider.
 - Webhook delivery pins the approved IP, retains original Host and TLS identity, disables environment proxies and redirects, and avoids logging secret-bearing URLs. Malformed URLs and URL credentials are rejected.
 - Imports read at most the upload cap plus one byte before rejecting oversize data; infrastructure request limits are still needed for multipart ingress.
-- Stop-work prevents new execution and skips schedules; it does not kill an already running local process.
+- Stop-work prevents new execution; it does not kill an already running local process.
 
 ## Test coverage required
 
