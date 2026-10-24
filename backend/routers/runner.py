@@ -90,10 +90,10 @@ def post_heartbeat(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """VardrRunner posts its status here on startup and periodically during jobs run.
+    """VardrRunner posts its status here at the start of `jobs run` and on `vardrrunner heartbeat`.
 
-    Upserted per (user, hostname) so multiple machines — e.g. a laptop and an
-    always-on VPS — each keep their own status row.
+    Upserted per (user, hostname) so multiple machines — e.g. a laptop and a
+    VPS — each keep their own status row.
     """
     hb = (
         db.query(RunnerHeartbeat)

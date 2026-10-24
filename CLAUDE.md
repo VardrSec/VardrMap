@@ -108,12 +108,15 @@ queue time rather than failing on the operator's machine after a runner claims t
 **`ffuf.wordlist` is a name, never a path** — a path would let the API name any file the
 runner can read for ffuf to read and replay at a target.
 
-**Schedules can recur active tools.** They validate `tool_type` and config exactly as jobs do,
-so ffuf and dalfox are schedulable. Rate/worker caps are **per execution, not per engagement**,
-and policy (warnings) is evaluated at **claim**, not at schedule creation. **Stop-work pauses a
-stopped engagement's schedules** (skipped, `next_run_at` untouched, so release yields one
-catch-up job rather than a backlog), pinned by `test_stop_work_pauses_a_schedule_so_no_backlog_builds`.
-Change it deliberately, with the tests and `docs/api.md` § Scheduling active tools.
+**There are no recurring scans.** VardrRunner runs only when invoked, so a schedule could
+never fire on its own; `/schedules` and the `scheduled_scans` table were removed (migration
+`0029dropschedules`). Every job runs once, when the operator runs `vardrrunner jobs run`. Do
+not reintroduce scheduling or anything that implies jobs run unattended.
+
+**Request controls.** The Composer's Request Controls set `rate` (httpx/nuclei/katana/ffuf)
+and `headers` (those plus dalfox) on a job and on every pipeline stage that accepts them.
+`frontend/app/lib/requestControls.ts` mirrors the backend's `_validate_headers` and rate
+bounds; change both together.
 
 **Scanner output is a candidate, not a finding.** nuclei and dalfox imports land as
 `scan_items` with `status: "new"`; promoting one is the operator's act. Keep the scanner's

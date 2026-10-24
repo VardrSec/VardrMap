@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { AuthorizationTestCase, JobPreview, PipelineStage, PolicyWarning, RunnerStatus, ScanJob, ScanJobUI, ScanProfile, ScheduledScan } from "../types";
+import type { AuthorizationTestCase, JobPreview, PipelineStage, PolicyWarning, RunnerStatus, ScanJob, ScanJobUI, ScanProfile } from "../types";
 import GateAssessmentPanel from "./jobs/GateAssessmentPanel";
 import { useAppContext } from "../context/AppContext";
 import { TOOLS } from "./jobs/mockData";
@@ -9,7 +9,6 @@ import Bridge from "./jobs/Bridge";
 import Telemetry from "./jobs/Telemetry";
 import Composer from "./jobs/Composer";
 import JobBoard from "./jobs/JobBoard";
-import SchedulesPanel from "./jobs/SchedulesPanel";
 import Terminal from "./jobs/Terminal";
 
 const ACCENT = "#f59e0b";
@@ -89,12 +88,10 @@ export default function JobsSection({
   }
 
   const [jobs,          setJobs]          = useState<ScanJobUI[]>([]);
-  const [schedules,     setSchedules]     = useState<ScheduledScan[]>([]);
   const [profiles,      setProfiles]      = useState<ScanProfile[]>([]);
   const [testCases,     setTestCases]     = useState<AuthorizationTestCase[]>([]);
   const [loading,       setLoading]       = useState(true);
   const [runnerStatus,  setRunnerStatus]  = useState<RunnerStatus | null>(null);
-  const [autoRun,       setAutoRun]       = useState(false);
   const [lastPoll,      setLastPoll]      = useState(() => new Date().toISOString());
   const [activeId,      setActiveId]      = useState<string | null>(null);
   const [pulseKey,      setPulseKey]      = useState(0);
@@ -146,15 +143,6 @@ export default function JobsSection({
     }
   }, [authFetch, engagementId]);
 
-  const loadSchedules = useCallback(async () => {
-    try {
-      const res = await authFetch(`/engagements/${engagementId}/schedules`);
-      if (!res.ok) return;
-      const data = await res.json();
-      setSchedules(Array.isArray(data?.schedules) ? data.schedules : []);
-    } catch { /* schedules panel just stays hidden */ }
-  }, [authFetch, engagementId]);
-
   const loadProfiles = useCallback(async () => {
     try {
       const res = await authFetch(`/engagements/${engagementId}/scan-profiles`);
@@ -178,10 +166,9 @@ export default function JobsSection({
   // Initial load
   useEffect(() => {
     void loadJobs();
-    void loadSchedules();
     void loadProfiles();
     void loadTestCases();
-  }, [loadJobs, loadSchedules, loadProfiles, loadTestCases]);
+  }, [loadJobs, loadProfiles, loadTestCases]);
 
   // SSE connection for real-time job updates
   useEffect(() => {
@@ -239,31 +226,7 @@ export default function JobsSection({
 
   async function queueJob(spec: {
     tool: string; source: string; config: Record<string, unknown>; targets: number; yieldKind: string;
-    interval?: string;
   }) {
-    // Recurring specs become schedules; the backend materializes a job on each due poll
-    if (spec.interval) {
-      try {
-        const res = await authFetch(`/engagements/${engagementId}/schedules`, {
-          method: "POST",
-          body: JSON.stringify({
-            tool_type:     spec.tool,
-            target_source: spec.source,
-            config:        spec.config,
-            interval:      spec.interval,
-          }),
-        });
-        if (!res.ok) {
-          const err = await res.json().catch(() => null) as { detail?: string } | null;
-          flash(`Failed to create schedule${err?.detail ? `: ${err.detail}` : "."}`);
-          return;
-        }
-        await loadSchedules();
-        flash(`Scheduled ${spec.tool} ${spec.interval} — first run on the runner's next poll.`);
-      } catch { flash("Failed to create schedule."); }
-      return;
-    }
-
     try {
       const res = await authFetch(`/engagements/${engagementId}/jobs`, {
         method: "POST",
@@ -364,27 +327,6 @@ export default function JobsSection({
     } catch { flash("Failed to delete profile."); }
   }
 
-  async function toggleSchedule(id: string, enabled: boolean) {
-    try {
-      const res = await authFetch(`/engagements/${engagementId}/schedules/${id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ enabled }),
-      });
-      if (!res.ok) { flash("Failed to update schedule."); return; }
-      const updated: ScheduledScan = await res.json();
-      setSchedules((p) => p.map((s) => (s.id === id ? updated : s)));
-    } catch { flash("Failed to update schedule."); }
-  }
-
-  async function deleteSchedule(id: string) {
-    try {
-      const res = await authFetch(`/engagements/${engagementId}/schedules/${id}`, { method: "DELETE" });
-      if (!res.ok) { flash("Failed to delete schedule."); return; }
-      setSchedules((p) => p.filter((s) => s.id !== id));
-      flash("Schedule deleted.");
-    } catch { flash("Failed to delete schedule."); }
-  }
-
   async function cancel(id: string) {
     try {
       const res = await authFetch(`/jobs/${id}`, {
@@ -443,7 +385,9 @@ export default function JobsSection({
 
   function runPending() {
     if (pendingCount === 0) { flash("No pending jobs."); return; }
-    flash(`${pendingCount} job${pendingCount > 1 ? "s" : ""} pending. Run \`vardrrunner jobs run\` on your runner machine to execute them.`);
+    // Jobs only run when the operator runs them, so hand over the command.
+    void navigator.clipboard?.writeText("vardrrunner jobs run").catch(() => {});
+    flash(`${pendingCount} job${pendingCount > 1 ? "s" : ""} pending. Copied \`vardrrunner jobs run\`: run it on your runner machine to execute them.`);
   }
 
   const sorted       = [...jobs].sort((a, b) => new Date(b.queuedAt).getTime() - new Date(a.queuedAt).getTime());
@@ -474,7 +418,6 @@ export default function JobsSection({
         accent={ACCENT}
         runnerOnline={runnerOnline}
         runnerStatus={runnerStatus}
-        autoRun={autoRun}
         lastPoll={lastPoll}
         queueDepth={pendingCount}
         runningCount={runningCount}
@@ -482,7 +425,6 @@ export default function JobsSection({
         pulseKey={pulseKey}
         collapsed={prefs.collapsed}
         onRefreshRunner={() => { void loadJobs(); }}
-        onToggleAuto={() => setAutoRun((v) => !v)}
         onToggleCollapse={() => pref("collapsed", !prefs.collapsed)}
         onSetupRunner={() => navigate("settings")}
       />
@@ -501,17 +443,11 @@ export default function JobsSection({
             testCases={testCases}
             onSaveProfile={saveProfile}
             onDeleteProfile={deleteProfile}
-            runnerOnline={runnerOnline}
+            maxRequestRate={selectedEngagement?.max_request_rate ?? null}
             scopeCount={scopeCount}
             reconCount={reconCount}
             programName={programName}
             initialTool={defaultTool}
-          />
-          <SchedulesPanel
-            accent={ACCENT}
-            schedules={schedules}
-            onToggle={toggleSchedule}
-            onDelete={deleteSchedule}
           />
         </div>
 
@@ -532,8 +468,6 @@ export default function JobsSection({
               onDelete={deleteJob}
               onRunPending={runPending}
               pendingCount={pendingCount}
-              runnerOnline={runnerOnline}
-              autoRun={autoRun}
             />
           )}
 

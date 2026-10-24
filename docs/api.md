@@ -1020,7 +1020,7 @@ List jobs for an engagement, newest first.
 `total` counts the jobs matching `status`, regardless of paging.
 
 ### `GET /jobs/pending`
-Return `pending` jobs in engagements accessible with write permission to the authenticated user that are eligible to run now, oldest first. Used by VardrRunner to poll for work. Also materializes any due scheduled scans into pending jobs.
+Return `pending` jobs in engagements accessible with write permission to the authenticated user that are eligible to run now, oldest first. Read by `vardrrunner jobs run`, which executes what it returns once and exits; nothing polls in the background.
 
 Pipeline stages with an unmet dependency are held back: a job with `depends_on` set is only returned once its parent reaches `done`. If the parent `failed` (or no longer exists), the dependent job is auto-failed with an `"upstream pipeline stage failed"` message so it never hangs the queue.
 
@@ -1395,91 +1395,6 @@ Permanently delete a job and all its events. Intended for removing stuck jobs th
 
 **Errors**
 - `404` — job not found or belongs to another user
-
----
-
-## Scheduled Scans
-
-Recurring scan definitions. There is no backend cron: due schedules are materialized into pending `scan_jobs` whenever VardrRunner polls `GET /jobs/pending`, so schedules only fire while a runner is connected. New schedules are due immediately — the first job is created on the runner's next poll. After a runner outage, one catch-up job is created (not one per missed interval).
-
-### Scheduling active tools (ffuf, dalfox)
-
-Any `tool_type` a job accepts, a schedule accepts — including `ffuf`, which sends sustained
-traffic at the target, and `dalfox`, which sends payloads at every parameter it finds.
-Creating a schedule needs write access to the engagement (a `full` API key included).
-VardrRunner's MCP server exposes no tool that creates or edits one.
-
-- **Repeated schedules mean repeated active traffic.** The shortest interval is `hourly`, so
-  an `ffuf` or `dalfox` schedule scans the target every hour for as long as it exists. **The
-  load limits — `config.rate` for ffuf, `config.worker`/`config.delay` for dalfox — apply to
-  one execution, not to the engagement:** each run is a fresh process with its own full
-  allowance, and nothing aggregates traffic across runs, across schedules, or across jobs
-  that overlap. They bound how hard one run pushes, not how often runs happen.
-- **Execution limits are validated at creation**, by the same validator a job uses, so a
-  schedule cannot carry a wordlist path, switch the rate cap off, or remove dalfox's
-  concurrency cap. Those limits then travel with every job it materializes, unchanged.
-- **Policy is evaluated when a runner claims the job, not when the schedule is created.**
-  Creating a schedule and materializing its job perform no authorization, testing-window or
-  scope check. At claim (and on the transition to `running`) the engagement is evaluated:
-  findings come back in the claim response's `warnings` array and the job still runs, because
-  scope, window and authorization are advisory (ADR 0001). A schedule therefore **keeps
-  running after the authorization window closes**; each run carries the warning.
-- **Stop-work pauses the schedule as well as refusing the claim.** While stop-work is engaged
-  a claim returns `403 stop_work_active`, and due schedules for that engagement are **skipped**:
-  no job is queued, and `next_run_at` is left untouched. On release each schedule fires
-  **one** catch-up job on the next runner poll, the same rule as after a runner outage,
-  rather than a backlog of one job per missed interval. (Before this was fixed, jobs kept
-  queueing behind the refusal and all became claimable on release, a burst of repeated active
-  scans the moment work resumed.) Other engagements' schedules are unaffected. If you would
-  rather nothing fire on release, disable the schedule (`PATCH ... {"enabled": false}`).
-- **Scheduled dalfox results are deduplicated like any other**, so a recurring scan does not
-  inflate the engagement's candidate count; each run still records that it observed a known
-  candidate (`GET /scans?job_id=`).
-
-**Schedule object shape**
-```json
-{
-  "id":            "uuid",
-  "program_id":    "uuid",
-  "tool_type":     "httpx",
-  "target_source": "scope",
-  "config":        { "limit": 50 },
-  "interval":      "daily",
-  "enabled":       true,
-  "last_run_at":   "2026-06-12T10:00:00+00:00",
-  "next_run_at":   "2026-06-13T10:00:00+00:00",
-  "created_at":    "2026-06-12T10:00:00+00:00"
-}
-```
-
-### `GET /engagements/{program_id}/schedules`
-List all schedules for a engagement, newest first.
-
-**Response**
-```json
-{ "schedules": [ <schedule_object>, ... ], "total": 2 }
-```
-
-### `POST /engagements/{program_id}/schedules`
-Create a recurring scan.
-
-**Request body**
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `tool_type` | string | yes | `httpx`, `nuclei`, `subfinder`, `nmap`, `dnsx`, `naabu`, `katana`, `gau`, `ffuf`, `dalfox`, or `vardrgate_api_test` |
-| `target_source` | string | yes | `scope` or `recon` |
-| `config` | object | no | Tool config, same validation as job creation |
-| `interval` | string | yes | `hourly`, `daily`, or `weekly` |
-
-**Errors**
-- `400` — invalid tool, source, interval, or config keys
-- `404` — engagement not found or belongs to another user
-
-### `PATCH /engagements/{program_id}/schedules/{schedule_id}`
-Update `enabled` (pause/resume) and/or `interval`.
-
-### `DELETE /engagements/{program_id}/schedules/{schedule_id}`
-Permanently delete a schedule. Jobs already materialized from it are unaffected.
 
 ---
 

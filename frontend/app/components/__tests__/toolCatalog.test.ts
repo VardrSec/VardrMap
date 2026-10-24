@@ -21,7 +21,7 @@ describe("tool catalog", () => {
     expect(gau.config.find((c) => c.key === "subs")).toMatchObject({ type: "toggle", default: true });
   });
 
-  it("offers ffuf against recon or scope with a rate field", () => {
+  it("offers ffuf against recon or scope; its rate lives in Request Controls", () => {
     const ffuf = TOOLS.ffuf;
     expect(ffuf.sources).toEqual(["recon", "scope"]);
     expect(ffuf.yieldsTo).toBe("recon");
@@ -29,7 +29,6 @@ describe("tool catalog", () => {
       "wordlist",
       "extensions",
       "match_codes",
-      "rate",
     ]);
   });
 

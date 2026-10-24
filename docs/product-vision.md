@@ -78,7 +78,7 @@ VardrMap models the **target** and the **authority to test it**:
    target falls outside what was agreed. VardrMap does not refuse the work:
    staying in scope is the operator's responsibility, as it is with every other
    tool in the kit. The exception is stop-work, the operator's own halt switch,
-   which prevents new starts and schedule materialization. Cancellation of already
+   which prevents new starts. Cancellation of already
    running processes remains future work.
 2. **Assets are a graph, not rows.** A finding correlates to the service that
    exposed it, which correlates to the host, which correlates to the domain.

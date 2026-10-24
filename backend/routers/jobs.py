@@ -1,7 +1,7 @@
 import hashlib
 import json
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Any, Literal, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
@@ -30,21 +30,12 @@ from models import (
     ReconItem,
     ScanItem,
     ScanJob,
-    ScheduledScan,
     ScopeItem,
     User,
 )
 from notifications import send_webhook
 
 router = APIRouter(tags=["jobs"])
-
-# Schedule intervals live here (not in routers/schedules.py) because both this
-# module and schedules.py need them, and schedules.py already imports from here.
-SCHEDULE_INTERVALS: dict[str, timedelta] = {
-    "hourly": timedelta(hours=1),
-    "daily":  timedelta(days=1),
-    "weekly": timedelta(weeks=1),
-}
 
 
 EventKind = Literal["started", "targets_resolved", "target_stats", "target_warning", "blocked", "running", "uploaded", "done", "failed", "log"]
@@ -637,50 +628,12 @@ def list_jobs(
     return {"jobs": [serialize_job(j) for j in jobs], "total": total, "limit": limit, "offset": offset}
 
 
-def _materialize_due_schedules(db: Session, github_id: str) -> None:
-    """Turn due scheduled scans into pending jobs and advance their next_run_at.
-
-    next_run_at advances from now (not from the old next_run_at) so a daemon
-    that was offline for a week creates one catch-up job, not seven.
-    """
-    now = datetime.now(timezone.utc)
-    # Stop-work is the operator's halt switch, and it must stop a schedule too. Refusing the
-    # claim is not enough on its own: materialization would keep queueing a job per interval
-    # behind the refusal, and all of them would become claimable on release -- a burst of
-    # repeated active scans the moment work resumes. So a stopped engagement's schedules are
-    # skipped AND left untouched: next_run_at is not advanced, so on release each schedule
-    # fires exactly one catch-up job, the same as after a runner outage.
-    stopped = db.query(Engagement.id).filter(Engagement.stop_work_at.isnot(None))
-    due = (
-        db.query(ScheduledScan)
-        .filter(
-            ScheduledScan.program_id.in_(accessible_engagement_ids(github_id, db)),
-            ScheduledScan.program_id.notin_(stopped),
-            ScheduledScan.enabled == True,  # noqa: E712 — SQLAlchemy needs the comparison
-            ScheduledScan.next_run_at <= now,
-        )
-        .all()
-    )
-    for schedule in due:
-        db.add(ScanJob(
-            program_id=schedule.program_id,
-            owner_github_id=github_id,
-            tool_type=schedule.tool_type,
-            target_source=schedule.target_source,
-            config=schedule.config or {},
-        ))
-        schedule.last_run_at = now
-        schedule.next_run_at = now + SCHEDULE_INTERVALS.get(schedule.interval, timedelta(days=1))
-    if due:
-        db.commit()
-
-
 @router.get("/jobs/pending")
 def get_pending_jobs(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Pending jobs the runner may execute now, oldest first. Used by VardrRunner to poll.
+    """Pending jobs the runner may execute now, oldest first. Read by `vardrrunner jobs run`.
 
     Pipeline stages with an unmet dependency are held back: a job waits until its
     parent is "done", and is auto-failed if its parent failed (or vanished) so it
@@ -690,7 +643,6 @@ def get_pending_jobs(
     inlined here so the runner receives the `test_case` object its config parser
     expects. See `_inline_test_cases`.
     """
-    _materialize_due_schedules(db, current_user["github_id"])
     pending = (
         db.query(ScanJob)
         .filter(

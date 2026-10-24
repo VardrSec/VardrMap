@@ -153,14 +153,15 @@ either can be narrowed or revoked without touching the other.
 
 ### 6. Queue permission can cause target traffic through a runner.
 
-The remote server does not execute a binary itself, but an installed daemon
-automatically claims queued work. Granting `job:write` therefore grants a path to
+The remote server does not execute a binary itself, but a runner claims queued
+work the next time an operator runs `vardrrunner jobs run` (since Runner 0.48.0 no
+daemon claims it automatically). Granting `job:write` therefore grants a path to
 active target traffic; there is no separate per-job human consent step today.
 
 A compromised agent can read the engagement data it was granted and enqueue
 repeated permitted scans. Scope/window warnings remain advisory. Per-execution
 rate/worker limits do not create an engagement-wide traffic budget. Stop-work
-blocks new starts and skips schedules, but does not cancel running processes;
+blocks new starts, but does not cancel running processes;
 remote tools cannot release it. Local target guards and bounded job types remain
 in effect, and arbitrary shell execution is not exposed.
 

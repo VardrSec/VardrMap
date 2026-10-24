@@ -34,7 +34,7 @@ class Organization(Base):
     """The tenant. Everything an operator owns hangs off one of these.
 
     Before this existed the tenancy anchor was a GitHub user id, denormalized
-    onto Client, ScanJob, ScheduledScan, Authorization and Service. That made a
+    onto Client, ScanJob, ScheduledScan (since removed), Authorization and Service. That made a
     teammate unable to operate an engagement's jobs, and made a consulting firm
     unable to share a client record or a runner fleet between two people.
 
@@ -211,7 +211,6 @@ class Engagement(Base):
     import_records = relationship("ImportRecord", back_populates="engagement", cascade="all, delete-orphan")
     scan_jobs   = relationship("ScanJob",    back_populates="engagement", cascade="all, delete-orphan")
     services    = relationship("Service",    back_populates="engagement", cascade="all, delete-orphan")
-    scheduled_scans = relationship("ScheduledScan", back_populates="engagement", cascade="all, delete-orphan")
     members = relationship("EngagementMember", back_populates="engagement", cascade="all, delete-orphan")
     scan_profiles = relationship("ScanProfile", back_populates="engagement", cascade="all, delete-orphan")
     test_cases = relationship("AuthorizationTestCase", back_populates="engagement", cascade="all, delete-orphan")
@@ -632,26 +631,6 @@ class RadarProgram(Base):
     is_new = Column(String(1), default="1")  # "1" = unseen since last refresh, "0" = seen
     discovered_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     last_fetched_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
-
-
-class ScheduledScan(Base):
-    __tablename__ = "scheduled_scans"
-
-    id = Column(String, primary_key=True, default=new_uuid)
-    program_id = Column(String, ForeignKey("programs.id", ondelete="CASCADE"), nullable=False, index=True)
-    owner_github_id = Column(String, nullable=False, index=True)
-    tool_type = Column(String(20), nullable=False)       # see routers/jobs.py _VALID_TOOLS
-    target_source = Column(String(20), nullable=False)   # "scope" | "recon"
-    config = Column(JSON, nullable=True)                 # tool-specific options, same shape as ScanJob.config
-    interval = Column(String(20), nullable=False)        # "hourly" | "daily" | "weekly"
-    enabled = Column(Boolean, nullable=False, default=True)
-    last_run_at = Column(DateTime, nullable=True)
-    # Due schedules are materialized into scan_jobs when the runner polls
-    # GET /jobs/pending — the polling daemon drives the clock, no cron needed
-    next_run_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
-    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
-
-    engagement = relationship("Engagement", back_populates="scheduled_scans")
 
 
 class EngagementMember(Base):

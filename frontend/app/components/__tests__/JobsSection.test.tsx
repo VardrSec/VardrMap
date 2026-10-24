@@ -17,7 +17,6 @@ const BASE_ROUTES = {
   [`GET /engagements/${PROGRAM_ID}/jobs`]: { body: { jobs: [] } },
   "GET /runner/status": { body: { online: false } },
   [`GET /engagements/${PROGRAM_ID}/recon?limit=1`]: { body: { total: 0 } },
-  [`GET /engagements/${PROGRAM_ID}/schedules`]: { body: { schedules: [] } },
   [`GET /engagements/${PROGRAM_ID}/scan-profiles`]: { body: { profiles: [] } },
   [`GET /engagements/${PROGRAM_ID}/test-cases`]: { body: { test_cases: [] } },
 };
@@ -43,7 +42,7 @@ const NEW_JOB = {
 };
 
 describe("JobsSection", () => {
-  it("fetches jobs, runner status, recon count, and schedules on mount", async () => {
+  it("fetches jobs, runner status and recon count on mount, and no schedules", async () => {
     const { authFetch } = renderWithApp(
       <JobsSection engagementId={PROGRAM_ID} />,
       { routes: BASE_ROUTES },
@@ -53,8 +52,8 @@ describe("JobsSection", () => {
       expect(authFetch).toHaveBeenCalledWith(`/engagements/${PROGRAM_ID}/jobs`);
       expect(authFetch).toHaveBeenCalledWith("/runner/status");
       expect(authFetch).toHaveBeenCalledWith(`/engagements/${PROGRAM_ID}/recon?limit=1`);
-      expect(authFetch).toHaveBeenCalledWith(`/engagements/${PROGRAM_ID}/schedules`);
     });
+    expect(authFetch).not.toHaveBeenCalledWith(`/engagements/${PROGRAM_ID}/schedules`);
   });
 
   it("renders the Composer panel", async () => {
@@ -370,35 +369,76 @@ describe("JobsSection", () => {
     );
   });
 
-  it("creates a schedule via POST /schedules when a recurrence is picked", async () => {
-    const SCHEDULE = {
-      id: "sched-1", tool_type: "subfinder", target_source: "scope",
-      config: {}, interval: "daily", enabled: true,
-      next_run_at: null, last_run_at: null, created_at: new Date().toISOString(),
-    };
-    const { authFetch } = renderWithApp(<JobsSection engagementId={PROGRAM_ID} />, {
-      routes: {
-        ...BASE_ROUTES,
-        [`POST /engagements/${PROGRAM_ID}/schedules`]: { body: SCHEDULE },
-      },
-    });
-
+  it("offers no recurrence: jobs run once, when the operator runs them", async () => {
+    renderWithApp(<JobsSection engagementId={PROGRAM_ID} />, { routes: BASE_ROUTES });
     await screen.findByText("Queue a Job");
+    expect(screen.queryByRole("button", { name: "daily" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Recurrence")).not.toBeInTheDocument();
+    expect(screen.getByText(/Queued jobs run when you run/)).toBeInTheDocument();
+  });
 
-    // Switch to subfinder — accessible name includes glyph + label + blurb
-    await userEvent.click(await screen.findByRole("button", { name: /subfinder/i }));
-
-    // Select daily recurrence
-    await userEvent.click(await screen.findByRole("button", { name: "daily" }));
-
-    // Submit button now reads "Schedule daily"
-    await userEvent.click(await screen.findByRole("button", { name: "Schedule daily" }));
+  it("sends the request rate and custom headers with a queued job", async () => {
+    const { authFetch } = renderWithApp(<JobsSection engagementId={PROGRAM_ID} />, {
+      routes: { ...BASE_ROUTES, [`POST /engagements/${PROGRAM_ID}/jobs`]: { body: NEW_JOB } },
+    });
+    await screen.findByText("Queue a Job");
+    await userEvent.type(screen.getByLabelText("Requests per second"), "25");
+    await userEvent.type(screen.getByLabelText("Custom headers"), "X-Bug-Bounty: me{enter}X-Test: 1");
+    await userEvent.click(screen.getByRole("button", { name: "Queue Job" }));
 
     await waitFor(() =>
-      expect(authFetch).toHaveBeenCalledWith(
-        `/engagements/${PROGRAM_ID}/schedules`,
-        expect.objectContaining({ method: "POST" }),
-      ),
+      expect(authFetch).toHaveBeenCalledWith(`/engagements/${PROGRAM_ID}/jobs`, expect.objectContaining({ method: "POST" })),
     );
+    const call = authFetch.mock.calls.find(
+      (c: unknown[]) => c[0] === `/engagements/${PROGRAM_ID}/jobs` && (c[1] as { method?: string })?.method === "POST",
+    );
+    const { config } = JSON.parse((call![1] as { body: string }).body);
+    expect(config.rate).toBe(25);
+    expect(config.headers).toEqual({ "X-Bug-Bounty": "me", "X-Test": "1" });
+  });
+
+  it("will not queue an invalid header or a rate above the engagement ceiling", async () => {
+    renderWithApp(<JobsSection engagementId={PROGRAM_ID} />, {
+      routes: BASE_ROUTES,
+      overrides: {
+        selectedEngagement: { id: PROGRAM_ID, name: "Acme", max_request_rate: 10, scope: { in: [], out: [] } } as never,
+      },
+    });
+    await screen.findByText("Queue a Job");
+    const rate = screen.getByLabelText("Requests per second");
+    expect(rate).toHaveAttribute("placeholder", "requests/sec (engagement max 10)");
+
+    await userEvent.type(rate, "50");
+    expect(screen.getByText("rate exceeds this engagement's ceiling of 10/s")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Queue Job" })).toBeDisabled();
+
+    await userEvent.clear(rate);
+    await userEvent.type(screen.getByLabelText("Custom headers"), "no colon here");
+    expect(screen.getByText('"no colon here" must be Name: value')).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Queue Job" })).toBeDisabled();
+  });
+
+  it("applies headers only to the pipeline stages that accept them", async () => {
+    const confirmSpy = jest.spyOn(window, "confirm").mockReturnValue(true);
+    try {
+      const { authFetch } = renderWithApp(<JobsSection engagementId={PROGRAM_ID} />, {
+        routes: { ...BASE_ROUTES, [`POST /engagements/${PROGRAM_ID}/pipelines`]: { body: { jobs: [] } } },
+      });
+      await screen.findByText("Queue a Job");
+      await userEvent.click(await screen.findByRole("button", { name: "Select Attack Surface" }));
+      await userEvent.type(screen.getByLabelText("Custom headers"), "X-Bug-Bounty: me");
+      await userEvent.click(screen.getByRole("button", { name: "Queue Pipeline" }));
+
+      await waitFor(() =>
+        expect(authFetch).toHaveBeenCalledWith(`/engagements/${PROGRAM_ID}/pipelines`, expect.objectContaining({ method: "POST" })),
+      );
+      const call = authFetch.mock.calls.find((c: unknown[]) => c[0] === `/engagements/${PROGRAM_ID}/pipelines`);
+      const stages: { tool_type: string; config: Record<string, unknown> }[] =
+        JSON.parse((call![1] as { body: string }).body).stages;
+      const withHeaders = stages.filter((st) => st.config.headers).map((st) => st.tool_type);
+      expect(withHeaders).toEqual(["httpx", "nuclei"]);
+    } finally {
+      confirmSpy.mockRestore();
+    }
   });
 });

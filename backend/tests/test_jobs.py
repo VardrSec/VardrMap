@@ -326,3 +326,25 @@ class TestJobConfigValidation:
         res = _create_job(client, program_id, auth_headers,
                           tool_type="nmap", config={"top_ports": 200, "timing": 4})
         assert res.status_code == 200
+
+
+# ── recurring scans are removed ──────────────────────────────────────────────
+#
+# VardrRunner runs only when invoked, so a schedule could never recur on its own.
+# The endpoints are gone, and polling the queue creates no job by itself.
+
+def test_schedule_endpoints_are_gone(client, program_id, auth_headers):
+    assert client.get(f"/programs/{program_id}/schedules", headers=auth_headers).status_code == 404
+    res = client.post(
+        f"/programs/{program_id}/schedules",
+        json={"tool_type": "httpx", "target_source": "scope", "interval": "daily"},
+        headers=auth_headers,
+    )
+    assert res.status_code in (404, 405)
+
+
+def test_polling_the_queue_creates_no_jobs(client, program_id, auth_headers):
+    before = client.get(f"/programs/{program_id}/jobs", headers=auth_headers).json()["total"]
+    client.get("/jobs/pending", headers=auth_headers)
+    after = client.get(f"/programs/{program_id}/jobs", headers=auth_headers).json()["total"]
+    assert after == before

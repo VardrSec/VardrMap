@@ -117,9 +117,8 @@ export const TOOLS: Record<string, ToolDef> = {
       { key: "wordlist", label: "Wordlist name", type: "text", placeholder: "common" },
       { key: "extensions", label: "Extensions", type: "text", placeholder: ".php,.bak" },
       { key: "match_codes", label: "Status filter", type: "text", placeholder: "200,301,403" },
-      // The rate cap bounds the load this puts on a client's host; there is no
-      // value that disables it.
-      { key: "rate", label: "Requests/sec", type: "number", placeholder: "50" },
+      // Rate is set under Request Controls. Left blank, ffuf keeps its always-on cap
+      // (50/s); there is no value that disables it.
     ],
   },
   dalfox: {

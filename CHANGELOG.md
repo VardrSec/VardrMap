@@ -4,6 +4,25 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- **Breaking — remove recurring scans.** VardrRunner runs only when invoked (Runner 0.48.0),
+  so a schedule never fired on its own. The Composer's recurrence picker, the Recurring Scans
+  panel, `/engagements/{id}/schedules` (GET/POST/PATCH/DELETE) and schedule materialization in
+  `GET /jobs/pending` are removed. **Migration `0029dropschedules` drops the
+  `scheduled_scans` table and permanently deletes every stored schedule**; its downgrade
+  recreates the table empty. Stop-work no longer has schedules to pause.
+- Remove the Jobs **auto-run** toggle, which only changed a label: nothing ran a job until
+  `vardrrunner jobs run`. The board's `vardrrunner jobs run · N` button is no longer disabled
+  while the runner shows offline, and copies the command.
+- Add **Request Controls** to the job composer: a requests-per-second rate (httpx, nuclei,
+  katana, ffuf) and custom headers, one `Name: value` per line (those plus dalfox), validated
+  with the API's rules before queueing. They apply to a single job or to every pipeline stage
+  that accepts them, show and enforce the engagement's `max_request_rate`, and round-trip
+  through saved profiles. ffuf's separate Requests/sec field moved here.
+- Show the runner's **version** beside "VardrRunner" in the Execution Link panel and its
+  collapsed strip, in smaller text, including the last reported version while offline.
+- Docs and comments: describe the heartbeat as sent by `jobs run` and `vardrrunner heartbeat`
+  only (no daemon), name Runner 0.48.0 instead of "the release after 0.47.0", and drop
+  scheduled-scan and always-on-runner wording.
 - Make **secondary text readable** across the app: hints, step titles, labels, inactive tabs
   and Copy buttons move from `#52525b` (~2.6:1 contrast, below WCAG AA) to a shared
   `--color-muted` token, `#a1a1aa` (~7.7:1); their hover brightens to `#e4e4e7`. Off-state
