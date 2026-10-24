@@ -9,6 +9,12 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
   returning typed arrays, GHSA-673q-mjm6-r5xr; Server Actions DoS, GHSA-p3m5-59mp-jv5r) and the
   DOMPurify override ^3.4.16 → ^3.4.17 (critical sanitizer bypasses GHSA-cg2g-xh64-v4q7,
   GHSA-mrv2-3pqr-j5jr, GHSA-c6gr-qvv4-5v3f; pulled in by jspdf). `npm audit --omit=dev` is clean.
+- Add a **VardrGate install step** to Settings → Connect Runner (now seven steps): one
+  copyable command for Windows PowerShell and one for macOS/Linux. Each downloads the pinned
+  VardrGate release (v0.1.0), verifies it against the release's `SHA256SUMS` and refuses it on
+  a mismatch, then installs it on `PATH` (`%LOCALAPPDATA%\Programs\VardrGate` or
+  `~/.local/bin`, no sudo) and prints its version. Marked as needed only for API assessments;
+  the manual download link stays.
 - Fix **Settings → Connect Runner** for VardrRunner's manual-invocation release (Runner
   PR #60): the connect command is now `vardrrunner init --url <api> --no-install-tools`,
   because Runner now rejects `--install-service` and installs no startup service. Step 5 adds
