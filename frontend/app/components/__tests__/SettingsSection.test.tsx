@@ -9,6 +9,7 @@ jest.mock("remark-gfm", () => ({ __esModule: true, default: () => {} }));
 
 import { renderWithApp } from "../../../test-utils/renderWithApp";
 import SettingsSection, { engagementCommands, runnerInitCommand } from "../SettingsSection";
+import { vardrgateUnixInstallCommand, vardrgateWindowsInstallCommand } from "../../lib/vardrgateInstall";
 
 const BASE_ROUTES = {
   "GET /auth/apikeys": { body: { keys: [] } },
@@ -47,7 +48,18 @@ describe("SettingsSection workflows", () => {
       expect(await screen.findByText(cmd)).toBeInTheDocument();
     }
     expect(screen.getByText(/Ready for Acme API/)).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "Copy" }).length).toBeGreaterThanOrEqual(7);
+    expect(screen.getAllByRole("button", { name: "Copy" }).length).toBeGreaterThanOrEqual(9);
+  });
+
+  it("offers a verified VardrGate install command for Windows and for macOS/Linux", async () => {
+    renderWithApp(<SettingsSection />, { routes: BASE_ROUTES });
+    expect(await screen.findByText("5 · Install VardrGate (API assessments only)")).toBeInTheDocument();
+    expect(screen.getByText(vardrgateWindowsInstallCommand())).toBeInTheDocument();
+    expect(screen.getByText(vardrgateUnixInstallCommand())).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Download it here" })).toHaveAttribute(
+      "href",
+      "https://github.com/VardrSec/VardrGate/releases/latest",
+    );
   });
 
   it("shows the key once and keeps it out of every setup command", async () => {

@@ -269,9 +269,16 @@ To connect a runner to this VardrMap instance after installation (the same steps
 
    Safe to rerun: it installs missing tools, updates outdated ones, repairs missing or
    changed binaries, skips verified ones, and reports whether nmap and vardrgate (which it
-   cannot install) are on `PATH`. VardrGate is only needed for `vardrgate_api_test` jobs; get
-   it from the [VardrGate releases](https://github.com/VardrSec/VardrGate/releases/latest)
-   and check it against `SHA256SUMS`. The per-tool report needs a VardrRunner release newer
+   cannot install) are on `PATH`. VardrGate is only needed for `vardrgate_api_test` jobs.
+   **Settings → Connect Runner** step 5 has a copyable install command for Windows
+   (PowerShell) and for macOS/Linux: each downloads the pinned VardrGate release
+   (`VARDRGATE_VERSION` in `frontend/app/lib/vardrgateInstall.ts`), checks it against that
+   release's `SHA256SUMS`, refuses it on a mismatch, and puts it on `PATH`
+   (`%LOCALAPPDATA%\Programs\VardrGate` or `~/.local/bin`). Bump the pin when VardrGate
+   releases. Or get it from the
+   [VardrGate releases](https://github.com/VardrSec/VardrGate/releases/latest) and check it
+   against `SHA256SUMS` by hand. Keep it out of `~/.vardrmap/tools`: VardrRunner refuses any
+   binary there that it did not install. The per-tool report needs a VardrRunner release newer
    than 0.47.0; 0.47.0 installs the same way with less detail.
 4. **Check the connection.** Run `vardrrunner heartbeat`, then click **Verify connection** in
    Settings. The runner shows online for 5 minutes after its last heartbeat (`jobs run` also

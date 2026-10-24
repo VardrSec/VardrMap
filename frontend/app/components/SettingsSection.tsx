@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { ApiKey } from "../types";
 import { useAppContext } from "../context/AppContext";
 import { Panel, Input, PrimaryButton, DangerButton, SectionHeader } from "./ui";
+import { VARDRGATE_VERSION, vardrgateUnixInstallCommand, vardrgateWindowsInstallCommand } from "../lib/vardrgateInstall";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 const VARDRUNNER_INSTALL_COMMAND = "pipx install vardrrunner";
@@ -213,14 +214,28 @@ export default function SettingsSection() {
             <CopyLine text={VARDRUNNER_TOOLS_COMMAND} onCopy={copyCmd} />
             <Hint>
               Safe to run any time: installs missing tools, updates old ones, repairs broken ones and skips the ones that are
-              fine. It also tells you if nmap or VardrGate is missing. VardrGate is only needed for API assessments:{" "}
+              fine. It also tells you if nmap or VardrGate is missing. VardrGate has its own step below.
+            </Hint>
+          </Step>
+
+          <Step n={5} title="Install VardrGate (API assessments only)">
+            <Hint>
+              Skip this unless you run API assessments. Each command downloads VardrGate v{VARDRGATE_VERSION}, checks it
+              against the release&apos;s checksums, refuses it if they don&apos;t match, and puts it on your PATH.
+            </Hint>
+            <Hint>Windows (PowerShell):</Hint>
+            <CopyLine text={vardrgateWindowsInstallCommand()} onCopy={copyCmd} />
+            <Hint>macOS or Linux (installs to ~/.local/bin; add that to your PATH if it isn&apos;t already):</Hint>
+            <CopyLine text={vardrgateUnixInstallCommand()} onCopy={copyCmd} />
+            <Hint>
+              Both finish by printing the version. Prefer to do it by hand?{" "}
               <a href={VARDRGATE_RELEASES_URL} target="_blank" rel="noopener noreferrer" className="underline hover:text-[#94a3b8]">
-                download it here
+                Download it here
               </a>.
             </Hint>
           </Step>
 
-          <Step n={5} title="Check it's connected">
+          <Step n={6} title="Check it's connected">
             <Hint>Report in once, then click Verify within five minutes:</Hint>
             <CopyLine text={VARDRUNNER_HEARTBEAT_COMMAND} onCopy={copyCmd} />
             <button
@@ -238,7 +253,7 @@ export default function SettingsSection() {
             <CopyLine text="vardrrunner doctor" onCopy={copyCmd} />
           </Step>
 
-          <Step n={6} title="Start on an engagement">
+          <Step n={7} title="Start on an engagement">
             <Hint>
               {selectedEngagement
                 ? `Ready for ${selectedEngagement.name}. Check its scope, then see which in-scope hosts are live:`
