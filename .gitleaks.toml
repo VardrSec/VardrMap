@@ -27,8 +27,17 @@ control the fixtures exist to verify.
 
 Scoped to exactly the two files that need it. Every other path in the repository,
 including all other tests, is still scanned by the full default ruleset.
+
+GitHub advisory IDs (GHSA-xxxx-xxxx-xxxx) are public identifiers, but cited after
+"API" in a changelog entry they trip generic-api-key. Only a match containing a
+well-formed GHSA ID is allowed; GitHub draws its segments from the 20-character
+alphabet below, so no real key or token can satisfy it.
 """
 paths = [
     '''backend/tests/test_redaction\.py''',
     '''backend/tests/test_evidence\.py''',
+]
+regexTarget = "match"
+regexes = [
+    '''GHSA(-[23456789cfghjmpqrvwx]{4}){3}''',
 ]
