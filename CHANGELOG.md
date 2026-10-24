@@ -4,6 +4,13 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Make the composer's **tool list collapsible**, collapsed by default and remembered: it shows
+  only the chosen tool, so its settings and Request Controls sit right under the pipelines;
+  picking from the open list closes it. Pipelines are unchanged and always visible.
+- Add **ffuf to the Content Discovery pipeline** (subfinder → httpx → ffuf → katana → gau): it
+  fuzzes the live hosts' site roots, and katana then crawls from what it found. It can be
+  excluded like any stage. dalfox stays out of every pipeline: it attacks parameters rather
+  than discovering anything, so it remains its own decision.
 - **Breaking — remove recurring scans.** VardrRunner runs only when invoked (Runner 0.48.0),
   so a schedule never fired on its own. The Composer's recurrence picker, the Recurring Scans
   panel, `/engagements/{id}/schedules` (GET/POST/PATCH/DELETE) and schedule materialization in

@@ -64,13 +64,21 @@ describe("tool catalog", () => {
 });
 
 describe("pipelines", () => {
-  it("includes a Content Discovery chain using katana and gau", () => {
+  it("includes a Content Discovery chain using ffuf, katana and gau", () => {
     const content = PIPELINES.find((p) => p.id === "content-discovery");
     expect(content).toBeDefined();
-    expect(content!.stages.map((s) => s.tool_type)).toEqual(["subfinder", "httpx", "katana", "gau"]);
-    // katana crawls recon's live hosts; gau reads the wildcard scope.
-    expect(content!.stages[2]).toMatchObject({ tool_type: "katana", target_source: "recon" });
-    expect(content!.stages[3]).toMatchObject({ tool_type: "gau", target_source: "scope" });
+    expect(content!.stages.map((s) => s.tool_type)).toEqual(["subfinder", "httpx", "ffuf", "katana", "gau"]);
+    // ffuf fuzzes the live hosts' site roots before katana crawls, so the crawl
+    // starts from what ffuf found; gau reads the wildcard scope.
+    expect(content!.stages[2]).toMatchObject({ tool_type: "ffuf", target_source: "recon", config: {} });
+    expect(content!.stages[3]).toMatchObject({ tool_type: "katana", target_source: "recon" });
+    expect(content!.stages[4]).toMatchObject({ tool_type: "gau", target_source: "scope" });
+  });
+
+  it("keeps dalfox out of the pipelines: it attacks parameters, none of them is an XSS sweep", () => {
+    for (const pipeline of PIPELINES) {
+      expect(pipeline.stages.map((s) => s.tool_type)).not.toContain("dalfox");
+    }
   });
 
   it("only references tools that exist in the catalog", () => {

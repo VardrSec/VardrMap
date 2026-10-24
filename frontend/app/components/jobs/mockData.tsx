@@ -198,13 +198,16 @@ export const PIPELINES: PipelineDef[] = [
   {
     id: "content-discovery",
     label: "Content Discovery",
-    // subfinder finds names, httpx keeps the live ones, katana crawls those for
-    // endpoints, and gau adds URLs public archives already hold for the scope
-    // domains. All four land in the recon store.
-    blurb: "Find live hosts, crawl them, and pull archived URLs",
+    // subfinder finds names, httpx keeps the live ones, ffuf fuzzes their site
+    // roots for unlinked paths, katana crawls (picking up what ffuf found), and gau
+    // adds URLs public archives already hold for the scope domains. All land in
+    // the recon store. ffuf is active: the runner caps it at 100 site roots and
+    // 50 req/s unless Request Controls lower it.
+    blurb: "Find live hosts, fuzz and crawl them, and pull archived URLs",
     stages: [
       { tool_type: "subfinder", target_source: "scope", config: {} },
       { tool_type: "httpx", target_source: "recon", config: {} },
+      { tool_type: "ffuf", target_source: "recon", config: {} },
       { tool_type: "katana", target_source: "recon", config: {} },
       { tool_type: "gau", target_source: "scope", config: {} },
     ],
