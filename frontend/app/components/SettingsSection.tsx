@@ -21,7 +21,8 @@ const VARDRUNNER_JOBS_COMMAND = "vardrrunner jobs run";
 
 // The key is deliberately not part of the command: `init` reads it from a hidden prompt, so it
 // never lands in shell history, and stores it in the OS keychain. Tools are their own step.
-// No startup service: VardrRunner runs only when invoked, and rejects `--install-service`.
+// No startup service: VardrRunner runs only when invoked; `--install-service` no longer exists
+// (removed in Runner 0.51.0). The tests keep guarding that it is never shown.
 export function runnerInitCommand(apiUrl: string = API_URL): string {
   return `vardrrunner init --url ${apiUrl} --no-install-tools`;
 }
