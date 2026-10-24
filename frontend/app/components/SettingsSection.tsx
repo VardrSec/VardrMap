@@ -8,6 +8,8 @@ import { VARDRGATE_VERSION, vardrgateUnixInstallCommand, vardrgateWindowsInstall
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 const VARDRUNNER_INSTALL_COMMAND = "pipx install vardrrunner";
+// VardrRunner 0.50.0+ updates itself; older copies need one pipx upgrade to get there.
+const VARDRUNNER_UPDATE_COMMAND = "vardrrunner update";
 const VARDRUNNER_UPGRADE_COMMAND = "pipx upgrade vardrrunner";
 const VARDRGATE_RELEASES_URL = "https://github.com/VardrSec/VardrGate/releases/latest";
 
@@ -186,6 +188,8 @@ export default function SettingsSection() {
           <Step n={1} title="Install VardrRunner">
             <CopyLine text={VARDRUNNER_INSTALL_COMMAND} onCopy={copyCmd} />
             <Hint>Needs Python 3.10+ and pipx. Already installed? Update it instead:</Hint>
+            <CopyLine text={VARDRUNNER_UPDATE_COMMAND} onCopy={copyCmd} />
+            <Hint>On VardrRunner 0.49 or older, <span className="font-mono">vardrrunner update</span> doesn&apos;t exist yet. Run this once instead:</Hint>
             <CopyLine text={VARDRUNNER_UPGRADE_COMMAND} onCopy={copyCmd} />
           </Step>
 
