@@ -770,3 +770,38 @@ class DeliverableRevision(Base):
     content_hash = Column(String(64), nullable=False)
     actor = Column(String(100), nullable=False)
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+
+
+class AgentProposal(Base):
+    """A change an MCP agent proposes but cannot apply: scope, authorization or rate ceiling.
+
+    The MCP server exposes tools to *propose* these, but none to approve them (ADR 0015 in
+    VardrRunner). A proposal is inert until a human with a full-access key approves it in the
+    console, so a prompt-injected agent can only create a pending row the operator sees and
+    rejects — it can never widen its own scope or authorization. Approval applies the change
+    (a scope item, an authorization, or the engagement's rate ceiling); the row keeps the
+    agent's stated reason and cited source so the operator can judge it.
+    """
+
+    __tablename__ = "agent_proposals"
+
+    id = Column(String, primary_key=True, default=new_uuid)
+    program_id = Column(String, ForeignKey("programs.id"), nullable=False, index=True)
+    # Denormalised owner for the same fast BOLA filter every other table uses.
+    owner_github_id = Column(String, nullable=False, index=True)
+    # Display label of whoever's key created it. Not a trust boundary — shown, never checked.
+    proposed_by = Column(String(200), default="")
+    # scope_in | scope_out | authorization | rate_ceiling
+    kind = Column(String(20), nullable=False)
+    # The proposed values, already validated and sanitised for the kind.
+    payload = Column(JSON, nullable=False)
+    # The agent's own words; treated as untrusted display data, never as instructions.
+    reason = Column(Text, default="")
+    source = Column(String(500), default="")
+    # pending | approved | rejected
+    status = Column(String(10), nullable=False, default="pending")
+    # The id of the row created when a scope/authorization proposal is approved.
+    applied_resource_id = Column(String, default="")
+    created_at = Column(DateTime, nullable=True, default=lambda: datetime.now(timezone.utc))
+    resolved_at = Column(DateTime, nullable=True)
+    resolved_by = Column(String, default="")

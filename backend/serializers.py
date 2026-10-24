@@ -1,7 +1,7 @@
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from models import Authorization, Client, Finding, ImportRecord, ManualTest, Engagement, EngagementMember, OrganizationMember, ReconItem, Report, ScanItem, ScopeItem, Service
+from models import AgentProposal, Authorization, Client, Finding, ImportRecord, ManualTest, Engagement, EngagementMember, OrganizationMember, ReconItem, Report, ScanItem, ScopeItem, Service
 
 
 def serialize_scope_item(item: ScopeItem) -> dict:
@@ -350,4 +350,21 @@ def serialize_authorization(a: Authorization) -> dict:
         "status": a.status or "active",
         "notes": a.notes or "",
         "created_at": _iso(a.created_at),
+    }
+
+
+def serialize_proposal(p: AgentProposal) -> dict:
+    return {
+        "id": p.id,
+        "program_id": p.program_id,
+        "proposed_by": p.proposed_by or "",
+        "kind": p.kind,
+        "payload": p.payload or {},
+        "reason": p.reason or "",
+        "source": p.source or "",
+        "status": p.status,
+        "applied_resource_id": p.applied_resource_id or "",
+        "created_at": _iso(p.created_at),
+        "resolved_at": _iso(p.resolved_at),
+        "resolved_by": p.resolved_by or "",
     }

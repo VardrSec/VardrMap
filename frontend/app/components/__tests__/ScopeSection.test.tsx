@@ -48,14 +48,14 @@ test("previews an import without committing, then imports", async () => {
   // The preview summary and the skipped reason are shown; nothing was committed.
   expect(await screen.findByText(/2 in-scope · 1 out-of-scope · 1 already present · 1 skipped/)).toBeInTheDocument();
   expect(screen.getByText(/line 4 \(invalid characters\)/)).toBeInTheDocument();
-  const firstCall = authFetch.mock.calls[0];
-  expect(JSON.parse((firstCall[1] as RequestInit).body as string).commit).toBe(false);
+  const previewCall = authFetch.mock.calls.find((c) => String(c[0]).endsWith("/scope/import"));
+  expect(JSON.parse((previewCall?.[1] as RequestInit).body as string).commit).toBe(false);
 
   // Clicking import sends commit:true.
   await userEvent.click(screen.getByRole("button", { name: /Import 3 new items/ }));
   await waitFor(() => {
     const commitCall = authFetch.mock.calls.find(
-      (c) => JSON.parse((c[1] as RequestInit).body as string).commit === true,
+      (c) => (c[1] as RequestInit)?.body && JSON.parse((c[1] as RequestInit).body as string).commit === true,
     );
     expect(commitCall).toBeTruthy();
   });
