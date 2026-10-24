@@ -14,7 +14,7 @@
   "dependencies": {
     "jose": "^6.2.12",
     "jspdf": "^4.2.1",
-    "next": "16.4.0",
+    "next": "16.4.3",
     "next-auth": "^5.0.0-beta.32",
     "react": "19.3.0",
     "react-dom": "19.3.0",
@@ -43,7 +43,7 @@
   "overrides": {
     "postcss": "^8.5.26",
     "source-map-js": "^1.2.2",
-    "dompurify": "^3.4.16",
+    "dompurify": "^3.4.17",
     "baseline-browser-mapping": "^2.11.0"
   }
 }
