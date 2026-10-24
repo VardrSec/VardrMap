@@ -4,6 +4,10 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Development docs no longer point to `vardrrunner service uninstall`, which VardrRunner
+  0.51.0 removed; they link Runner's manual removal steps for a service left by 0.47.0 or
+  earlier. The Settings comment notes that `--install-service` no longer exists. No
+  behavior change.
 - **Settings → Connect Runner** step 1 offers `vardrrunner update` to update an installed
   runner (VardrRunner 0.50.0+, which runs the pipx upgrade and confirms the version), with
   `pipx upgrade vardrrunner` kept as the one-time step for 0.49 and older. README and

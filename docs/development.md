@@ -262,10 +262,10 @@ To connect a runner to this VardrMap instance after installation (the same steps
    Paste the key at the hidden prompt. `init` stores it in the OS keychain (it refuses to
    write a plaintext key unless you pass `--allow-plaintext-credentials`), sets the runner
    name and finishes with `doctor`. It is safe to rerun. Avoid `--key` on the command line:
-   it puts the key in shell history. VardrRunner runs only when invoked: since 0.48.0 it installs no startup service and
-   rejects `--install-service`. (0.47.0
-   still asks whether to install a background service; answer no, and run
-   `vardrrunner service uninstall` on a machine that has one.)
+   it puts the key in shell history. VardrRunner runs only when invoked and installs no
+   startup service. (0.47.0 still asks whether to install a background service; answer no.
+   A service installed by 0.47.0 or earlier is removed by hand; see VardrRunner's
+   [upgrade notes](https://github.com/VardrSec/VardrRunner/blob/main/docs/cli.md#upgrading-from-0470-or-earlier).)
 3. **Install or check the tools.**
 
    ```bash
