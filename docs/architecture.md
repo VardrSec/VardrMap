@@ -233,7 +233,7 @@ The sidebar exposes **7 top-level sections** mapped to the engagement workflow:
 
 1. **Bridge** (`jobs/Bridge.tsx`) — animated link visualization showing VardrMap ↔ VardrRunner connection; runner node shows real hostname, OS, version, and per-tool availability chips from the latest heartbeat; collapses to a slim strip. Collapse state persists to `localStorage`.
 2. **Telemetry** (`jobs/Telemetry.tsx`) — four stat tiles: running, completed, results yielded, avg runtime.
-3. **Composer** (`jobs/Composer.tsx`) — a single selection across the named pipelines and the eleven tools (subfinder/httpx/nuclei/nmap/dnsx/naabu/katana/gau/ffuf/dalfox/vardrgate_api_test). Picking a pipeline clears the tool highlight and vice versa, so only one thing is ever chosen; the tool's config is preserved across the toggle. Nothing is queued until **Queue**, and a pipeline confirms first since it queues several jobs at once.
+3. **Composer** (`jobs/Composer.tsx`) — a single selection across the named pipelines and the eleven tools (subfinder/httpx/nuclei/nmap/dnsx/naabu/katana/gau/ffuf/dalfox/vardrgate_api_test). Picking a pipeline clears the tool highlight and vice versa, so only one thing is ever chosen; the tool's config is preserved across the toggle. The tool list is collapsible (`toolsOpen`, remembered in the Jobs prefs, collapsed by default): collapsed, it shows only the chosen tool so its settings and Request Controls sit right under the pipelines, and picking a tool from the open list closes it again. Pipelines always stay visible. Nothing is queued until **Queue**, and a pipeline confirms first since it queues several jobs at once.
 
    Four pipelines ship in `PIPELINES` (`jobs/mockData.tsx`):
 
@@ -241,8 +241,10 @@ The sidebar exposes **7 top-level sections** mapped to the engagement workflow:
    |---|---|---|
    | **Attack Surface** | subfinder → dnsx → httpx → nuclei | An external surface you have to discover. Each stage feeds the next through the recon store. |
    | **Host Enumeration** | naabu → nmap → httpx | A scope you were given; each stage uses scope. |
-   | **Content Discovery** | subfinder → httpx → katana → gau | Find live hosts, crawl them and import archived URLs. |
+   | **Content Discovery** | subfinder → httpx → ffuf → katana → gau | Find live hosts, fuzz their site roots for unlinked paths, crawl them (including what ffuf found) and import archived URLs. ffuf is active; the runner caps it at 100 site roots and 50 req/s unless Request Controls lower it. |
    | **API Assessment** | httpx → vardrgate_api_test | Confirm reachability, then execute a selected stored authorization test case. |
+
+   dalfox is deliberately in no pipeline: it injects XSS payloads into parameters, which is an attack on what discovery found rather than a discovery step, and should be queued as its own decision.
 
    Selecting a pipeline expands it into a **stage editor**: each stage can be included or excluded, so subfinder → httpx alone is as valid as the full chain. Order always follows the pipeline definition, so re-including a stage restores its original position rather than appending it. Stage inclusion is stored per pipeline (`Record<pipelineId, Record<toolType, boolean>>`) because httpx appears in both — excluding it from one must not touch the other. The card blurb, the summary line and the confirm dialog all read from the current selection, so none of them can advertise a chain the operator has edited away. Queue is disabled while zero stages are included.
 

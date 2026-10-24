@@ -16,15 +16,16 @@ const LS = "vardrmap:jobs:prefs";
 const POLL_ACTIVE_MS = 5000;
 const POLL_IDLE_MS   = 30000;
 
-type Prefs = { view: "stream" | "pipeline" | "table"; collapsed: boolean; showTerminal: boolean };
+type Prefs = { view: "stream" | "pipeline" | "table"; collapsed: boolean; showTerminal: boolean; toolsOpen: boolean };
 
 function loadPrefs(): Prefs {
-  if (typeof window === "undefined") return { view: "stream", collapsed: false, showTerminal: true };
+  const defaults: Prefs = { view: "stream", collapsed: false, showTerminal: true, toolsOpen: false };
+  if (typeof window === "undefined") return defaults;
   try {
     const stored = localStorage.getItem(LS);
-    if (stored) return { view: "stream", collapsed: false, showTerminal: true, ...JSON.parse(stored) };
+    if (stored) return { ...defaults, ...JSON.parse(stored) };
   } catch { /* ignore */ }
-  return { view: "stream", collapsed: false, showTerminal: true };
+  return defaults;
 }
 
 type Toast = { text: string; id: number };
@@ -444,6 +445,8 @@ export default function JobsSection({
             onSaveProfile={saveProfile}
             onDeleteProfile={deleteProfile}
             maxRequestRate={selectedEngagement?.max_request_rate ?? null}
+            toolsOpen={prefs.toolsOpen}
+            onToolsOpenChange={(open) => pref("toolsOpen", open)}
             scopeCount={scopeCount}
             reconCount={reconCount}
             programName={programName}

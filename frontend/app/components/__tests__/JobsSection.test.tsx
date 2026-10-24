@@ -35,6 +35,12 @@ const ROUTES_WITH_CASE = {
   [`POST /engagements/${PROGRAM_ID}/jobs`]: { body: { id: "job-vg", tool_type: "vardrgate_api_test", target_source: "scope", config: {}, status: "pending", created_at: new Date().toISOString(), started_at: null, completed_at: null, error_message: null } },
 };
 
+/** Open the collapsed tool list, if it is not already open (prefs persist between tests). */
+async function openTools() {
+  const toggle = await screen.findByRole("button", { name: /^Tools/ });
+  if (toggle.getAttribute("aria-expanded") !== "true") await userEvent.click(toggle);
+}
+
 const NEW_JOB = {
   id: "job-1", tool_type: "nuclei", target_source: "scope",
   config: {}, status: "pending", created_at: new Date().toISOString(),
@@ -299,6 +305,7 @@ describe("JobsSection", () => {
     });
 
     await screen.findByText("Queue a Job");
+    await openTools();
     await userEvent.click(await screen.findByRole("button", { name: "Select vardrgate" }));
     expect(screen.getByRole("button", { name: "Queue Job" })).toBeDisabled();
 
@@ -328,6 +335,7 @@ describe("JobsSection", () => {
     renderWithApp(<JobsSection engagementId={PROGRAM_ID} />, { routes: BASE_ROUTES });
 
     await screen.findByText("Queue a Job");
+    await openTools();
     await userEvent.click(await screen.findByRole("button", { name: "Select vardrgate" }));
 
     expect(screen.getByText(/no test cases stored/i)).toBeInTheDocument();
@@ -342,10 +350,12 @@ describe("JobsSection", () => {
     await userEvent.click(pipeline);
     expect(pipeline).toHaveAttribute("aria-pressed", "true");
 
+    await openTools();
     const subfinder = screen.getByRole("button", { name: "Select subfinder" });
     await userEvent.click(subfinder);
     expect(pipeline).toHaveAttribute("aria-pressed", "false");
-    expect(subfinder).toHaveAttribute("aria-pressed", "true");
+    // Picking closes the list; the chosen tool is what remains.
+    expect(screen.getByRole("button", { name: "Select subfinder" })).toHaveAttribute("aria-pressed", "true");
     // Back to a single-tool queue, not a pipeline queue.
     expect(screen.getByRole("button", { name: "Queue Job" })).toBeInTheDocument();
   });
@@ -440,5 +450,25 @@ describe("JobsSection", () => {
     } finally {
       confirmSpy.mockRestore();
     }
+  });
+  it("collapses the tool list to the chosen tool, and picking from it closes it again", async () => {
+    renderWithApp(<JobsSection engagementId={PROGRAM_ID} />, { routes: BASE_ROUTES });
+    await screen.findByText("Queue a Job");
+    const toggle = screen.getByRole("button", { name: /^Tools/ });
+    if (toggle.getAttribute("aria-expanded") === "true") await userEvent.click(toggle);
+
+    // Collapsed: only the selected tool, so its settings are in view.
+    expect(screen.getByRole("button", { name: "Select nuclei" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Select httpx" })).not.toBeInTheDocument();
+
+    await userEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    await userEvent.click(screen.getByRole("button", { name: "Select httpx" }));
+
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByRole("button", { name: "Select httpx" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByRole("button", { name: "Select nuclei" })).not.toBeInTheDocument();
+    // Pipelines are untouched by the collapse.
+    expect(screen.getByRole("button", { name: "Select Content Discovery" })).toBeInTheDocument();
   });
 });

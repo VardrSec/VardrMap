@@ -33,6 +33,9 @@ type ComposerProps = {
   onDeleteProfile: (id: string) => void;
   /** The engagement's request-rate ceiling, or null for none. */
   maxRequestRate: number | null;
+  /** Whether the full tool list is shown; collapsed, only the chosen tool is. */
+  toolsOpen: boolean;
+  onToolsOpenChange: (open: boolean) => void;
   scopeCount: number;
   reconCount: number;
   programName: string;
@@ -103,7 +106,7 @@ function TestCasePicker({ cases, value, onChange, accent }: {
 
 type ComposerPropsWithTool = ComposerProps & { initialTool?: string };
 
-export default function Composer({ accent, onQueue, onPipeline, onPreview, profiles, testCases, onSaveProfile, onDeleteProfile, maxRequestRate, scopeCount, reconCount, programName, initialTool }: ComposerPropsWithTool) {
+export default function Composer({ accent, onQueue, onPipeline, onPreview, profiles, testCases, onSaveProfile, onDeleteProfile, maxRequestRate, toolsOpen, onToolsOpenChange, scopeCount, reconCount, programName, initialTool }: ComposerPropsWithTool) {
   // Which stored case a vardrgate job runs. Shared by the standalone tool and
   // the API Assessment pipeline, since both queue the same job type.
   const [caseId, setCaseId] = useState("");
@@ -136,6 +139,9 @@ export default function Composer({ accent, onQueue, onPipeline, onPreview, profi
   const tool = TOOLS[toolId];
 
   function pick(id: string) {
+    // Choosing is what the open list is for, so close it and bring the tool's
+    // settings back into view.
+    onToolsOpenChange(false);
     setPipelineId(null);
     setToolId(id);
     const t = TOOLS[id];
@@ -289,11 +295,23 @@ export default function Composer({ accent, onQueue, onPipeline, onPreview, profi
         })}
       </div>
 
-      <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-widest text-muted">Tools</label>
+      <button
+        onClick={() => onToolsOpenChange(!toolsOpen)}
+        aria-expanded={toolsOpen}
+        className="mb-1.5 flex w-full items-center justify-between text-[10px] font-semibold uppercase tracking-widest text-muted transition hover:text-muted-hover">
+        <span>Tools <span className="font-mono font-normal">· {Object.keys(TOOLS).length}</span></span>
+        <span className="font-mono font-normal normal-case tracking-normal">{toolsOpen ? "hide ▾" : "show all ▸"}</span>
+      </button>
       <div className="grid gap-2">
-        {Object.values(TOOLS).map((t) => (
-          <ToolPick key={t.id} tool={t} selected={!pipeline && toolId === t.id} accent={accent} onClick={() => pick(t.id)} />
-        ))}
+        {toolsOpen
+          ? Object.values(TOOLS).map((t) => (
+              <ToolPick key={t.id} tool={t} selected={!pipeline && toolId === t.id} accent={accent} onClick={() => pick(t.id)} />
+            ))
+          : !pipeline && (
+              // Collapsed: just the chosen tool. Clicking it reopens the list rather
+              // than re-picking it, which would reset its config.
+              <ToolPick tool={tool} selected accent={accent} onClick={() => onToolsOpenChange(true)} />
+            )}
       </div>
 
       <div className="mt-4 space-y-3">

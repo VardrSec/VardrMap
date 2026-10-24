@@ -109,6 +109,8 @@ test("pentest creation, job preview/queue, candidate review and immutable client
   });
   await page.reload();
   await page.getByLabel("Active Engagement").selectOption(engagement.id);
+  // The tool list starts collapsed to the chosen tool; open it to pick another.
+  await page.getByRole("button", { name: /^Tools/ }).click();
   await page.getByRole("button", { name: "Select httpx", exact: true }).click();
   await page.getByRole("button", { name: "Preview", exact: true }).click();
   await expect(page.getByText("http://127.0.0.1:9876/api?view=full&include=roles", { exact: true }).first()).toBeVisible();
