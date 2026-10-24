@@ -4,6 +4,9 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- The architecture diagram's runner example uses `--engagement` and the `/engagements/{id}/...`
+  paths. VardrRunner 0.52.0 removed `--program`, and the runner stopped calling `/programs/*`
+  long ago. No behavior change.
 - Development docs no longer point to `vardrrunner service uninstall`, which VardrRunner
   0.51.0 removed; they link Runner's manual removal steps for a service left by 0.47.0 or
   earlier. The Settings comment notes that `--install-service` no longer exists. No

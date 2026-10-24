@@ -282,11 +282,11 @@ VardrRunner is a local CLI that runs offensive tools on the user's machine and u
 ```
 User's machine
   │
-  │  vardrrunner run nuclei --program <id> --from-recon
+  │  vardrrunner run nuclei --engagement <id> --from-recon
   ▼
 VardrRunner (separate repo)
   │  1. fetch recon targets from VardrMap API
-  │     GET /programs/{id}/recon?limit=100&status_code=200
+  │     GET /engagements/{id}/recon?limit=100&status_code=200
   │
   │  2. show dry-run preview, ask for confirmation
   │
@@ -296,7 +296,7 @@ VardrRunner (separate repo)
   │  4. save raw output to ~/.vardrmap/runs/<timestamp>/
   │
   │  5. upload via existing import endpoint
-  │     POST /programs/{id}/imports  (multipart, tool_type=nuclei)
+  │     POST /engagements/{id}/imports  (multipart, tool_type=nuclei)
   ▼
 VardrMap backend (Railway)
   │  parse, store, deduplicate → ScanItem rows
