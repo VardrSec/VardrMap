@@ -1786,6 +1786,60 @@ answered before it runs anything.
 
 ---
 
+## Agent proposals
+
+A change an MCP agent proposes but cannot apply: a scope item, an authorization, or the
+engagement's request-rate ceiling. The VardrRunner MCP server exposes tools to *propose* one
+but **no tool to approve one** — a proposal is inert until a human with a full-access key
+approves it here, which is what applies the change. This is the guardrail that keeps a
+prompt-injected agent from widening its own scope or authorization: the worst it can do is
+create a pending row the operator sees, with its stated reason and source, and rejects.
+
+`reason` and `source` are the agent's own words. Treat them as untrusted display text.
+
+### `GET /engagements/{program_id}/proposals`
+List proposals, newest first. Optional `?status=pending|approved|rejected`. Readable by any
+member, so an agent can see what is already pending and avoid duplicates.
+
+**Response:** `{ "proposals": [ proposal, ... ] }`
+
+### `POST /engagements/{program_id}/proposals`
+Create a pending proposal. Inert, so member-write is enough — a runner-scoped key may call
+it. `payload` is validated for the `kind`, reusing the scope/authorization sanitisers, so
+only clean values are stored.
+
+**Request body**
+```json
+{
+  "kind": "scope_in",
+  "payload": { "value": "branch.remitly.com", "kind": "domain", "max_severity": "critical" },
+  "reason": "Listed in the HackerOne scope table",
+  "source": "https://hackerone.com/remitly"
+}
+```
+`kind` is `scope_in`, `scope_out`, `authorization` or `rate_ceiling`. `payload` matches the
+corresponding create body: a scope item (`value`, `kind`, `notes`, `max_severity`), an
+authorization (same fields as `POST .../authorizations`), or `{ "rate": <1–1000> }`. A bad
+payload is refused (`400`, or `422` for an unparseable date). Beyond 100 pending proposals
+the endpoint returns `409`.
+
+**Response:** `201` proposal object, `status: "pending"`.
+
+### `POST /engagements/{program_id}/proposals/{proposal_id}/approve`
+Approve a pending proposal, applying the change (creates the scope item or authorization, or
+sets the ceiling). **Full-access key only** (`403` for a runner-scoped key) — this is the
+operator action an agent must not be able to take. A non-pending proposal returns `409`.
+
+**Response:** proposal object, `status: "approved"`, with `applied_resource_id` set for a
+scope/authorization approval.
+
+### `POST /engagements/{program_id}/proposals/{proposal_id}/reject`
+Reject a pending proposal without applying it. Full-access key only.
+
+**Response:** proposal object, `status: "rejected"`.
+
+---
+
 ## API Surface (Burp integration)
 
 These routes require a browser JWT or a full-scope personal API key. Every

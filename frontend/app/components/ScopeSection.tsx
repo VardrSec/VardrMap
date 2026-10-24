@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Engagement } from "../types";
 import { useAppContext } from "../context/AppContext";
 import { Panel, Input, Textarea, PrimaryButton, ListCard, SectionHeader } from "./ui";
+import ProposalsPanel from "./ProposalsPanel";
 
 type ImportSummary = {
   in: number; out: number; duplicates: number; skipped: number; total_rows: number;
@@ -76,6 +77,8 @@ export default function ScopeSection({ engagement }: { engagement: Engagement })
   return (
     <div className="space-y-7">
       <SectionHeader title="Scope" description="Keep clear in-scope and out-of-scope boundaries before testing." />
+
+      <ProposalsPanel engagement={engagement} />
 
       <Panel title="Import from a scope CSV">
         <p className="mb-3 text-xs text-muted">

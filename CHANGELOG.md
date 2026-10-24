@@ -4,6 +4,16 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- **Agent proposals.** An MCP agent can now propose a scope item, an authorization record, or
+  the engagement's request-rate ceiling, but cannot apply one. A proposal is created as
+  `pending` and does nothing until a full-access operator approves it in the Scope section,
+  which applies the change; the row keeps the agent's stated reason and cited source.
+  `agent_proposals` table (migration `0030agentproposals`, additive), `GET/POST
+  /engagements/{id}/proposals` and `.../approve|reject`, and a "Proposed changes" panel.
+  Creating a proposal needs only member-write (it is inert); approving or rejecting needs a
+  full-access key, so a runner-scoped or prompt-injected agent can never apply its own
+  proposal. Pairs with VardrRunner's MCP propose tools. Deploy this before that Runner release.
+
 - The architecture diagram's runner example uses `--engagement` and the `/engagements/{id}/...`
   paths. VardrRunner 0.52.0 removed `--program`, and the runner stopped calling `/programs/*`
   long ago. No behavior change.

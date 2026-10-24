@@ -318,3 +318,23 @@ class AuthorizationUpdate(BaseModel):
     @field_validator("permits", "notes", mode="before")
     @classmethod
     def sanitize_long(cls, v): return strip_html(v)
+
+
+class ProposalCreate(BaseModel):
+    """An agent's proposed change. `payload` is validated per `kind` in the router, where the
+    reused ScopeItem/Authorization sanitisers apply, so only clean values are ever stored."""
+
+    kind: Literal["scope_in", "scope_out", "authorization", "rate_ceiling"]
+    payload: dict = Field(default_factory=dict)
+    reason: Optional[str] = Field(default="", max_length=2000)
+    source: Optional[str] = Field(default="", max_length=500)
+
+    @field_validator("reason", mode="before")
+    @classmethod
+    def sanitize_reason(cls, v):
+        return strip_html(v)
+
+    @field_validator("source", mode="before")
+    @classmethod
+    def sanitize_source(cls, v):
+        return sanitize_identifier(v)

@@ -14,7 +14,7 @@ from deps import get_current_user, require_full_scope
 from limiter import limiter
 from logging_config import configure_logging
 from routers import api_surface, apikeys, assets, authorizations, clients, engagements, evidence, findings, imports, jobs, manual_tests, members, radar, recon, reports, runner, scan_profiles, scans, scope, services, settings, test_cases
-from routers import case_authoring, deliverables, finding_activity, playbooks
+from routers import case_authoring, deliverables, finding_activity, playbooks, proposals
 
 ENV = os.getenv("ENV") or os.getenv("RAILWAY_ENVIRONMENT_NAME", "development")
 
@@ -179,6 +179,7 @@ _full = [Depends(require_full_scope)]
 app.include_router(imports.router)
 app.include_router(jobs.router)
 app.include_router(runner.router)
+app.include_router(proposals.router)
 
 app.include_router(apikeys.router,      dependencies=_full)
 app.include_router(assets.router,       dependencies=_full)
