@@ -8,9 +8,9 @@ function StatTile({ label, value, accent, foot }: {
 }) {
   return (
     <div className="rounded-xl border border-[#2e2e2e] bg-[#1a1a1a] px-4 py-3.5 transition hover:border-[#3a3a3a]">
-      <div className="text-[9px] font-semibold uppercase tracking-widest text-[#52525b]">{label}</div>
+      <div className="text-[9px] font-semibold uppercase tracking-widest text-muted">{label}</div>
       <div className="mt-2 font-mono text-2xl font-bold leading-none tracking-tight" style={{ color: accent }}>{value}</div>
-      {foot && <div className="mt-1.5 font-mono text-[10px] text-[#52525b]">{foot}</div>}
+      {foot && <div className="mt-1.5 font-mono text-[10px] text-muted">{foot}</div>}
     </div>
   );
 }

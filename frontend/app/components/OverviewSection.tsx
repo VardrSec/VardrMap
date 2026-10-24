@@ -15,7 +15,7 @@ const SEVERITY_CONFIG = [
 ] as const;
 
 const STATUS_CONFIG = [
-  { status: "new",         label: "New",         color: "#52525b" },
+  { status: "new",         label: "New",         color: "var(--color-muted)" },
   { status: "candidate",   label: "Candidate",   color: "#74c7ec" },
   { status: "triaged",     label: "Triaged",     color: "#89b4fa" },
   { status: "in_progress", label: "In Progress", color: "#f9e2af" },
@@ -25,7 +25,7 @@ const STATUS_CONFIG = [
 function DashboardCard({ title, value, accent }: { title: string; value: number; accent: string }) {
   return (
     <div className="rounded-xl border border-[#2e2e2e] bg-[#1a1a1a] p-5 transition hover:border-[#3a3a3a]">
-      <div className="text-[9px] font-semibold uppercase tracking-widest text-[#52525b]">{title}</div>
+      <div className="text-[9px] font-semibold uppercase tracking-widest text-muted">{title}</div>
       <div className="mt-3 font-mono text-4xl font-bold tracking-tight" style={{ color: accent }}>{value}</div>
     </div>
   );
@@ -42,7 +42,7 @@ function QuickActionButton({ label, sub, onClick }: QuickAction) {
     <button onClick={onClick}
       className="flex flex-col items-start rounded-xl border border-[#2e2e2e] bg-[#1a1a1a] px-4 py-3.5 text-left transition hover:border-[#3a3a3a] hover:bg-[#222] active:scale-[0.98]">
       <span className="text-sm font-semibold text-[#f1f5f9]">{label}</span>
-      <span className="mt-0.5 text-[10px] text-[#52525b]">{sub}</span>
+      <span className="mt-0.5 text-[10px] text-muted">{sub}</span>
     </button>
   );
 }
@@ -114,7 +114,7 @@ function RadarWidget({ authFetch, setMessage }: { authFetch: (p: string, i?: Req
   return (
     <Panel title={`Target Radar${newCount > 0 ? ` · ${newCount} new` : ""}`}>
       <div className="mb-3 flex items-center justify-between">
-        <p className="text-xs text-[#52525b]">
+        <p className="text-xs text-muted">
           {lastFetched
             ? `Last refreshed ${new Date(lastFetched).toLocaleDateString()}`
             : "Never refreshed"}
@@ -122,11 +122,11 @@ function RadarWidget({ authFetch, setMessage }: { authFetch: (p: string, i?: Req
         <button
           onClick={handleRefresh}
           disabled={refreshing}
-          className="rounded-md border border-[#2e2e2e] px-3 py-1.5 text-xs text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#94a3b8] disabled:opacity-50">
+          className="rounded-md border border-[#2e2e2e] px-3 py-1.5 text-xs text-muted transition hover:border-[#3a3a3a] hover:text-muted-hover disabled:opacity-50">
           {refreshing ? "Refreshing…" : "Refresh"}
         </button>
       </div>
-      {loading && <p className="py-4 text-center text-xs text-[#52525b]">Loading…</p>}
+      {loading && <p className="py-4 text-center text-xs text-muted">Loading…</p>}
       {!loading && programs.length === 0 && (
         <p className="py-4 text-center text-xs text-[#3a3a3a]">
           No programs found. Click Refresh to fetch from HackerOne and Bugcrowd.
@@ -144,7 +144,7 @@ function RadarWidget({ authFetch, setMessage }: { authFetch: (p: string, i?: Req
                     style={{ background: "#1d4ed8", color: "#bfdbfe" }}>new</span>
                 )}
                 <span className="truncate text-xs font-medium text-[#f1f5f9]">{p.name}</span>
-                <span className="flex-shrink-0 text-[10px] text-[#52525b] uppercase">{p.platform}</span>
+                <span className="flex-shrink-0 text-[10px] text-muted uppercase">{p.platform}</span>
               </a>
               {p.max_payout != null && (
                 <span className="flex-shrink-0 font-mono text-xs text-[#a6e3a1]">${p.max_payout.toLocaleString()}</span>
@@ -246,7 +246,7 @@ export default function OverviewSection({ engagement }: { engagement: Engagement
                 const pct   = Math.round((count / maxSevCount) * 100);
                 return (
                   <div key={key} className="flex items-center gap-3">
-                    <span className="w-14 flex-shrink-0 text-[11px] font-medium text-[#52525b]">{label}</span>
+                    <span className="w-14 flex-shrink-0 text-[11px] font-medium text-muted">{label}</span>
                     <div className="h-2 flex-1 overflow-hidden rounded-full bg-[#2e2e2e]">
                       <div className="h-full rounded-full transition-all duration-500"
                         style={{ width: `${pct}%`, backgroundColor: color }} />
@@ -262,7 +262,7 @@ export default function OverviewSection({ engagement }: { engagement: Engagement
             <div className="space-y-4">
               <div>
                 <div className="mb-1.5 flex items-center justify-between text-xs">
-                  <span className="text-[#52525b]">Resolved</span>
+                  <span className="text-muted">Resolved</span>
                   <span className="font-mono text-[#a6e3a1]">{closed} / {total} ({closedPct}%)</span>
                 </div>
                 <div className="h-2 w-full overflow-hidden rounded-full bg-[#2e2e2e]">
@@ -275,7 +275,7 @@ export default function OverviewSection({ engagement }: { engagement: Engagement
                   const count = byStatus[status] ?? 0;
                   return (
                     <div key={status} className="flex items-center justify-between rounded-lg border border-[#2e2e2e] bg-[#161616] px-3 py-2">
-                      <span className="text-xs text-[#52525b]">{label}</span>
+                      <span className="text-xs text-muted">{label}</span>
                       <span className="font-mono text-sm font-bold" style={{ color }}>{count}</span>
                     </div>
                   );
@@ -296,7 +296,7 @@ export default function OverviewSection({ engagement }: { engagement: Engagement
               {engagement.imports.map((item) => (
                 <div key={item.id} className="flex items-center justify-between rounded-lg border border-[#2e2e2e] bg-[#161616] px-4 py-3">
                   <span className="font-mono text-xs font-semibold uppercase text-[#f59e0b]">{item.tool_type}</span>
-                  <span className="text-xs text-[#52525b]">{item.imported_count} records</span>
+                  <span className="text-xs text-muted">{item.imported_count} records</span>
                 </div>
               ))}
             </div>

@@ -4,6 +4,10 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Make **secondary text readable** across the app: hints, step titles, labels, inactive tabs
+  and Copy buttons move from `#52525b` (~2.6:1 contrast, below WCAG AA) to a shared
+  `--color-muted` token, `#a1a1aa` (~7.7:1); their hover brightens to `#e4e4e7`. Off-state
+  indicator dots, wires and the focus border stay dim on purpose.
 - **Security:** upgrade Next.js 16.4.0 → 16.4.3 (critical: unauthenticated RCE in the Image
   Optimization API with SVG, GHSA-2464-fhr4-w9xw; unauthenticated RCE in `use cache` functions
   returning typed arrays, GHSA-673q-mjm6-r5xr; Server Actions DoS, GHSA-p3m5-59mp-jv5r) and the

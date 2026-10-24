@@ -78,7 +78,7 @@ export default function ScopeSection({ engagement }: { engagement: Engagement })
       <SectionHeader title="Scope" description="Keep clear in-scope and out-of-scope boundaries before testing." />
 
       <Panel title="Import from a scope CSV">
-        <p className="mb-3 text-xs text-[#52525b]">
+        <p className="mb-3 text-xs text-muted">
           Paste a HackerOne scope export. Preview shows what will be added before anything is
           saved; out-of-scope rows and per-asset severity caps are mapped automatically. Re-importing
           only adds what is new.
@@ -102,7 +102,7 @@ export default function ScopeSection({ engagement }: { engagement: Engagement })
           )}
         </div>
         {preview && (
-          <p className="mt-3 text-[11px] text-[#52525b]">
+          <p className="mt-3 text-[11px] text-muted">
             {preview.summary.in} in-scope · {preview.summary.out} out-of-scope ·{" "}
             {preview.summary.duplicates} already present · {preview.summary.skipped} skipped
             {preview.skipped.length > 0 && (

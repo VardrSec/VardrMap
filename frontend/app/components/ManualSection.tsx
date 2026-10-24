@@ -127,7 +127,7 @@ export default function ManualSection({
                     <ManualForm value={editForm} onChange={setEditForm} />
                     <div className="flex gap-2">
                       <PrimaryButton onClick={() => saveEdit(test.id)} label="Save" />
-                      <button onClick={() => setEditingId(null)} className="rounded-md border border-[#2e2e2e] px-4 py-2 text-sm text-[#52525b] transition hover:text-[#94a3b8]">
+                      <button onClick={() => setEditingId(null)} className="rounded-md border border-[#2e2e2e] px-4 py-2 text-sm text-muted transition hover:text-muted-hover">
                         Cancel
                       </button>
                     </div>
@@ -141,18 +141,18 @@ export default function ManualSection({
                       </div>
                       <div className="flex gap-2">
                         <button onClick={() => promoteToFinding(test)}
-                          className="rounded-md border border-[#2e2e2e] px-2.5 py-1 text-xs text-[#52525b] transition hover:border-[#a6e3a1]/40 hover:text-[#a6e3a1]">
+                          className="rounded-md border border-[#2e2e2e] px-2.5 py-1 text-xs text-muted transition hover:border-[#a6e3a1]/40 hover:text-[#a6e3a1]">
                           → Finding
                         </button>
-                        <button onClick={() => startEdit(test)} className="rounded-md border border-[#2e2e2e] px-2.5 py-1 text-xs text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#94a3b8]">
+                        <button onClick={() => startEdit(test)} className="rounded-md border border-[#2e2e2e] px-2.5 py-1 text-xs text-muted transition hover:border-[#3a3a3a] hover:text-muted-hover">
                           Edit
                         </button>
                         <DangerButton onClick={() => deleteManualTest(test.id)} label="Delete" small />
                       </div>
                     </div>
                     {test.hypothesis && <p className="mt-3 text-sm text-[#6b7280]">{test.hypothesis}</p>}
-                    {test.payload    && <p className="mt-2 font-mono text-xs text-[#52525b]">Payload: {test.payload}</p>}
-                    {test.evidence   && <p className="mt-1 text-xs text-[#52525b]">Evidence: {test.evidence}</p>}
+                    {test.payload    && <p className="mt-2 font-mono text-xs text-muted">Payload: {test.payload}</p>}
+                    {test.evidence   && <p className="mt-1 text-xs text-muted">Evidence: {test.evidence}</p>}
                   </div>
                 )
               )}

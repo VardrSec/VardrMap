@@ -63,7 +63,7 @@ export default function ApiSurfaceSection({ engagementId }: { engagementId: stri
       {[["Operations", total], ["Visible exchanges", stats.exchanges], ["Visible hosts", stats.hosts], ["Visible identities", stats.identities]].map(([label, value]) =>
         <div key={label} className="rounded-lg border border-[#2e2e2e] bg-[#171717] p-4">
           <div className="font-mono text-2xl text-[#f1f5f9]">{value}</div>
-          <div className="mt-1 text-[10px] uppercase tracking-widest text-[#52525b]">{label}</div>
+          <div className="mt-1 text-[10px] uppercase tracking-widest text-muted">{label}</div>
         </div>)}
     </div>
 
@@ -77,24 +77,24 @@ export default function ApiSurfaceSection({ engagementId }: { engagementId: stri
           {["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"].map((item) => <option key={item}>{item}</option>)}
         </select>
       </div>
-      {loading && <p className="py-8 text-center text-sm text-[#52525b]">Loading API map…</p>}
+      {loading && <p className="py-8 text-center text-sm text-muted">Loading API map…</p>}
       {!loading && endpoints.length === 0 && <div className="py-10 text-center">
         <p className="text-sm text-[#94a3b8]">No API exchanges promoted yet.</p>
-        <p className="mt-1 text-xs text-[#52525b]">In Burp, select a request or response and choose “Send to VardrMap”. Automatic capture stays off.</p>
+        <p className="mt-1 text-xs text-muted">In Burp, select a request or response and choose “Send to VardrMap”. Automatic capture stays off.</p>
       </div>}
       {!loading && endpoints.length > 0 && <div className="overflow-x-auto"><table className="w-full text-left text-xs">
-        <thead><tr className="border-b border-[#2e2e2e]">{["Draft", "Method", "Operation", "Responses", "Identities", "Seen", ""].map((h) => <th key={h} className="pb-2 pr-4 font-semibold uppercase tracking-widest text-[#52525b]">{h}</th>)}</tr></thead>
+        <thead><tr className="border-b border-[#2e2e2e]">{["Draft", "Method", "Operation", "Responses", "Identities", "Seen", ""].map((h) => <th key={h} className="pb-2 pr-4 font-semibold uppercase tracking-widest text-muted">{h}</th>)}</tr></thead>
         <tbody>{endpoints.map((item) => <tr key={item.id} className="border-b border-[#1e1e1e] hover:bg-[#161616]">
           <td className="pr-4"><input aria-label={`Draft ${item.method} ${item.host}${item.path_template}`} type="checkbox" checked={draftIds.includes(item.id)} disabled={draftIds.length >= 100 && !draftIds.includes(item.id)} onChange={e => setDraftIds(ids => e.target.checked ? [...ids, item.id] : ids.filter(id => id !== item.id))} /></td>
           <td className="py-2.5 pr-4 font-mono font-bold" style={{ color: methodColor[item.method] ?? "#94a3b8" }}>{item.method}</td>
-          <td className="py-2.5 pr-4"><div className="font-mono text-[#f1f5f9]">{item.path_template}</div><div className="mt-0.5 text-[10px] text-[#52525b]">{item.host}</div></td>
+          <td className="py-2.5 pr-4"><div className="font-mono text-[#f1f5f9]">{item.path_template}</div><div className="mt-0.5 text-[10px] text-muted">{item.host}</div></td>
           <td className="py-2.5 pr-4 font-mono text-[#94a3b8]">{item.statuses.join(" · ") || "—"}</td>
           <td className="py-2.5 pr-4 text-[#94a3b8]">{item.identities.join(", ") || "—"}</td>
-          <td className="py-2.5 pr-4 font-mono text-[#52525b]">{item.observation_count}</td>
+          <td className="py-2.5 pr-4 font-mono text-muted">{item.observation_count}</td>
           <td className="py-2.5 text-right"><button onClick={() => void inspect(item)} className="rounded px-2 py-1 text-[10px] text-[#89b4fa] hover:bg-[#2e2e2e]">Inspect</button></td>
         </tr>)}</tbody>
       </table></div>}
-      {!loading && total > PAGE_SIZE && <div className="mt-4 flex items-center justify-between text-xs text-[#52525b]">
+      {!loading && total > PAGE_SIZE && <div className="mt-4 flex items-center justify-between text-xs text-muted">
         <span>Showing {offset + 1}–{Math.min(offset + endpoints.length, total)} of {total}</span>
         <div className="flex gap-2">
           <button disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))} className="rounded border border-[#2e2e2e] px-3 py-1.5 disabled:opacity-30">Previous</button>
@@ -107,14 +107,14 @@ export default function ApiSurfaceSection({ engagementId }: { engagementId: stri
       <div className="mb-3 flex flex-wrap gap-2">{selected.identities.map((identity) => <span key={identity} className="rounded bg-[#242424] px-2 py-1 font-mono text-[10px] text-[#c084fc]">{identity}</span>)}</div>
       <div className="space-y-2">{selected.exchanges?.map((exchange) => <details key={exchange.id} className="rounded border border-[#2e2e2e] bg-[#111] p-3">
         <summary className="cursor-pointer font-mono text-xs text-[#94a3b8]">
-          <span className="mr-3 text-[#f1f5f9]">{exchange.response_status ?? "—"}</span>{exchange.identity_label}<span className="ml-3 text-[#52525b]">{exchange.source_tool}{exchange.response_time_ms === null ? "" : ` · ${exchange.response_time_ms} ms`}</span>
+          <span className="mr-3 text-[#f1f5f9]">{exchange.response_status ?? "—"}</span>{exchange.identity_label}<span className="ml-3 text-muted">{exchange.source_tool}{exchange.response_time_ms === null ? "" : ` · ${exchange.response_time_ms} ms`}</span>
         </summary>
         <div className="mt-3 grid gap-3 lg:grid-cols-2">
           <Message title="Request" headers={exchange.request_headers} body={exchange.request_body} />
           <Message title="Response" headers={exchange.response_headers} body={exchange.response_body} />
         </div>
       </details>)}</div>
-      {(selected.exchange_total ?? 0) > EXCHANGE_PAGE_SIZE && <div className="mt-4 flex items-center justify-between text-xs text-[#52525b]">
+      {(selected.exchange_total ?? 0) > EXCHANGE_PAGE_SIZE && <div className="mt-4 flex items-center justify-between text-xs text-muted">
         <span>Showing {exchangeOffset + 1}–{Math.min(exchangeOffset + (selected.exchanges?.length ?? 0), selected.exchange_total ?? 0)} of {selected.exchange_total}</span>
         <div className="flex gap-2">
           <button disabled={exchangeOffset === 0} onClick={() => void inspect(selected, Math.max(0, exchangeOffset - EXCHANGE_PAGE_SIZE))} className="rounded border border-[#2e2e2e] px-3 py-1.5 disabled:opacity-30">Previous exchanges</button>
@@ -126,6 +126,6 @@ export default function ApiSurfaceSection({ engagementId }: { engagementId: stri
 }
 
 function Message({ title, headers, body }: { title: string; headers: string; body: string }) {
-  return <div><div className="mb-1 text-[10px] uppercase tracking-widest text-[#52525b]">{title} · redacted</div>
+  return <div><div className="mb-1 text-[10px] uppercase tracking-widest text-muted">{title} · redacted</div>
     <pre className="max-h-72 overflow-auto whitespace-pre-wrap break-all rounded bg-[#0a0a0a] p-3 font-mono text-[10px] leading-relaxed text-[#94a3b8]">{[headers, body].filter(Boolean).join("\n\n") || "No retained content"}</pre></div>;
 }

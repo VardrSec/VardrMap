@@ -87,7 +87,7 @@ export default function DashboardSection({ engagement }: { engagement: Engagemen
       <div className="flex flex-wrap items-end justify-between gap-4 border-b border-[#2e2e2e] pb-5">
         <div>
           <h2 className="text-2xl font-bold tracking-tight text-[#f1f5f9]">Dashboard</h2>
-          <p className="mt-1.5 text-sm text-[#52525b]">
+          <p className="mt-1.5 text-sm text-muted">
             Dispatch scan jobs to VardrRunner or import tool output directly.
           </p>
         </div>
@@ -95,7 +95,7 @@ export default function DashboardSection({ engagement }: { engagement: Engagemen
           {TABS.map((t) => (
             <button key={t.id} onClick={() => setActiveTab(t.id)}
               className="rounded-md px-5 py-1.5 font-mono text-[11px] uppercase tracking-wider transition"
-              style={activeTab === t.id ? { backgroundColor: "#2e2e2e", color: "#f1f5f9" } : { color: "#52525b" }}>
+              style={activeTab === t.id ? { backgroundColor: "#2e2e2e", color: "#f1f5f9" } : { color: "var(--color-muted)" }}>
               {t.label}
             </button>
           ))}
@@ -114,7 +114,7 @@ export default function DashboardSection({ engagement }: { engagement: Engagemen
                   onClick={() => navigate("findings")}
                   className="flex items-center gap-1.5 rounded-full border border-[#2e2e2e] bg-[#161616] px-3 py-1 text-xs transition hover:border-[#3a3a3a]">
                   <span className={`font-mono font-semibold ${COLOR[sev]}`}>{stats.findings_by_severity[sev]}</span>
-                  <span className="text-[#52525b]">{sev}</span>
+                  <span className="text-muted">{sev}</span>
                 </button>
               );
             })}
@@ -130,7 +130,7 @@ export default function DashboardSection({ engagement }: { engagement: Engagemen
           <Panel title="Import Tool Output">
             <div className="grid gap-4 md:grid-cols-3">
               <div>
-                <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-widest text-[#52525b]">Tool Type</label>
+                <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-widest text-muted">Tool Type</label>
                 <select
                   className="w-full rounded-md border border-[#2e2e2e] bg-[#161616] px-2.5 py-2 text-sm text-[#f1f5f9] transition focus:border-[#f59e0b] focus:outline-none"
                   value={toolType} onChange={(e) => setToolType(e.target.value)}>
@@ -143,18 +143,18 @@ export default function DashboardSection({ engagement }: { engagement: Engagemen
                 </select>
               </div>
               <div className="md:col-span-2">
-                <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-widest text-[#52525b]">JSON / JSONL File</label>
+                <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-widest text-muted">JSON / JSONL File</label>
                 <input type="file" accept=".json,.jsonl,application/json,application/x-ndjson"
                   onChange={(e) => setImportFile(e.target.files?.[0] || null)}
-                  className="w-full rounded-md border border-[#2e2e2e] bg-[#161616] px-2.5 py-2 text-sm text-[#52525b] file:mr-3 file:rounded file:border-0 file:bg-[#2e2e2e] file:px-2.5 file:py-1 file:text-xs file:font-semibold file:text-[#f1f5f9]" />
+                  className="w-full rounded-md border border-[#2e2e2e] bg-[#161616] px-2.5 py-2 text-sm text-muted file:mr-3 file:rounded file:border-0 file:bg-[#2e2e2e] file:px-2.5 file:py-1 file:text-xs file:font-semibold file:text-[#f1f5f9]" />
               </div>
             </div>
             <div className="mt-5">
               <PrimaryButton onClick={handleImport} label={importing ? "Importing…" : "Import Results"} />
             </div>
             <div className="mt-6 rounded-xl border border-[#2e2e2e] bg-[#161616] p-4">
-              <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-[#52525b]">Supported imports</p>
-              <div className="space-y-1 text-xs text-[#52525b]">
+              <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-muted">Supported imports</p>
+              <div className="space-y-1 text-xs text-muted">
                 <p><span className="font-mono text-[#f59e0b]">ffuf</span> — Recon endpoints and paths</p>
                 <p><span className="font-mono text-[#f59e0b]">httpx</span> — Live hosts, titles, technologies</p>
                 <p><span className="font-mono text-[#f59e0b]">nuclei</span> — Candidate scan findings</p>

@@ -8,7 +8,7 @@ import { TOOLS, fmtClock, fmtDur } from "./mockData";
 const LINE_COLOR: Record<string, string> = {
   sys:  "#7f849c",
   info: "#89b4fa",
-  out:  "#52525b",
+  out:  "var(--color-muted)",
   ok:   "#a6e3a1",
   warn: "#f9e2af",
   err:  "#f87171",
@@ -40,7 +40,7 @@ function eventToLogLine(e: JobEvent): LogLine {
 function LogLineRow({ line }: { line: LogLine }) {
   const color = line.kind === "hit"
     ? (SEV_COLOR[line.sev ?? ""] || "#fab387")
-    : LINE_COLOR[line.kind] || "#52525b";
+    : LINE_COLOR[line.kind] || "var(--color-muted)";
   const prefix = PREFIX[line.kind] || "·";
   return (
     <div className="flex gap-2 leading-relaxed">
@@ -128,7 +128,7 @@ export default function Terminal({ job, accent, onClose, onRetry, onCancel, onDe
         <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-[#2e2e2e] bg-[#161616] font-mono text-lg text-[#3a3a3a]">
           ⌥
         </div>
-        <p className="mt-3 text-sm text-[#52525b]">Select a job to inspect its live output</p>
+        <p className="mt-3 text-sm text-muted">Select a job to inspect its live output</p>
         <p className="mt-1 font-mono text-[11px] text-[#3a3a3a]">running jobs stream here in real time</p>
       </div>
     );
@@ -150,7 +150,7 @@ export default function Terminal({ job, accent, onClose, onRetry, onCancel, onDe
             <span className="font-mono text-sm font-semibold text-[#f1f5f9]">{tool?.label || job.tool}</span>
             <span className="font-mono text-[11px] text-[#3a3a3a]">{job.id}</span>
           </div>
-          <div className="font-mono text-[10px] text-[#52525b]">{job.source} · {job.targets} targets</div>
+          <div className="font-mono text-[10px] text-muted">{job.source} · {job.targets} targets</div>
         </div>
         <span className="ml-auto flex items-center gap-1.5 rounded border px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest"
           style={{ color: statusColor, borderColor: `${statusColor}55` }}>
@@ -160,7 +160,7 @@ export default function Terminal({ job, accent, onClose, onRetry, onCancel, onDe
           {job.status}
         </span>
         <button onClick={onClose}
-          className="rounded p-1 text-[#52525b] transition hover:bg-[#2e2e2e] hover:text-[#f1f5f9]"
+          className="rounded p-1 text-muted transition hover:bg-[#2e2e2e] hover:text-[#f1f5f9]"
           title="Close">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
             <path d="M18 6 6 18M6 6l12 12" />
@@ -179,7 +179,7 @@ export default function Terminal({ job, accent, onClose, onRetry, onCancel, onDe
           <span className="font-mono text-[11px] text-[#a6e3a1]">{job.yield} {job.yieldKind} · {fmtDur(job.durationMs)}</span>
         )}
         {job.status === "running" && (
-          <span className="font-mono text-[11px] text-[#52525b]">live</span>
+          <span className="font-mono text-[11px] text-muted">live</span>
         )}
       </div>
 
@@ -190,7 +190,7 @@ export default function Terminal({ job, accent, onClose, onRetry, onCancel, onDe
         style={{ maxHeight: 360, minHeight: 240 }}
       >
         {lines.length === 0 ? (
-          <div className="flex items-center gap-2 text-[#52525b]">
+          <div className="flex items-center gap-2 text-muted">
             <span className="h-1.5 w-1.5 animate-pulse rounded-full" style={{ backgroundColor: accent }} />
             waiting for runner to claim job…
           </div>
@@ -199,7 +199,7 @@ export default function Terminal({ job, accent, onClose, onRetry, onCancel, onDe
         )}
         {job.status === "running" && lines.length > 0 && (
           <div className="mt-0.5 flex items-center gap-1">
-            <span className="text-[#52525b]">›</span>
+            <span className="text-muted">›</span>
             <span className="inline-block h-3.5 w-2 animate-pulse" style={{ backgroundColor: accent }} />
           </div>
         )}
@@ -207,7 +207,7 @@ export default function Terminal({ job, accent, onClose, onRetry, onCancel, onDe
 
       {/* footer */}
       <div className="flex items-center gap-2 border-t border-[#2e2e2e] bg-[#1a1a1a] px-4 py-2.5">
-        <span className="font-mono text-[10px] text-[#52525b]">queued {fmtClock(job.queuedAt)}</span>
+        <span className="font-mono text-[10px] text-muted">queued {fmtClock(job.queuedAt)}</span>
         {job.error && (
           <span className="truncate font-mono text-[10px] text-[#f87171]">{job.error}</span>
         )}
@@ -238,7 +238,7 @@ export default function Terminal({ job, accent, onClose, onRetry, onCancel, onDe
             </button>
           )}
           <button onClick={() => onDelete(job.id)}
-            className="rounded-md border border-[#3a3a3a] px-3 py-1 font-mono text-[11px] text-[#52525b] transition hover:border-[#f87171]/50 hover:text-[#f87171]"
+            className="rounded-md border border-[#3a3a3a] px-3 py-1 font-mono text-[11px] text-muted transition hover:border-[#f87171]/50 hover:text-[#f87171]"
             title={job.status === "running" ? "Force-delete stuck job" : "Delete job"}>
             delete
           </button>

@@ -51,7 +51,7 @@ export function AppShell() {
   if (authLoading) {
     return (
       <main className="min-h-screen bg-[#161616] text-[#f1f5f9] flex items-center justify-center">
-        <div className="flex items-center gap-3 text-[#52525b]">
+        <div className="flex items-center gap-3 text-muted">
           <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#7f849c]" />
           <span className="text-sm tracking-wide font-mono">initializing…</span>
         </div>
@@ -69,7 +69,7 @@ export function AppShell() {
             </svg>
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-[#f1f5f9]">VardrMap</h1>
-          <p className="mt-2 text-sm text-[#52525b]">Sign in with GitHub to access your authorized security testing workspace.</p>
+          <p className="mt-2 text-sm text-muted">Sign in with GitHub to access your authorized security testing workspace.</p>
           <button onClick={() => signIn("github")} className="mt-7 w-full rounded-lg bg-[#f59e0b] px-4 py-2.5 text-sm font-semibold text-[#161616] transition hover:bg-[#fbbf24] active:scale-[0.98]">
             Sign in with GitHub
           </button>
@@ -95,15 +95,15 @@ export function AppShell() {
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="text-base font-bold tracking-tight text-[#f1f5f9]">VardrMap</span>
-                  <span className="rounded bg-[#2e2e2e] px-1.5 py-0.5 font-mono text-[9px] text-[#52525b]">BETA</span>
+                  <span className="rounded bg-[#2e2e2e] px-1.5 py-0.5 font-mono text-[9px] text-muted">BETA</span>
                 </div>
-                <p className="mt-0.5 truncate text-[10px] text-[#52525b]">
+                <p className="mt-0.5 truncate text-[10px] text-muted">
                   {session.user?.username || session.user?.email || "GitHub user"}
                 </p>
               </div>
             )}
             <button onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-              className="flex-shrink-0 rounded-md p-1.5 text-[#52525b] transition hover:bg-[#2e2e2e] hover:text-[#f1f5f9]"
+              className="flex-shrink-0 rounded-md p-1.5 text-muted transition hover:bg-[#2e2e2e] hover:text-[#f1f5f9]"
               title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 {sidebarCollapsed ? <polyline points="9 18 15 12 9 6" /> : <polyline points="15 18 9 12 15 6" />}
@@ -114,7 +114,7 @@ export function AppShell() {
           {/* Engagement selector */}
           {!sidebarCollapsed && (
             <div className="border-b border-[#2e2e2e] px-3 py-3">
-              <label className="mb-1.5 block text-[9px] font-semibold uppercase tracking-widest text-[#52525b]">Active Engagement</label>
+              <label className="mb-1.5 block text-[9px] font-semibold uppercase tracking-widest text-muted">Active Engagement</label>
               <select aria-label="Active Engagement" className="w-full rounded-md border border-[#2e2e2e] bg-[#161616] px-2.5 py-1.5 text-xs text-[#f1f5f9] transition focus:border-[#f59e0b] focus:outline-none"
                 value={selectedEngagementId} onChange={(e) => selectEngagement(e.target.value)}>
                 <option value="">Choose an engagement</option>
@@ -127,7 +127,7 @@ export function AppShell() {
           <nav className="flex-1 space-y-0.5 px-2 py-3">
             {NAV_ITEMS.map(({ section, label, icon }) => (
               <button key={section} onClick={() => navigate(section)}
-                className={`group relative flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm transition-all duration-150 ${activeSection === section ? "bg-[#f59e0b]/10 text-[#f59e0b] font-semibold" : "text-[#52525b] hover:bg-[#242424] hover:text-[#94a3b8]"}`}
+                className={`group relative flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm transition-all duration-150 ${activeSection === section ? "bg-[#f59e0b]/10 text-[#f59e0b] font-semibold" : "text-muted hover:bg-[#242424] hover:text-muted-hover"}`}
                 title={sidebarCollapsed ? label : undefined}>
                 {activeSection === section && <span className="absolute left-0 top-1/2 h-4 w-0.5 -translate-y-1/2 rounded-full bg-[#f59e0b]" />}
                 <span className="flex-shrink-0 font-mono text-xs text-[#f59e0b]">{icon}</span>
@@ -146,7 +146,7 @@ export function AppShell() {
                 />
               )}
               <button onClick={() => signOut({ callbackUrl: "/" })}
-                className="w-full rounded-md border border-[#2e2e2e] px-3 py-1.5 text-xs text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#94a3b8]">
+                className="w-full rounded-md border border-[#2e2e2e] px-3 py-1.5 text-xs text-muted transition hover:border-[#3a3a3a] hover:text-muted-hover">
                 Sign out
               </button>
             </div>

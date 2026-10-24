@@ -105,7 +105,7 @@ export default function NewEngagementForm({ onCreated, onMessage }: Props) {
 
   return (
     <div className="space-y-2">
-      <p className="text-[9px] font-semibold uppercase tracking-widest text-[#52525b]">New Engagement</p>
+      <p className="text-[9px] font-semibold uppercase tracking-widest text-muted">New Engagement</p>
 
       <input className={inputCls} placeholder="Engagement name" aria-label="Engagement name"
         value={name} onChange={(e) => setName(e.target.value)} />
@@ -114,7 +114,7 @@ export default function NewEngagementForm({ onCreated, onMessage }: Props) {
         value={type} onChange={(e) => setType(e.target.value as EngagementType)}>
         {TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
       </select>
-      <p className="text-[9px] leading-tight text-[#52525b]">
+      <p className="text-[9px] leading-tight text-muted">
         {TYPES.find((t) => t.value === type)?.hint}
       </p>
 

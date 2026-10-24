@@ -48,10 +48,10 @@ function ToolPick({ tool, selected, accent, onClick }: {
         borderColor: selected ? `${accent}80` : "#2e2e2e",
         backgroundColor: selected ? `${accent}12` : "#161616",
       }}>
-      <span className="mt-0.5 font-mono text-base leading-none" style={{ color: selected ? accent : "#52525b" }}>{tool.glyph}</span>
+      <span className="mt-0.5 font-mono text-base leading-none" style={{ color: selected ? accent : "var(--color-muted)" }}>{tool.glyph}</span>
       <span className="min-w-0">
         <span className="block font-mono text-[13px] font-semibold" style={{ color: selected ? "#f1f5f9" : "#cbd5e1" }}>{tool.label}</span>
-        <span className="mt-0.5 block text-[10px] leading-tight text-[#52525b]">{tool.blurb}</span>
+        <span className="mt-0.5 block text-[10px] leading-tight text-muted">{tool.blurb}</span>
       </span>
     </button>
   );
@@ -60,7 +60,7 @@ function ToolPick({ tool, selected, accent, onClick }: {
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-widest text-[#52525b]">{label}</label>
+      <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-widest text-muted">{label}</label>
       {children}
     </div>
   );
@@ -235,13 +235,13 @@ export default function Composer({ accent, onQueue, onPipeline, onPreview, profi
   return (
     <div className="rounded-2xl border border-[#2e2e2e] bg-[#1a1a1a] p-5">
       <div className="mb-4 flex items-center justify-between">
-        <h3 className="text-[10px] font-semibold uppercase tracking-widest text-[#52525b]">Queue a Job</h3>
-        <span className="font-mono text-[10px] text-[#52525b]">{programName}</span>
+        <h3 className="text-[10px] font-semibold uppercase tracking-widest text-muted">Queue a Job</h3>
+        <span className="font-mono text-[10px] text-muted">{programName}</span>
       </div>
 
       {/* Pipelines are selections like any tool, not actions. Selecting one
           clears the tool highlight so only one thing is ever chosen. */}
-      <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-widest text-[#52525b]">Pipelines</label>
+      <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-widest text-muted">Pipelines</label>
       <div className="mb-3 grid gap-2">
         {PIPELINES.map((p) => {
           const on = pipelineId === p.id;
@@ -263,13 +263,13 @@ export default function Composer({ accent, onQueue, onPipeline, onPreview, profi
                 borderColor: on ? `${accent}80` : "#2e2e2e",
                 backgroundColor: on ? `${accent}12` : "#161616",
               }}>
-              <span className="mt-0.5 font-mono text-base leading-none" style={{ color: on ? accent : "#52525b" }}>⚡</span>
+              <span className="mt-0.5 font-mono text-base leading-none" style={{ color: on ? accent : "var(--color-muted)" }}>⚡</span>
               <span className="min-w-0 flex-1">
                 <span className="block font-mono text-[13px] font-semibold" style={{ color: on ? "#f1f5f9" : "#cbd5e1" }}>{p.label}</span>
-                <span className="mt-0.5 block text-[10px] leading-tight text-[#52525b]">{chain}</span>
+                <span className="mt-0.5 block text-[10px] leading-tight text-muted">{chain}</span>
                 {!on && <span className="mt-0.5 block text-[10px] leading-tight text-[#3a3a3a]">{p.blurb}</span>}
               </span>
-              <span className="mt-0.5 font-mono text-[10px] leading-none" style={{ color: on ? accent : "#52525b" }}>
+              <span className="mt-0.5 font-mono text-[10px] leading-none" style={{ color: on ? accent : "var(--color-muted)" }}>
                 {on ? "▾" : "▸"}
               </span>
             </button>
@@ -277,7 +277,7 @@ export default function Composer({ accent, onQueue, onPipeline, onPreview, profi
         })}
       </div>
 
-      <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-widest text-[#52525b]">Tools</label>
+      <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-widest text-muted">Tools</label>
       <div className="grid gap-2">
         {Object.values(TOOLS).map((t) => (
           <ToolPick key={t.id} tool={t} selected={!pipeline && toolId === t.id} accent={accent} onClick={() => pick(t.id)} />
@@ -308,15 +308,15 @@ export default function Composer({ accent, onQueue, onPipeline, onPreview, profi
                         backgroundColor: on ? `${accent}12` : "#161616",
                         opacity: on ? 1 : 0.55,
                       }}>
-                      <span className="font-mono text-[10px] leading-none" style={{ color: on ? accent : "#52525b" }}>
+                      <span className="font-mono text-[10px] leading-none" style={{ color: on ? accent : "var(--color-muted)" }}>
                         {on ? "✓" : "○"}
                       </span>
-                      <span className="font-mono text-base leading-none" style={{ color: on ? accent : "#52525b" }}>{TOOLS[s.tool_type]?.glyph}</span>
-                      <span className="font-mono text-[11px]" style={{ color: on ? "#cbd5e1" : "#52525b" }}>{s.tool_type}</span>
-                      <span className="font-mono text-[10px] text-[#52525b]">
+                      <span className="font-mono text-base leading-none" style={{ color: on ? accent : "var(--color-muted)" }}>{TOOLS[s.tool_type]?.glyph}</span>
+                      <span className="font-mono text-[11px]" style={{ color: on ? "#cbd5e1" : "var(--color-muted)" }}>{s.tool_type}</span>
+                      <span className="font-mono text-[10px] text-muted">
                         {s.target_source} · {s.target_source === "scope" ? scopeCount : reconCount}
                       </span>
-                      {waitsOn && <span className="ml-auto font-mono text-[10px] text-[#52525b]">waits on {waitsOn}</span>}
+                      {waitsOn && <span className="ml-auto font-mono text-[10px] text-muted">waits on {waitsOn}</span>}
                     </button>
                   </li>
                 );
@@ -418,7 +418,7 @@ export default function Composer({ accent, onQueue, onPipeline, onPreview, profi
                   <span key={p.id}
                     className="group flex items-center gap-1 rounded-md border border-[#2e2e2e] bg-[#161616] px-2 py-1 font-mono text-[11px] text-[#94a3b8]">
                     <button onClick={() => loadProfile(p)} className="hover:text-[#f1f5f9]" title="Load this profile">{p.name}</button>
-                    <button onClick={() => onDeleteProfile(p.id)} className="text-[#52525b] hover:text-[#f87171]" title="Delete profile">×</button>
+                    <button onClick={() => onDeleteProfile(p.id)} className="text-muted hover:text-[#f87171]" title="Delete profile">×</button>
                   </span>
                 ))}
               </div>
@@ -437,7 +437,7 @@ export default function Composer({ accent, onQueue, onPipeline, onPreview, profi
               </div>
             ) : (
               <button onClick={() => setSavingProfile(true)}
-                className="font-mono text-[10px] text-[#52525b] transition hover:text-[#94a3b8]">
+                className="font-mono text-[10px] text-muted transition hover:text-muted-hover">
                 + save current config as profile
               </button>
             )}
@@ -449,9 +449,9 @@ export default function Composer({ accent, onQueue, onPipeline, onPreview, profi
           <span className="font-mono text-base leading-none" style={{ color: accent }}>{pipeline ? "⚡" : tool.glyph}</span>
           {pipeline ? (
             activeStages.length === 0 ? (
-              <p className="font-mono text-[11px] leading-tight text-[#52525b]">no stages selected</p>
+              <p className="font-mono text-[11px] leading-tight text-muted">no stages selected</p>
             ) : (
-              <p className="font-mono text-[11px] leading-tight text-[#52525b]">
+              <p className="font-mono text-[11px] leading-tight text-muted">
                 <span className="text-[#94a3b8]">
                   {activeStages.length} {activeStages.length === 1 ? "job" : "chained jobs"}
                 </span>
@@ -464,7 +464,7 @@ export default function Composer({ accent, onQueue, onPipeline, onPreview, profi
               </p>
             )
           ) : (
-            <p className="font-mono text-[11px] leading-tight text-[#52525b]">
+            <p className="font-mono text-[11px] leading-tight text-muted">
               <span className="text-[#94a3b8]">{tool.label}</span>{" on "}
               <span className="text-[#94a3b8]">{sourceCount}</span>{" "}{source} targets → yields{" "}
               <span style={{ color: accent }}>{tool.yields}</span>
@@ -480,7 +480,7 @@ export default function Composer({ accent, onQueue, onPipeline, onPreview, profi
               <span style={{ color: accent }}>{preview.count}</span> target{preview.count === 1 ? "" : "s"} resolved from {preview.target_source}
             </p>
             {preview.sample.length > 0 && (
-              <p className="mt-1 break-all font-mono text-[10px] leading-relaxed text-[#52525b]">
+              <p className="mt-1 break-all font-mono text-[10px] leading-relaxed text-muted">
                 {preview.sample.join("  ·  ")}{preview.truncated && " …"}
               </p>
             )}

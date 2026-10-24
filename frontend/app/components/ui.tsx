@@ -44,7 +44,7 @@ export function StatusBadge({ status }: { status: string }) {
 export function Panel({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="rounded-xl border border-[#2e2e2e] bg-[#1a1a1a] p-5">
-      <h3 className="mb-5 text-[10px] font-semibold uppercase tracking-widest text-[#52525b]">{title}</h3>
+      <h3 className="mb-5 text-[10px] font-semibold uppercase tracking-widest text-muted">{title}</h3>
       {children}
     </div>
   );
@@ -54,7 +54,7 @@ export function SectionHeader({ title, description }: { title: string; descripti
   return (
     <div className="border-b border-[#2e2e2e] pb-5">
       <h2 className="text-2xl font-bold tracking-tight text-[#f1f5f9]">{title}</h2>
-      <p className="mt-1.5 text-sm text-[#52525b]">{description}</p>
+      <p className="mt-1.5 text-sm text-muted">{description}</p>
     </div>
   );
 }
@@ -62,7 +62,7 @@ export function SectionHeader({ title, description }: { title: string; descripti
 export function Input({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
   return (
     <div>
-      <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-widest text-[#52525b]">{label}</label>
+      <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-widest text-muted">{label}</label>
       <input
         className="w-full rounded-md border border-[#2e2e2e] bg-[#161616] px-3 py-2 text-sm text-[#f1f5f9] placeholder-[#3a3a3a] transition focus:border-[#f59e0b] focus:outline-none"
         value={value}
@@ -75,7 +75,7 @@ export function Input({ label, value, onChange }: { label: string; value: string
 export function SelectField({ label, value, onChange, options }: { label: string; value: string; onChange: (v: string) => void; options: string[] }) {
   return (
     <div>
-      <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-widest text-[#52525b]">{label}</label>
+      <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-widest text-muted">{label}</label>
       <select
         className="w-full rounded-md border border-[#2e2e2e] bg-[#161616] px-3 py-2 text-sm text-[#f1f5f9] transition focus:border-[#f59e0b] focus:outline-none"
         value={value}
@@ -92,11 +92,11 @@ export function Textarea({ label, value, onChange }: { label: string; value: str
   return (
     <div>
       <div className="mb-1.5 flex items-center justify-between">
-        <label className="text-[10px] font-semibold uppercase tracking-widest text-[#52525b]">{label}</label>
+        <label className="text-[10px] font-semibold uppercase tracking-widest text-muted">{label}</label>
         <div className="flex rounded border border-[#2e2e2e] bg-[#161616] p-0.5">
           {(["edit", "preview"] as const).map((m) => (
             <button key={m} onClick={() => setMode(m)}
-              className={`rounded px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider transition ${mode === m ? "bg-[#2e2e2e] text-[#f1f5f9]" : "text-[#52525b] hover:text-[#6b7280]"}`}>
+              className={`rounded px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider transition ${mode === m ? "bg-[#2e2e2e] text-[#f1f5f9]" : "text-muted hover:text-[#6b7280]"}`}>
               {m}
             </button>
           ))}
@@ -120,7 +120,7 @@ export function Textarea({ label, value, onChange }: { label: string; value: str
               [&_pre]:rounded-md [&_pre]:border [&_pre]:border-[#2e2e2e] [&_pre]:bg-[#161616] [&_pre]:p-3 [&_pre]:text-xs
               [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4
               [&_li]:text-[#6b7280]
-              [&_blockquote]:border-l-2 [&_blockquote]:border-[#f59e0b]/30 [&_blockquote]:pl-3 [&_blockquote]:text-[#52525b]
+              [&_blockquote]:border-l-2 [&_blockquote]:border-[#f59e0b]/30 [&_blockquote]:pl-3 [&_blockquote]:text-muted
               [&_hr]:border-[#2e2e2e]">
               <ReactMarkdown remarkPlugins={[remarkGfm]} urlTransform={safeMarkdownUrl} disallowedElements={["img"]}>{value}</ReactMarkdown>
             </div>
@@ -136,7 +136,7 @@ export function Textarea({ label, value, onChange }: { label: string; value: str
 export function KeyValue({ label, value }: { label: string; value: string }) {
   return (
     <div className="mb-4 last:mb-0">
-      <div className="text-[9px] font-semibold uppercase tracking-widest text-[#52525b]">{label}</div>
+      <div className="text-[9px] font-semibold uppercase tracking-widest text-muted">{label}</div>
       <div className="mt-1 text-sm text-[#94a3b8]">{value}</div>
     </div>
   );
@@ -147,7 +147,7 @@ export function ListCard({ title, subtitle, onDelete }: { title: string; subtitl
     <div className="flex items-start justify-between gap-3 rounded-lg border border-[#2e2e2e] bg-[#161616] px-4 py-3">
       <div className="min-w-0">
         <div className="truncate text-sm font-medium text-[#f1f5f9]">{title}</div>
-        <div className="mt-0.5 truncate text-xs text-[#52525b]">{subtitle}</div>
+        <div className="mt-0.5 truncate text-xs text-muted">{subtitle}</div>
       </div>
       <DangerButton onClick={onDelete} label="Delete" small />
     </div>

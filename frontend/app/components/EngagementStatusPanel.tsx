@@ -32,7 +32,7 @@ type ActiveAuthorization = {
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex items-start justify-between gap-3 border-b border-[#242424] py-2 last:border-0">
-      <span className="text-[10px] font-semibold uppercase tracking-widest text-[#52525b]">{label}</span>
+      <span className="text-[10px] font-semibold uppercase tracking-widest text-muted">{label}</span>
       <span className="text-right text-xs text-[#cbd5e1]">{children}</span>
     </div>
   );
@@ -143,7 +143,7 @@ function EngagementStatusPanelState({ engagement }: { engagement: Engagement }) 
           <Row label="Client">
             {engagement.client_id
               ? (client?.name ?? engagement.client_id)
-              : <span className="text-[#52525b]">{wantsClient ? "Not linked" : "Not applicable"}</span>}
+              : <span className="text-muted">{wantsClient ? "Not linked" : "Not applicable"}</span>}
           </Row>
         </div>
 
@@ -151,7 +151,7 @@ function EngagementStatusPanelState({ engagement }: { engagement: Engagement }) 
           <Row label="Testing window">{windowText}</Row>
           <Row label="Authorization">
             {authState.phase === "loading" ? (
-              <span className="text-[#52525b]">checking…</span>
+              <span className="text-muted">checking…</span>
             ) : authState.phase === "error" ? (
               // "Could not check" is not "none on record". Reporting a failed
               // lookup as an absent authorization would tell an operator they
@@ -167,7 +167,7 @@ function EngagementStatusPanelState({ engagement }: { engagement: Engagement }) 
             ) : (
               // Bounty work is authorized by the programme's published policy,
               // not by a document held here.
-              <span className="text-[#52525b]">Programme policy</span>
+              <span className="text-muted">Programme policy</span>
             )}
           </Row>
           <Row label="Findings">{engagement.findings_count}</Row>

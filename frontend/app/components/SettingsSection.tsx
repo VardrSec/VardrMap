@@ -166,19 +166,19 @@ export default function SettingsSection() {
             </code>
             <button
               onClick={() => { void navigator.clipboard.writeText(newToken); setMessage("Copied."); }}
-              className="flex-shrink-0 rounded-md border border-[#2e2e2e] px-3 py-2 text-xs text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#94a3b8]"
+              className="flex-shrink-0 rounded-md border border-[#2e2e2e] px-3 py-2 text-xs text-muted transition hover:border-[#3a3a3a] hover:text-muted-hover"
             >
               Copy
             </button>
           </div>
-          <button onClick={() => setNewToken(null)} className="text-xs text-[#52525b] transition hover:text-[#94a3b8]">
+          <button onClick={() => setNewToken(null)} className="text-xs text-muted transition hover:text-muted-hover">
             Dismiss
           </button>
         </div>
       )}
 
       <Panel title="Connect Runner">
-        <p className="mb-5 text-xs text-[#52525b]">
+        <p className="mb-5 text-xs text-muted">
           Run these on the computer that will run your scans. Each step has a Copy button.
         </p>
 
@@ -272,7 +272,7 @@ export default function SettingsSection() {
         <div className="space-y-3">
           <Input label="Label (optional, e.g. Burp Suite)" value={label} onChange={setLabel} />
           <div>
-            <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-widest text-[#52525b]">
+            <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-widest text-muted">
               Scope
             </label>
             <div className="flex gap-2">
@@ -281,14 +281,14 @@ export default function SettingsSection() {
                   className="flex-1 rounded-md border px-3 py-2 text-xs font-semibold uppercase tracking-widest transition"
                   style={{
                     borderColor: keyScope === s ? "#f59e0b80" : "#2e2e2e",
-                    color: keyScope === s ? "#f59e0b" : "#52525b",
+                    color: keyScope === s ? "#f59e0b" : "var(--color-muted)",
                     backgroundColor: keyScope === s ? "#f59e0b12" : "#161616",
                   }}>
                   {s === "full" ? "Full access" : "Runner only"}
                 </button>
               ))}
             </div>
-            <p className="mt-1.5 text-[10px] text-[#52525b]">
+            <p className="mt-1.5 text-[10px] text-muted">
               {keyScope === "runner"
                 ? "Runner keys can only poll jobs, post imports, and send heartbeats — safe to place on a server."
                 : "Full-access keys can call any endpoint."}
@@ -296,7 +296,7 @@ export default function SettingsSection() {
           </div>
           <PrimaryButton onClick={generate} label="Generate Key" />
         </div>
-        <p className="mt-3 text-xs text-[#52525b]">
+        <p className="mt-3 text-xs text-muted">
           Send as{" "}
           <code className="rounded bg-[#2e2e2e] px-1.5 py-0.5 font-mono text-[#94a3b8]">
             Authorization: Bearer vmap_…
@@ -313,7 +313,7 @@ export default function SettingsSection() {
             onChange={setWebhookUrl}
           />
           <div>
-            <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-widest text-[#52525b]">
+            <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-widest text-muted">
               Notify on findings at or above
             </label>
             <div className="flex gap-1.5">
@@ -332,7 +332,7 @@ export default function SettingsSection() {
           </div>
           <PrimaryButton onClick={saveNotifications} label="Save Notifications" />
         </div>
-        <p className="mt-3 text-xs text-[#52525b]">
+        <p className="mt-3 text-xs text-muted">
           Sends a message when a scan job fails or a nuclei import contains findings at or above the threshold.
           Must be an HTTPS URL.
         </p>
@@ -348,7 +348,7 @@ export default function SettingsSection() {
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="text-sm text-[#f1f5f9]">
-                      {key.label || <span className="italic text-[#52525b]">unlabeled</span>}
+                      {key.label || <span className="italic text-muted">unlabeled</span>}
                     </span>
                     <span className={`rounded px-1.5 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-widest ${
                       key.scope === "runner"
@@ -358,7 +358,7 @@ export default function SettingsSection() {
                       {key.scope === "runner" ? "runner" : "full"}
                     </span>
                   </div>
-                  <div className="mt-0.5 font-mono text-xs text-[#52525b]">
+                  <div className="mt-0.5 font-mono text-xs text-muted">
                     Created {key.created_at ? new Date(key.created_at).toLocaleDateString() : "—"}
                     {key.last_used_at && (
                       <span className="ml-3">
@@ -385,7 +385,7 @@ function CopyLine({ text, onCopy }: { text: string; onCopy: (text: string) => vo
       </code>
       <button
         onClick={() => onCopy(text)}
-        className="flex-shrink-0 rounded-md border border-[#2e2e2e] px-3 py-2 text-xs text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#94a3b8]"
+        className="flex-shrink-0 rounded-md border border-[#2e2e2e] px-3 py-2 text-xs text-muted transition hover:border-[#3a3a3a] hover:text-muted-hover"
       >
         Copy
       </button>
@@ -396,7 +396,7 @@ function CopyLine({ text, onCopy }: { text: string; onCopy: (text: string) => vo
 function Step({ n, title, children }: { n: number; title: string; children: ReactNode }) {
   return (
     <div>
-      <div className="mb-1.5 font-mono text-[10px] uppercase tracking-widest text-[#52525b]">
+      <div className="mb-1.5 font-mono text-[10px] uppercase tracking-widest text-muted">
         {n} · {title}
       </div>
       <div className="space-y-1.5">{children}</div>
@@ -405,5 +405,5 @@ function Step({ n, title, children }: { n: number; title: string; children: Reac
 }
 
 function Hint({ children }: { children: ReactNode }) {
-  return <p className="text-[10px] text-[#52525b]">{children}</p>;
+  return <p className="text-[10px] text-muted">{children}</p>;
 }

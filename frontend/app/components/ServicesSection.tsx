@@ -54,12 +54,12 @@ export default function ServicesSection({ engagementId, hideHeader }: { engageme
 
       <Panel title={`Services (${services.length})`}>
         {loading && (
-          <p className="py-6 text-center text-sm text-[#52525b]">Loading…</p>
+          <p className="py-6 text-center text-sm text-muted">Loading…</p>
         )}
 
         {!loading && services.length === 0 && (
           <div className="py-10 text-center">
-            <p className="text-sm text-[#52525b]">No services discovered yet.</p>
+            <p className="text-sm text-muted">No services discovered yet.</p>
             <p className="mt-1 text-xs text-[#3a3a3a]">Run an nmap job from the Dashboard to populate this list.</p>
           </div>
         )}
@@ -70,7 +70,7 @@ export default function ServicesSection({ engagementId, hideHeader }: { engageme
               <thead>
                 <tr className="border-b border-[#2e2e2e]">
                   {["Host", "Port", "Proto", "Service", "Product / Version", "State", "Last Scanned", ""].map((h) => (
-                    <th key={h} className="pb-2 pr-4 font-semibold uppercase tracking-widest text-[#52525b]">{h}</th>
+                    <th key={h} className="pb-2 pr-4 font-semibold uppercase tracking-widest text-muted">{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -79,7 +79,7 @@ export default function ServicesSection({ engagementId, hideHeader }: { engageme
                   <tr key={svc.id} className="border-b border-[#1e1e1e] hover:bg-[#161616]">
                     <td className="py-2 pr-4 font-mono text-[#94a3b8]">{svc.host}</td>
                     <td className="py-2 pr-4 font-mono text-[#f59e0b]">{svc.port}</td>
-                    <td className="py-2 pr-4 text-[#52525b]">{svc.protocol}</td>
+                    <td className="py-2 pr-4 text-muted">{svc.protocol}</td>
                     <td className="py-2 pr-4 text-[#f1f5f9]">{svc.service_name || "—"}</td>
                     <td className="py-2 pr-4 text-[#94a3b8]">
                       {[svc.product, svc.version].filter(Boolean).join(" ") || "—"}
@@ -99,13 +99,13 @@ export default function ServicesSection({ engagementId, hideHeader }: { engageme
                       <div className="flex items-center justify-end gap-1">
                         <button
                           onClick={() => handleInvestigate(svc)}
-                          className="rounded px-2 py-0.5 text-[10px] text-[#52525b] transition hover:bg-[#2e2e2e] hover:text-[#89b4fa]">
+                          className="rounded px-2 py-0.5 text-[10px] text-muted transition hover:bg-[#2e2e2e] hover:text-[#89b4fa]">
                           Investigate
                         </button>
                         <button
                           onClick={() => handleDelete(svc.id)}
                           disabled={deleting === svc.id}
-                          className="rounded px-2 py-0.5 text-[10px] text-[#52525b] transition hover:bg-[#2e2e2e] hover:text-red-400 disabled:opacity-40">
+                          className="rounded px-2 py-0.5 text-[10px] text-muted transition hover:bg-[#2e2e2e] hover:text-red-400 disabled:opacity-40">
                           {deleting === svc.id ? "…" : "Delete"}
                         </button>
                       </div>

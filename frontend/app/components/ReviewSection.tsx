@@ -53,7 +53,7 @@ export default function ReviewSection({ engagement }: { engagement: Engagement }
       <div className="flex flex-wrap items-end justify-between gap-4 border-b border-[#2e2e2e] pb-5">
         <div>
           <h2 className="text-2xl font-bold tracking-tight text-[#f1f5f9]">Review</h2>
-          <p className="mt-1.5 text-sm text-[#52525b]">
+          <p className="mt-1.5 text-sm text-muted">
             Explore recon data, scan results, manual test notes, and discovered services.
           </p>
         </div>
@@ -63,11 +63,11 @@ export default function ReviewSection({ engagement }: { engagement: Engagement }
             return (
               <button key={t.id} onClick={() => selectTab(t.id)}
                 className="flex items-center gap-1.5 rounded-md px-4 py-1.5 font-mono text-[11px] uppercase tracking-wider transition"
-                style={activeTab === t.id ? { backgroundColor: "#2e2e2e", color: "#f1f5f9" } : { color: "#52525b" }}>
+                style={activeTab === t.id ? { backgroundColor: "#2e2e2e", color: "#f1f5f9" } : { color: "var(--color-muted)" }}>
                 {t.label}
                 {count > 0 && (
                   <span className="rounded bg-[#2e2e2e] px-1 py-0.5 font-mono text-[9px] leading-none"
-                    style={{ color: activeTab === t.id ? "#f1f5f9" : "#52525b", backgroundColor: activeTab === t.id ? "#3a3a3a" : "#242424" }}>
+                    style={{ color: activeTab === t.id ? "#f1f5f9" : "var(--color-muted)", backgroundColor: activeTab === t.id ? "#3a3a3a" : "#242424" }}>
                     {count}
                   </span>
                 )}
