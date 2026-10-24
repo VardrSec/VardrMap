@@ -21,7 +21,7 @@ const MD_CLASSES = `text-sm text-[#6b7280] leading-relaxed space-y-2
   [&_pre]:rounded-md [&_pre]:border [&_pre]:border-[#2e2e2e] [&_pre]:bg-[#161616] [&_pre]:p-3 [&_pre]:text-xs
   [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4
   [&_li]:text-[#6b7280]
-  [&_blockquote]:border-l-2 [&_blockquote]:border-[#f59e0b]/30 [&_blockquote]:pl-3 [&_blockquote]:text-[#52525b]
+  [&_blockquote]:border-l-2 [&_blockquote]:border-[#f59e0b]/30 [&_blockquote]:pl-3 [&_blockquote]:text-muted
   [&_hr]:border-[#2e2e2e]`;
 
 function generateMarkdown(f: ReportFormState) {
@@ -242,7 +242,7 @@ export default function ReportsSection({ engagement }: { engagement: Engagement 
           <Panel title="Draft Report">
             <div className="grid gap-3">
               <div>
-                <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-widest text-[#52525b]">Link Finding</label>
+                <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-widest text-muted">Link Finding</label>
                 <select
                   className="w-full rounded-md border border-[#2e2e2e] bg-[#161616] px-2.5 py-2 text-sm text-[#f1f5f9] transition focus:border-[#f59e0b] focus:outline-none"
                   value={form.finding_id}
@@ -273,26 +273,26 @@ export default function ReportsSection({ engagement }: { engagement: Engagement 
             )}
           </div>
           <div className="mt-3 flex gap-2">
-            <button onClick={copyMarkdown} className="rounded-md border border-[#2e2e2e] px-3 py-1.5 text-xs text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#94a3b8]">
+            <button onClick={copyMarkdown} className="rounded-md border border-[#2e2e2e] px-3 py-1.5 text-xs text-muted transition hover:border-[#3a3a3a] hover:text-muted-hover">
               Copy MD
             </button>
-            <button onClick={downloadMarkdown} className="rounded-md border border-[#2e2e2e] px-3 py-1.5 text-xs text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#94a3b8]">
+            <button onClick={downloadMarkdown} className="rounded-md border border-[#2e2e2e] px-3 py-1.5 text-xs text-muted transition hover:border-[#3a3a3a] hover:text-muted-hover">
               Download .md
             </button>
-            <button onClick={downloadPDF} className="rounded-md border border-[#2e2e2e] px-3 py-1.5 text-xs text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#94a3b8]">
+            <button onClick={downloadPDF} className="rounded-md border border-[#2e2e2e] px-3 py-1.5 text-xs text-muted transition hover:border-[#3a3a3a] hover:text-muted-hover">
               Export PDF
             </button>
           </div>
 
           <div className="mt-5 space-y-2">
-            {total > 0 && <p className="text-[10px] font-semibold uppercase tracking-widest text-[#52525b]">Saved Reports ({total})</p>}
+            {total > 0 && <p className="text-[10px] font-semibold uppercase tracking-widest text-muted">Saved Reports ({total})</p>}
             {reports.map((report) =>
               editingId === report.id ? (
                 <div key={report.id} className="rounded-xl border border-[#f59e0b]/30 bg-[#161616] p-4 space-y-3">
                   <ReportFields value={editForm} onChange={setEditForm} />
                   <div className="flex gap-2">
                     <PrimaryButton onClick={() => saveEdit(report.id)} label="Save" />
-                    <button onClick={() => setEditingId(null)} className="rounded-md border border-[#2e2e2e] px-4 py-2 text-sm text-[#52525b] transition hover:text-[#94a3b8]">
+                    <button onClick={() => setEditingId(null)} className="rounded-md border border-[#2e2e2e] px-4 py-2 text-sm text-muted transition hover:text-muted-hover">
                       Cancel
                     </button>
                   </div>
@@ -303,13 +303,13 @@ export default function ReportsSection({ engagement }: { engagement: Engagement 
                     <div className="font-semibold text-[#f1f5f9]">{report.title}</div>
                     <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                       <StatusBadge status={report.status} />
-                      {report.cwe  && <span className="font-mono text-xs text-[#52525b]">CWE: {report.cwe}</span>}
-                      {report.cvss && <span className="font-mono text-xs text-[#52525b]">CVSS: {report.cvss}</span>}
+                      {report.cwe  && <span className="font-mono text-xs text-muted">CWE: {report.cwe}</span>}
+                      {report.cvss && <span className="font-mono text-xs text-muted">CVSS: {report.cvss}</span>}
                     </div>
                   </div>
                   <div className="flex gap-2">
                     {!isViewer && (
-                      <button onClick={() => startEdit(report)} className="rounded-md border border-[#2e2e2e] px-2.5 py-1 text-xs text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#94a3b8]">
+                      <button onClick={() => startEdit(report)} className="rounded-md border border-[#2e2e2e] px-2.5 py-1 text-xs text-muted transition hover:border-[#3a3a3a] hover:text-muted-hover">
                         Edit
                       </button>
                     )}
@@ -322,7 +322,7 @@ export default function ReportsSection({ engagement }: { engagement: Engagement 
             )}
             {reports.length < total && (
               <button onClick={loadMore} disabled={loadingMore}
-                className="w-full rounded-md border border-[#2e2e2e] px-4 py-2 text-xs text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#94a3b8] disabled:opacity-50">
+                className="w-full rounded-md border border-[#2e2e2e] px-4 py-2 text-xs text-muted transition hover:border-[#3a3a3a] hover:text-muted-hover disabled:opacity-50">
                 {loadingMore ? "Loading…" : `Load more (${total - reports.length} remaining)`}
               </button>
             )}

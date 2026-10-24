@@ -458,11 +458,11 @@ export default function JobsSection({
         <div className="border-b border-[#2e2e2e] pb-5">
           <div className="flex items-center gap-2.5">
             <h2 className="text-2xl font-bold tracking-tight text-[#f1f5f9]">Scan Jobs</h2>
-            <span className="rounded border border-[#2e2e2e] px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest text-[#52525b]">
+            <span className="rounded border border-[#2e2e2e] px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest text-muted">
               orchestration
             </span>
           </div>
-          <p className="mt-1.5 text-sm text-[#52525b]">
+          <p className="mt-1.5 text-sm text-muted">
             Dispatch recon &amp; scan jobs to VardrRunner on your machine — results stream back into VardrMap.
           </p>
         </div>
@@ -517,7 +517,7 @@ export default function JobsSection({
 
         <div className="space-y-5">
           {loading ? (
-            <div className="flex min-h-[160px] items-center gap-2 rounded-2xl border border-[#2e2e2e] bg-[#1a1a1a] px-6 font-mono text-sm text-[#52525b]">
+            <div className="flex min-h-[160px] items-center gap-2 rounded-2xl border border-[#2e2e2e] bg-[#1a1a1a] px-6 font-mono text-sm text-muted">
               <span className="h-1.5 w-1.5 animate-pulse rounded-full" style={{ backgroundColor: ACCENT }} />
               loading jobs…
             </div>
@@ -551,7 +551,7 @@ export default function JobsSection({
           ) : (
             <button
               onClick={() => pref("showTerminal", true)}
-              className="flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-[#2e2e2e] py-3 font-mono text-[11px] text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#94a3b8]">
+              className="flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-[#2e2e2e] py-3 font-mono text-[11px] text-muted transition hover:border-[#3a3a3a] hover:text-muted-hover">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
                 <polyline points="4 17 10 11 4 5" /><line x1="12" y1="19" x2="20" y2="19" />
               </svg>

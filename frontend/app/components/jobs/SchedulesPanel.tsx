@@ -26,10 +26,10 @@ export default function SchedulesPanel({ accent, schedules, onToggle, onDelete }
   return (
     <div className="rounded-2xl border border-[#2e2e2e] bg-[#1a1a1a] p-5">
       <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-[10px] font-semibold uppercase tracking-widest text-[#52525b]">
+        <h3 className="text-[10px] font-semibold uppercase tracking-widest text-muted">
           Recurring Scans
         </h3>
-        <span className="font-mono text-[10px] text-[#52525b]">{schedules.length} schedule{schedules.length > 1 ? "s" : ""}</span>
+        <span className="font-mono text-[10px] text-muted">{schedules.length} schedule{schedules.length > 1 ? "s" : ""}</span>
       </div>
       <div className="space-y-1.5">
         {schedules.map((s) => (
@@ -43,19 +43,19 @@ export default function SchedulesPanel({ accent, schedules, onToggle, onDelete }
               <span className="absolute top-0.5 h-3 w-3 rounded-full bg-[#0d0d0d] transition-all"
                 style={{ left: s.enabled ? "14px" : "2px" }} />
             </button>
-            <span className="font-mono text-xs font-semibold" style={{ color: s.enabled ? "#f1f5f9" : "#52525b" }}>
+            <span className="font-mono text-xs font-semibold" style={{ color: s.enabled ? "#f1f5f9" : "var(--color-muted)" }}>
               {s.tool_type}
             </span>
-            <span className="font-mono text-[10px] text-[#52525b]">{s.target_source}</span>
+            <span className="font-mono text-[10px] text-muted">{s.target_source}</span>
             <span className="rounded border border-[#2e2e2e] px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wide"
-              style={{ color: s.enabled ? accent : "#52525b" }}>
+              style={{ color: s.enabled ? accent : "var(--color-muted)" }}>
               {s.interval}
             </span>
-            <span className="ml-auto font-mono text-[10px] text-[#52525b]">
+            <span className="ml-auto font-mono text-[10px] text-muted">
               {s.enabled ? fmtNext(s.next_run_at) : "paused"}
             </span>
             <button onClick={() => onDelete(s.id)}
-              className="flex-shrink-0 rounded-md border border-[#2e2e2e] px-2 py-0.5 font-mono text-[10px] text-[#52525b] transition hover:border-[#f87171]/50 hover:text-[#f87171]"
+              className="flex-shrink-0 rounded-md border border-[#2e2e2e] px-2 py-0.5 font-mono text-[10px] text-muted transition hover:border-[#f87171]/50 hover:text-[#f87171]"
               title="Delete schedule">
               ✕
             </button>

@@ -193,12 +193,12 @@ export default function FindingsSection({ engagement }: { engagement: Engagement
                 <option key={s} value={s}>{s}</option>
               ))}
             </select>
-            <button type="submit" className="rounded-md border border-[#2e2e2e] px-4 py-2 text-xs text-[#52525b] transition hover:text-[#94a3b8]">
+            <button type="submit" className="rounded-md border border-[#2e2e2e] px-4 py-2 text-xs text-muted transition hover:text-muted-hover">
               Search
             </button>
             {(search || severityFilter) && (
               <button type="button" onClick={() => { setSearch(""); setSearchInput(""); setSeverityFilter(""); }}
-                className="rounded-md border border-[#2e2e2e] px-4 py-2 text-xs text-[#52525b] transition hover:text-[#94a3b8]">
+                className="rounded-md border border-[#2e2e2e] px-4 py-2 text-xs text-muted transition hover:text-muted-hover">
                 Clear
               </button>
             )}
@@ -219,7 +219,7 @@ export default function FindingsSection({ engagement }: { engagement: Engagement
                     <FindingForm value={editForm} onChange={setEditForm} />
                     <div className="flex gap-2">
                       <PrimaryButton onClick={() => saveEdit(finding.id)} label="Save" />
-                      <button onClick={() => setEditingId(null)} className="rounded-md border border-[#2e2e2e] px-4 py-2 text-sm text-[#52525b] transition hover:text-[#94a3b8]">
+                      <button onClick={() => setEditingId(null)} className="rounded-md border border-[#2e2e2e] px-4 py-2 text-sm text-muted transition hover:text-muted-hover">
                         Cancel
                       </button>
                     </div>
@@ -232,7 +232,7 @@ export default function FindingsSection({ engagement }: { engagement: Engagement
                         <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                           <SeverityBadge severity={finding.severity} />
                           <StatusBadge   status={finding.status} />
-                          {finding.asset && <span className="font-mono text-xs text-[#52525b]">{finding.asset}</span>}
+                          {finding.asset && <span className="font-mono text-xs text-muted">{finding.asset}</span>}
                           {finding.created_at && (
                             <span className="font-mono text-xs text-[#3a3a3a]">
                               {new Date(finding.created_at).toLocaleDateString()}
@@ -246,15 +246,15 @@ export default function FindingsSection({ engagement }: { engagement: Engagement
                             onClick={() => aiSuggest(finding)}
                             disabled={suggesting === finding.id}
                             title="Use Claude AI to draft CVSS, impact, and remediation"
-                            className="rounded-md border border-[#2e2e2e] px-2.5 py-1 text-xs text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#a6e3a1] disabled:opacity-40">
+                            className="rounded-md border border-[#2e2e2e] px-2.5 py-1 text-xs text-muted transition hover:border-[#3a3a3a] hover:text-[#a6e3a1] disabled:opacity-40">
                             {suggesting === finding.id ? "…" : "AI Suggest"}
                           </button>
                         )}
-                        <button onClick={() => promoteToReport(finding)} className="rounded-md border border-[#2e2e2e] px-2.5 py-1 text-xs text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#94a3b8]">
+                        <button onClick={() => promoteToReport(finding)} className="rounded-md border border-[#2e2e2e] px-2.5 py-1 text-xs text-muted transition hover:border-[#3a3a3a] hover:text-muted-hover">
                           Draft Report →
                         </button>
                         {!isViewer && (
-                          <button onClick={() => startEdit(finding)} className="rounded-md border border-[#2e2e2e] px-2.5 py-1 text-xs text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#94a3b8]">
+                          <button onClick={() => startEdit(finding)} className="rounded-md border border-[#2e2e2e] px-2.5 py-1 text-xs text-muted transition hover:border-[#3a3a3a] hover:text-muted-hover">
                             Edit
                           </button>
                         )}
@@ -270,7 +270,7 @@ export default function FindingsSection({ engagement }: { engagement: Engagement
               )}
               {findings.length < total && (
                 <button onClick={loadMore} disabled={loadingMore}
-                  className="w-full rounded-md border border-[#2e2e2e] px-4 py-2 text-xs text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#94a3b8] disabled:opacity-50">
+                  className="w-full rounded-md border border-[#2e2e2e] px-4 py-2 text-xs text-muted transition hover:border-[#3a3a3a] hover:text-muted-hover disabled:opacity-50">
                   {loadingMore ? "Loading…" : `Load more (${total - findings.length} remaining)`}
                 </button>
               )}

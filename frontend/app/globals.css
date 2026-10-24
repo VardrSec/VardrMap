@@ -12,6 +12,13 @@
   --font-mono: var(--font-geist-mono);
 }
 
+/* Secondary text on the dark UI. #a1a1aa is ~7.7:1 on #0a0a0a; the old #52525b was ~2.6:1,
+   below WCAG AA. Non-inline so inline styles can use var(--color-muted) too. */
+@theme {
+  --color-muted: #a1a1aa;
+  --color-muted-hover: #e4e4e7;
+}
+
 @media (prefers-color-scheme: dark) {
   :root {
     --background: #0a0a0a;

@@ -13,7 +13,7 @@ type Props = {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
-      <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-[#52525b]">{title}</p>
+      <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-muted">{title}</p>
       {children}
     </div>
   );
@@ -81,11 +81,11 @@ export default function HostDetailPanel({ engagementId, item, onClose }: Props) 
             <p className="break-all font-mono text-sm font-semibold text-[#f1f5f9]">
               {item.url || item.host || "Unknown"}
             </p>
-            <p className="mt-0.5 font-mono text-[10px] text-[#52525b]">host detail</p>
+            <p className="mt-0.5 font-mono text-[10px] text-muted">host detail</p>
           </div>
           <button
             onClick={onClose}
-            className="flex-shrink-0 rounded-md border border-[#2e2e2e] px-2.5 py-1 font-mono text-xs text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#94a3b8]">
+            className="flex-shrink-0 rounded-md border border-[#2e2e2e] px-2.5 py-1 font-mono text-xs text-muted transition hover:border-[#3a3a3a] hover:text-muted-hover">
             ✕
           </button>
         </div>
@@ -96,25 +96,25 @@ export default function HostDetailPanel({ engagementId, item, onClose }: Props) 
             <div className="rounded-lg border border-[#2e2e2e] bg-[#161616] px-4 py-3 space-y-1.5">
               {item.status_code && (
                 <div className="flex gap-3 text-xs">
-                  <span className="text-[#52525b]">Status</span>
+                  <span className="text-muted">Status</span>
                   <span className="font-mono text-[#f1f5f9]">{item.status_code}</span>
                 </div>
               )}
               {item.title && (
                 <div className="flex gap-3 text-xs">
-                  <span className="text-[#52525b]">Title</span>
+                  <span className="text-muted">Title</span>
                   <span className="text-[#94a3b8]">{item.title}</span>
                 </div>
               )}
               {item.webserver && (
                 <div className="flex gap-3 text-xs">
-                  <span className="text-[#52525b]">Server</span>
+                  <span className="text-muted">Server</span>
                   <span className="font-mono text-[#6b7280]">{item.webserver}</span>
                 </div>
               )}
               {item.tech && (
                 <div className="flex gap-3 text-xs">
-                  <span className="text-[#52525b]">Tech</span>
+                  <span className="text-muted">Tech</span>
                   <span className="text-[#6b7280]">
                     {Array.isArray(item.tech) ? item.tech.join(", ") : item.tech}
                   </span>
@@ -122,12 +122,12 @@ export default function HostDetailPanel({ engagementId, item, onClose }: Props) 
               )}
               {item.content_type && (
                 <div className="flex gap-3 text-xs">
-                  <span className="text-[#52525b]">Content-Type</span>
+                  <span className="text-muted">Content-Type</span>
                   <span className="font-mono text-[#6b7280]">{item.content_type}</span>
                 </div>
               )}
               <div className="flex gap-3 text-xs">
-                <span className="text-[#52525b]">Source</span>
+                <span className="text-muted">Source</span>
                 <span className="font-mono text-[#3a3a3a]">{item.source}</span>
               </div>
             </div>
@@ -135,15 +135,15 @@ export default function HostDetailPanel({ engagementId, item, onClose }: Props) 
 
           {/* Services */}
           <Section title={`Services${services.length ? ` (${services.length})` : ""}`}>
-            {loading ? <p className="text-xs text-[#52525b]">Loading…</p> :
+            {loading ? <p className="text-xs text-muted">Loading…</p> :
               services.length === 0 ? <Empty /> : (
                 <div className="space-y-1.5">
                   {services.map((s) => (
                     <div key={s.id} className="flex items-center gap-2 rounded-lg border border-[#2e2e2e] bg-[#161616] px-3 py-2 text-xs">
                       <span className="font-mono text-[#f59e0b]">{s.port}/{s.protocol}</span>
                       <span className="text-[#94a3b8]">{s.service_name || "—"}</span>
-                      {s.product && <span className="text-[#52525b]">{s.product}{s.version ? ` ${s.version}` : ""}</span>}
-                      <span className={`ml-auto font-mono text-[10px] ${s.state === "open" ? "text-[#a6e3a1]" : "text-[#52525b]"}`}>
+                      {s.product && <span className="text-muted">{s.product}{s.version ? ` ${s.version}` : ""}</span>}
+                      <span className={`ml-auto font-mono text-[10px] ${s.state === "open" ? "text-[#a6e3a1]" : "text-muted"}`}>
                         {s.state}
                       </span>
                     </div>
@@ -154,13 +154,13 @@ export default function HostDetailPanel({ engagementId, item, onClose }: Props) 
 
           {/* Scans */}
           <Section title={`Vulnerabilities${scans.length ? ` (${scans.length})` : ""}`}>
-            {loading ? <p className="text-xs text-[#52525b]">Loading…</p> :
+            {loading ? <p className="text-xs text-muted">Loading…</p> :
               scans.length === 0 ? <Empty /> : (
                 <div className="space-y-1.5">
                   {scans.map((s) => (
                     <div key={s.id} className="rounded-lg border border-[#2e2e2e] bg-[#161616] px-3 py-2 text-xs space-y-0.5">
                       <div className="flex items-center gap-2">
-                        <span className={`font-mono ${SEV_COLOR[s.severity] || "text-[#52525b]"}`}>{s.severity}</span>
+                        <span className={`font-mono ${SEV_COLOR[s.severity] || "text-muted"}`}>{s.severity}</span>
                         <span className="truncate text-[#f1f5f9]">{s.title}</span>
                       </div>
                       <div className="font-mono text-[#3a3a3a]">{s.template_id}</div>
@@ -172,21 +172,21 @@ export default function HostDetailPanel({ engagementId, item, onClose }: Props) 
 
           {/* Findings */}
           <Section title={`Findings${findings.length ? ` (${findings.length})` : ""}`}>
-            {loading ? <p className="text-xs text-[#52525b]">Loading…</p> :
+            {loading ? <p className="text-xs text-muted">Loading…</p> :
               findings.length === 0 ? <Empty /> : (
                 <div className="space-y-1.5">
                   {findings.map((f) => (
                     <div key={f.id} className="rounded-lg border border-[#2e2e2e] bg-[#161616] px-3 py-2 text-xs space-y-0.5">
                       <div className="flex items-center gap-2">
-                        <span className={`font-mono ${SEV_COLOR[f.severity] || "text-[#52525b]"}`}>{f.severity}</span>
+                        <span className={`font-mono ${SEV_COLOR[f.severity] || "text-muted"}`}>{f.severity}</span>
                         <span className="truncate text-[#f1f5f9]">{f.title}</span>
                       </div>
-                      <div className="font-mono text-[10px] text-[#52525b]">{f.status}</div>
+                      <div className="font-mono text-[10px] text-muted">{f.status}</div>
                     </div>
                   ))}
                   <button
                     onClick={() => { onClose(); navigate("findings"); }}
-                    className="mt-1 w-full rounded-md border border-[#2e2e2e] py-1.5 font-mono text-[11px] text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#94a3b8]">
+                    className="mt-1 w-full rounded-md border border-[#2e2e2e] py-1.5 font-mono text-[11px] text-muted transition hover:border-[#3a3a3a] hover:text-muted-hover">
                     Open Findings →
                   </button>
                 </div>

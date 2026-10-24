@@ -72,7 +72,7 @@ function StreamCard({ job, accent, active, onClick, onDelete }: {
         <div className="flex items-center gap-2">
           <span className="font-mono text-[13px] font-semibold text-[#f1f5f9]">{job.tool}</span>
           <span className="text-[#3a3a3a]">·</span>
-          <span className="font-mono text-[11px] text-[#52525b]">{job.source}</span>
+          <span className="font-mono text-[11px] text-muted">{job.source}</span>
           <span className="ml-auto font-mono text-[10px] text-[#3a3a3a]">{fmtAgo(job.queuedAt)}</span>
         </div>
         <div className="mt-1.5 flex items-center gap-2">
@@ -89,7 +89,7 @@ function StreamCard({ job, accent, active, onClick, onDelete }: {
           ) : job.status === "failed" ? (
             <span className="truncate font-mono text-[11px] text-[#f87171]">{job.error || "execution failed"}</span>
           ) : (
-            <span className="font-mono text-[11px] text-[#52525b]">{job.targets} targets · awaiting runner</span>
+            <span className="font-mono text-[11px] text-muted">{job.targets} targets · awaiting runner</span>
           )}
         </div>
       </div>
@@ -123,7 +123,7 @@ function PipelineCard({ job, accent, active, onClick, onDelete }: {
         <span className="ml-auto font-mono text-[9px] text-[#3a3a3a]">{fmtAgo(job.queuedAt)}</span>
         <TrashButton onClick={(e) => { e.stopPropagation(); onDelete(); }} />
       </div>
-      <div className="mt-1 font-mono text-[10px] text-[#52525b]">{job.source} · {job.targets} targets</div>
+      <div className="mt-1 font-mono text-[10px] text-muted">{job.source} · {job.targets} targets</div>
       <AssessmentBadge job={job} />
       {job.status === "running" && <div className="mt-2"><MiniBar progress={job.progress} color={sc} /></div>}
       {job.status === "done" && (
@@ -149,7 +149,7 @@ function PipelineView({ jobs, accent, activeId, onSelect, onDelete }: ViewProps)
             <div className="mb-2.5 flex items-center gap-2 px-1">
               <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: color }} />
               <span className="font-mono text-[10px] uppercase tracking-widest" style={{ color }}>{m.label}</span>
-              <span className="ml-auto font-mono text-[10px] text-[#52525b]">{items.length}</span>
+              <span className="ml-auto font-mono text-[10px] text-muted">{items.length}</span>
             </div>
             <div className="space-y-2">
               {items.length === 0 ? (
@@ -178,7 +178,7 @@ function TableView({ jobs, accent, activeId, onSelect, onDelete }: ViewProps) {
         <thead>
           <tr className="bg-[#161616]">
             {["Tool", "Source", "Status", "Progress", "Targets", "Yield", "Runtime", "Queued", ""].map((h) => (
-              <th key={h} className="px-3 py-2 font-mono text-[9px] font-semibold uppercase tracking-widest text-[#52525b]">{h}</th>
+              <th key={h} className="px-3 py-2 font-mono text-[9px] font-semibold uppercase tracking-widest text-muted">{h}</th>
             ))}
           </tr>
         </thead>
@@ -200,15 +200,15 @@ function TableView({ jobs, accent, activeId, onSelect, onDelete }: ViewProps) {
                 <td className="px-3 py-2.5">
                   <div className="flex items-center gap-2">
                     <div className="w-16"><MiniBar progress={j.progress} color={sc} /></div>
-                    <span className="font-mono text-[10px] tabular-nums text-[#52525b]">{j.progress}%</span>
+                    <span className="font-mono text-[10px] tabular-nums text-muted">{j.progress}%</span>
                   </div>
                 </td>
                 <td className="px-3 py-2.5 font-mono text-[11px] tabular-nums text-[#94a3b8]">{j.targets}</td>
                 <td className="px-3 py-2.5 font-mono text-[11px] tabular-nums"
-                  style={{ color: j.status === "done" ? "#a6e3a1" : "#52525b" }}>
+                  style={{ color: j.status === "done" ? "#a6e3a1" : "var(--color-muted)" }}>
                   {j.status === "done" ? `+${j.yield}` : "—"}
                 </td>
-                <td className="px-3 py-2.5 font-mono text-[11px] tabular-nums text-[#52525b]">
+                <td className="px-3 py-2.5 font-mono text-[11px] tabular-nums text-muted">
                   {j.durationMs ? fmtDur(j.durationMs) : "—"}
                 </td>
                 <td className="px-3 py-2.5 font-mono text-[10px] text-[#3a3a3a]">{fmtAgo(j.queuedAt)}</td>
@@ -258,7 +258,7 @@ export default function JobBoard({
     <div className="rounded-2xl border border-[#2e2e2e] bg-[#1a1a1a] p-5">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
-          <h3 className="text-[10px] font-semibold uppercase tracking-widest text-[#52525b]">Job Board</h3>
+          <h3 className="text-[10px] font-semibold uppercase tracking-widest text-muted">Job Board</h3>
           <span className="rounded bg-[#2e2e2e] px-1.5 py-0.5 font-mono text-[9px] text-[#94a3b8]">{jobs.length}</span>
         </div>
         <div className="flex items-center gap-3">
@@ -270,7 +270,7 @@ export default function JobBoard({
             </button>
           )}
           {autoRun && pendingCount > 0 && (
-            <span className="flex items-center gap-1.5 font-mono text-[10px] text-[#52525b]">
+            <span className="flex items-center gap-1.5 font-mono text-[10px] text-muted">
               <span className="h-1.5 w-1.5 animate-pulse rounded-full" style={{ backgroundColor: accent }} />
               auto-running queue
             </span>
@@ -279,7 +279,7 @@ export default function JobBoard({
             {(["stream", "pipeline", "table"] as const).map((v) => (
               <button key={v} onClick={() => onViewChange(v)}
                 className="rounded-md px-3 py-1 font-mono text-[10px] uppercase tracking-wider transition"
-                style={view === v ? { backgroundColor: "#2e2e2e", color: "#f1f5f9" } : { color: "#52525b" }}>
+                style={view === v ? { backgroundColor: "#2e2e2e", color: "#f1f5f9" } : { color: "var(--color-muted)" }}>
                 {v}
               </button>
             ))}

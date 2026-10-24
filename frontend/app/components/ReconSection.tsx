@@ -114,12 +114,12 @@ export default function ReconSection({
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
           />
-          <button type="submit" className="rounded-md border border-[#2e2e2e] px-4 py-2 text-xs text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#94a3b8]">
+          <button type="submit" className="rounded-md border border-[#2e2e2e] px-4 py-2 text-xs text-muted transition hover:border-[#3a3a3a] hover:text-muted-hover">
             Search
           </button>
           {search && (
             <button type="button" onClick={clearSearch}
-              className="rounded-md border border-[#2e2e2e] px-4 py-2 text-xs text-[#52525b] transition hover:text-[#94a3b8]">
+              className="rounded-md border border-[#2e2e2e] px-4 py-2 text-xs text-muted transition hover:text-muted-hover">
               Clear
             </button>
           )}
@@ -131,7 +131,7 @@ export default function ReconSection({
             className="flex items-center gap-1.5 rounded-md border px-3 py-2 text-xs transition"
             style={scopeOnly
               ? { borderColor: "#f59e0b55", color: "#f59e0b", backgroundColor: "#f59e0b0d" }
-              : { borderColor: "#2e2e2e", color: "#52525b" }}>
+              : { borderColor: "#2e2e2e", color: "var(--color-muted)" }}>
             <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: scopeOnly ? "#f59e0b" : "#3a3a3a" }} />
             In scope only
           </button>
@@ -149,7 +149,7 @@ export default function ReconSection({
                   <thead>
                     <tr className="border-b border-[#2e2e2e]">
                       {["Source", "URL / Host", "Path / Title", "Status"].map((h) => (
-                        <th key={h} className="pb-2.5 pr-4 text-left text-[9px] font-semibold uppercase tracking-widest text-[#52525b]">{h}</th>
+                        <th key={h} className="pb-2.5 pr-4 text-left text-[9px] font-semibold uppercase tracking-widest text-muted">{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -159,10 +159,10 @@ export default function ReconSection({
                         key={item.id}
                         onClick={() => setDetailItem(item)}
                         className={`cursor-pointer border-b border-[#161616] transition hover:bg-[#1f1f1f] ${i % 2 === 0 ? "" : "bg-[#1a1a1a]/40"}`}>
-                        <td className="py-2.5 pr-4 font-mono text-[#52525b]">{item.source}</td>
+                        <td className="py-2.5 pr-4 font-mono text-muted">{item.source}</td>
                         <td className="py-2.5 pr-4 max-w-[180px] truncate text-[#f1f5f9]">{item.url || item.host || "—"}</td>
                         <td className="py-2.5 pr-4 max-w-[160px] truncate text-[#6b7280]">{item.path || item.title || "—"}</td>
-                        <td className="py-2.5 font-mono text-[#52525b]">{item.status_code || "—"}</td>
+                        <td className="py-2.5 font-mono text-muted">{item.status_code || "—"}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -170,7 +170,7 @@ export default function ReconSection({
               </div>
               {!scopeOnly && items.length < total && (
                 <button onClick={() => load(offset + PAGE_SIZE, false, search)} disabled={loading}
-                  className="mt-4 rounded-md border border-[#2e2e2e] px-4 py-2 text-xs text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#94a3b8] disabled:opacity-50">
+                  className="mt-4 rounded-md border border-[#2e2e2e] px-4 py-2 text-xs text-muted transition hover:border-[#3a3a3a] hover:text-muted-hover disabled:opacity-50">
                   {loading ? "Loading…" : `Load more (${total - items.length} remaining)`}
                 </button>
               )}
@@ -185,7 +185,7 @@ export default function ReconSection({
               {items.map((item) => (
                 <div key={item.id} className="rounded-lg border border-[#2e2e2e] bg-[#161616] px-4 py-3">
                   <div className="text-sm font-medium text-[#f1f5f9]">{item.url || item.host || "Unknown"}</div>
-                  <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-[#52525b]">
+                  <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-muted">
                     <span>Server: <span className="text-[#6b7280]">{item.webserver || "—"}</span></span>
                     <span>Tech: <span className="text-[#6b7280]">{Array.isArray(item.tech) ? (item.tech.join(", ") || "—") : (item.tech || "—")}</span></span>
                     <span>L/W/Li: <span className="font-mono text-[#6b7280]">{item.length || 0}/{item.words || 0}/{item.lines || 0}</span></span>

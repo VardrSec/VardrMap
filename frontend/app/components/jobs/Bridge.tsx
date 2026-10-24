@@ -10,8 +10,8 @@ function RunnerRow({ runner }: { runner: RunnerInfo }) {
         <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full"
           style={{ backgroundColor: runner.online ? "#a6e3a1" : "#52525b", boxShadow: runner.online ? "0 0 5px #a6e3a1" : "none" }} />
         <span className="truncate font-semibold text-[#f1f5f9]">{runner.hostname || "unknown"}</span>
-        {runner.os && <span className="hidden truncate text-[#52525b] sm:inline">{runner.os}</span>}
-        <span className="ml-auto flex-shrink-0 text-[10px] text-[#52525b]">
+        {runner.os && <span className="hidden truncate text-muted sm:inline">{runner.os}</span>}
+        <span className="ml-auto flex-shrink-0 text-[10px] text-muted">
           {runner.last_seen ? `seen ${fmtAgo(runner.last_seen)}` : "never"}
         </span>
       </div>
@@ -50,7 +50,7 @@ function LinkWire({ online, accent, busy, pulseKey }: {
       <div className="absolute -bottom-1 flex items-center gap-1.5">
         <span className="h-1 w-1 rounded-full" style={{ backgroundColor: online ? accent : "#3a3a3a" }} />
         <span className="font-mono text-[9px] uppercase tracking-widest"
-          style={{ color: online ? accent : "#52525b" }}>
+          style={{ color: online ? accent : "var(--color-muted)" }}>
           {online ? (busy ? "streaming" : "linked") : "offline"}
         </span>
       </div>
@@ -69,7 +69,7 @@ function Node({ label, sub, glyph, glyphColor, active, children }: {
           style={{ color: glyphColor }}>{glyph}</div>
         <div className="min-w-0">
           <div className="truncate text-sm font-semibold text-[#f1f5f9]">{label}</div>
-          <div className="truncate font-mono text-[10px] text-[#52525b]">{sub}</div>
+          <div className="truncate font-mono text-[10px] text-muted">{sub}</div>
         </div>
         <span className="ml-auto h-1.5 w-1.5 flex-shrink-0 rounded-full"
           style={{ backgroundColor: active ? "#a6e3a1" : "#52525b", boxShadow: active ? "0 0 6px #a6e3a1" : "none" }} />
@@ -85,7 +85,7 @@ function ToolChip({ name, ok, version }: { name: string; ok: boolean; version: s
       className="rounded border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wide"
       style={{
         borderColor: ok ? "#a6e3a180" : "#3a3a3a",
-        color:       ok ? "#a6e3a1"   : "#52525b",
+        color:       ok ? "#a6e3a1"   : "var(--color-muted)",
         backgroundColor: ok ? "#a6e3a10d" : "transparent",
       }}>
       {name}{ok && version ? ` ${version}` : ok ? " ✓" : " ✗"}
@@ -101,7 +101,7 @@ function BridgeStrip({ accent, runnerOnline, autoRun, queueDepth, runningCount, 
   return (
     <button onClick={onExpand}
       className="group flex w-full items-center gap-3 rounded-2xl border border-[#2e2e2e] bg-[#1a1a1a] px-4 py-2.5 text-left transition hover:border-[#3a3a3a]">
-      <span className="text-[10px] font-semibold uppercase tracking-widest text-[#52525b]">Execution Link</span>
+      <span className="text-[10px] font-semibold uppercase tracking-widest text-muted">Execution Link</span>
       <span className="flex items-center gap-1.5">
         <span className="font-mono text-xs" style={{ color: accent }}>⬡</span>
         <span className="hidden font-mono text-[11px] text-[#94a3b8] sm:inline">VardrMap</span>
@@ -112,20 +112,20 @@ function BridgeStrip({ accent, runnerOnline, autoRun, queueDepth, runningCount, 
         <span className="h-[2px] w-5 rounded-full" style={{ backgroundColor: linkColor, opacity: 0.6 }} />
       </span>
       <span className="flex items-center gap-1.5">
-        <span className="font-mono text-xs" style={{ color: runnerOnline ? "#a6e3a1" : "#52525b" }}>▣</span>
+        <span className="font-mono text-xs" style={{ color: runnerOnline ? "#a6e3a1" : "var(--color-muted)" }}>▣</span>
         <span className="hidden font-mono text-[11px] text-[#94a3b8] sm:inline">VardrRunner</span>
       </span>
       <span className="font-mono text-[10px] uppercase tracking-widest" style={{ color: linkColor }}>
         {runnerOnline ? (busy ? "streaming" : "linked") : "offline"}
       </span>
       <span className="ml-auto flex items-center gap-3">
-        <span className="hidden font-mono text-[10px] text-[#52525b] md:inline">{queueDepth} queued · {runningCount} running</span>
+        <span className="hidden font-mono text-[10px] text-muted md:inline">{queueDepth} queued · {runningCount} running</span>
         {autoRun && (
           <span className="hidden items-center gap-1.5 font-mono text-[10px] uppercase tracking-wider lg:flex" style={{ color: accent }}>
             <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: accent }} />auto-run
           </span>
         )}
-        <span className="flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-[#52525b] transition group-hover:text-[#94a3b8]">
+        <span className="flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-muted transition group-hover:text-muted-hover">
           expand
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="6 9 12 15 18 9" />
@@ -180,13 +180,13 @@ export default function Bridge({
   return (
     <div className="rounded-2xl border border-[#2e2e2e] bg-[#1a1a1a] p-5">
       <div className="mb-4 flex items-center justify-between">
-        <span className="text-[10px] font-semibold uppercase tracking-widest text-[#52525b]">Execution Link</span>
+        <span className="text-[10px] font-semibold uppercase tracking-widest text-muted">Execution Link</span>
         <div className="flex items-center gap-2">
           <button onClick={onToggleAuto}
             className="flex items-center gap-1.5 rounded-md border px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider transition"
             style={{
               borderColor: autoRun ? `${accent}66` : "#2e2e2e",
-              color: autoRun ? accent : "#52525b",
+              color: autoRun ? accent : "var(--color-muted)",
               backgroundColor: autoRun ? `${accent}14` : "transparent",
             }}>
             <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: autoRun ? accent : "#3a3a3a" }} />
@@ -200,7 +200,7 @@ export default function Bridge({
             sync
           </button>
           <button onClick={onToggleCollapse}
-            className="flex items-center gap-1 rounded-md border border-[#2e2e2e] px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-[#52525b] transition hover:border-[#3a3a3a] hover:text-[#94a3b8]">
+            className="flex items-center gap-1 rounded-md border border-[#2e2e2e] px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-muted transition hover:border-[#3a3a3a] hover:text-muted-hover">
             hide
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="18 15 12 9 6 15" />
@@ -215,11 +215,11 @@ export default function Bridge({
           <div className="mt-3 grid grid-cols-2 gap-2">
             <div className="rounded-lg border border-[#2e2e2e] bg-[#1a1a1a] px-2.5 py-1.5">
               <div className="font-mono text-lg font-bold leading-none" style={{ color: accent }}>{queueDepth}</div>
-              <div className="mt-1 text-[9px] uppercase tracking-widest text-[#52525b]">queued</div>
+              <div className="mt-1 text-[9px] uppercase tracking-widest text-muted">queued</div>
             </div>
             <div className="rounded-lg border border-[#2e2e2e] bg-[#1a1a1a] px-2.5 py-1.5">
               <div className="font-mono text-lg font-bold leading-none text-[#f1f5f9]">{runningCount}</div>
-              <div className="mt-1 text-[9px] uppercase tracking-widest text-[#52525b]">dispatched</div>
+              <div className="mt-1 text-[9px] uppercase tracking-widest text-muted">dispatched</div>
             </div>
           </div>
         </Node>
@@ -239,9 +239,9 @@ export default function Bridge({
             <div className="mt-3 space-y-2">
               <div className="flex items-center justify-between font-mono text-[10px]">
                 {runnerStatus?.version && (
-                  <span className="text-[#52525b]">v{runnerStatus.version}</span>
+                  <span className="text-muted">v{runnerStatus.version}</span>
                 )}
-                <span className="ml-auto flex items-center gap-1.5 text-[#52525b]">
+                <span className="ml-auto flex items-center gap-1.5 text-muted">
                   <span className="h-1 w-1 animate-pulse rounded-full bg-[#a6e3a1]" />
                   seen {seenAgo}
                 </span>
@@ -264,7 +264,7 @@ export default function Bridge({
           ) : (
             <div className="mt-3 space-y-2">
               <div className="rounded-lg border border-dashed border-[#2e2e2e] bg-[#1a1a1a] px-3 py-3 text-center">
-                <p className="font-mono text-[11px] text-[#52525b]">runner offline</p>
+                <p className="font-mono text-[11px] text-muted">runner offline</p>
                 <button
                   onClick={onSetupRunner}
                   className="mt-2 rounded-md border border-[#2e2e2e] px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider text-[#94a3b8] transition hover:border-[#3a3a3a] hover:text-[#f1f5f9]"
