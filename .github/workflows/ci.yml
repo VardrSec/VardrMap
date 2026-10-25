@@ -114,7 +114,7 @@ jobs:
           --output "${{ runner.temp }}"
       - name: Retain integration verdict and source manifest
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: api-integration-verdict
           path: |
@@ -149,7 +149,7 @@ jobs:
         run: npm run test:e2e
       - name: Retain failure traces
         if: failure()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: browser-acceptance-failure
           path: |
