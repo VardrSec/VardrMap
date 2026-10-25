@@ -489,3 +489,13 @@ at startup by `playbooks.py` (extra fields forbidden, unique ids). Full-scope re
 endpoints serve summaries and individual guides. Map's case builder and Runner
 MCP read that same catalog on demand; no duplicate data bundle, progress fields,
 automatic permission decisions or automatic human sign-off are introduced.
+
+## Gate assessment provenance refinement
+
+The existing `ScanJob.assessment` JSON and redacted `Evidence.body` retain bounded
+Gate semantic assessment fields, separate from raw executions and candidate
+findings. No table or migration is added. Claim-time snapshots remain the binding
+authority; statement completeness cannot turn an unknown result into protection.
+The UI shows expected permission, raw outcome, scanner assessment, credential
+check and independent readback provenance. Linking evidence to a confirmed finding
+remains an explicit operator action. Historical evidence is not rewritten.

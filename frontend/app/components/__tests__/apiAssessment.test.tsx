@@ -18,6 +18,17 @@ const evidence = { id: "e1", title: "Owner execution", job_id: "job", case_id: "
 const evidencePath = `${base}/evidence?job_id=job&limit=50&offset=0`;
 const guide = { id: "API-01", title: "Object ownership", version: "1.0", use_when: "Use known owned objects", expected_artifacts: "Reviewed case", prerequisites: ["Establish baseline"], steps: ["Review expected access"], common_traps: "Stale credentials", manual_remainder: "Verify business impact" };
 
+it("separates scanner conclusions, raw HTTP, credential checks and readback", async () => {
+  const enriched: ScanJobUI = { ...job, assessment: { ...job.assessment!, identities: [{ identity_id: "peer", expected_decision: "deny", observed_outcome: "allow", state: "evaluated", reason: "reported_write_verification", reported_decision: "denied", source: "write_verification", credential_status: "preflight_passed", write_verification: "verified_no_effect", verification: { strategy: "changed", environment: "synchronous_isolated", reader_identity_id: "reader", reader_credential_status: "not_checked", before_statuses: [200, 200], after_status: 200, reset_status: 204 } }] } };
+  renderWithApp(<GateAssessmentPanel engagementId="eng" job={enriched} />, { routes: { [evidencePath]: { body: { evidence: [], total: 0 } } } });
+  expect(screen.getByText("peer: expected deny · raw HTTP outcome allow")).toBeVisible();
+  expect(screen.getByText(/Scanner assessment: denied/)).toBeVisible();
+  expect(screen.getByText(/Credential check: preflight passed · write readback: verified no effect/)).toBeVisible();
+  expect(screen.getByText(/Reader reader: not checked · before HTTP 200, 200 · after HTTP 200/)).toBeVisible();
+  expect(screen.getByText(/scanner conclusions still need operator confirmation/)).toBeVisible();
+  await screen.findByText("No execution evidence recorded for this job.");
+});
+
 it("reads versioned guidance on demand and performs no writes", async () => {
   const { authFetch } = renderWithApp(<ApiPlaybookGuide engagementId="eng" />, { routes: {
     [`${base}/playbooks`]: { body: { playbooks: [guide], total: 1 } }, [`${base}/playbooks/API-01`]: { body: guide },

@@ -3,6 +3,7 @@
 import hashlib
 import json
 from collections import defaultdict
+from assessment_evidence import apply_semantics, safe_semantic_row
 
 
 def case_hash(spec: dict) -> str:
@@ -18,6 +19,7 @@ def assess(
     *,
     case_verified: bool = True,
     preflight: list[dict] | None = None,
+    semantic: list[dict] | None = None,
 ) -> dict:
     """Derive completeness against the spec captured at claim, never from findings count.
 
@@ -84,6 +86,31 @@ def assess(
                 "reason": reason,
             }
         )
+    apply_semantics(spec, identities, executions, [safe_semantic_row(r) for r in semantic or []], case_verified)
+    for item in identities:
+        declared = next((i for i in spec.get("identities", []) if i["id"] == item["identity_id"]), {})
+        credential = declared.get("credential") or {}
+        rows = reported.get(item["identity_id"], [])
+        sends_credentials = credential.get("type") in {"bearer", "api_key_header"} or (credential.get("type") == "static_header" and bool(credential.get("header")))
+        checked = next((p for p in session["identities"] if p["identity_id"] == item["identity_id"]), None)
+        credential_status = "not_checked" if sends_credentials else "anonymous_identity"
+        if checked:
+            credential_status = "preflight_passed" if checked["status"] == "passed" else "preflight_failed"
+        if sends_credentials and len(rows) == 1 and rows[0].get("status_code") == 401:
+            credential_status = "preflight_passed_resource_401" if credential_status == "preflight_passed" else "resource_401_unverified"
+        item["credential_status"] = credential_status if case_verified else "not_recorded"
+        verification = item.get("verification")
+        if verification:
+            oracle = spec.get("write_verification") or {}
+            reader = oracle.get("identity") or {}
+            credential = reader.get("credential") or {}
+            reader_status = "anonymous_identity" if credential.get("type") == "static_header" and not credential.get("header") else "not_checked"
+            checked = next((p for p in session["identities"] if p["identity_id"] == reader.get("id")), None)
+            if checked:
+                reader_status = "preflight_passed" if checked["status"] == "passed" else "preflight_failed"
+            verification["reader_credential_status"] = reader_status if case_verified else "not_recorded"
+        if item["expected_decision"] == "deny" and len(rows) == 1 and rows[0].get("status_code") == 401 and sends_credentials and not spec.get("unauthorized_is_denial") and item.get("reported_decision") != "allowed":
+            item.update(state="inconclusive", reason="credential_rejected")
     if not case_verified:
         for item in identities:
             if item["state"] == "evaluated":
@@ -152,6 +179,10 @@ def assess_preflight(spec: dict, rows: list[dict], verified: bool) -> dict:
         for i in spec.get("identities", [])
         if i.get("preflight") is not None
     }
+    oracle = spec.get("write_verification") if isinstance(spec.get("write_verification"), dict) else {}
+    reader = oracle.get("identity") if isinstance(oracle.get("identity"), dict) else {}
+    if reader.get("preflight") is not None:
+        declared[reader["id"]] = reader["preflight"]
     reported = defaultdict(list)
     for row in rows:
         reported[str(row.get("identity_id") or "")].append(row)

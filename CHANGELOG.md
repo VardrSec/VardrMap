@@ -4,6 +4,11 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Retain bound Gate semantic assessments and value-free readback provenance in
+  API assessment/evidence reporting. Show raw HTTP, scanner conclusion, credential
+  checks and readback separately. Missing/conflicting proof stays inconclusive;
+  legacy receipt replays are unchanged and findings still require confirmation.
+
 - Align the frontend ESLint 10 configuration with Next 16.4.3 and apply the
   frontend dependency group. Existing effect diagnostics remain visible as
   scoped warnings during the documented migration; other lint rules stay active.

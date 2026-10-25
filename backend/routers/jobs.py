@@ -1051,6 +1051,7 @@ class VardrGateUpload(BaseModel):
     executions: list[dict] = Field(default_factory=list, max_length=100)
     findings: list[dict] = Field(default_factory=list, max_length=500)
     preflight: list[IdentityPreflightResult] = Field(default_factory=list, max_length=100)
+    assessments: list[dict] = Field(default_factory=list, max_length=100)
 
     @field_validator("findings", mode="before")
     @classmethod
@@ -1124,6 +1125,10 @@ def upload_job_result(
         receipt_payload.pop("case_hash")
     if not body.preflight:
         receipt_payload.pop("preflight")
+    if not body.assessments:
+        receipt_payload.pop("assessments")
+    else:
+        receipt_payload["assessments"] = [assessments.safe_semantic_row(a) for a in body.assessments]
     canonical_payload = json.dumps(
         receipt_payload, sort_keys=True, separators=(",", ":"), default=str
     ).encode("utf-8")
@@ -1134,6 +1139,12 @@ def upload_job_result(
     receipt = db.query(JobResultReceipt).filter(JobResultReceipt.job_id == job.id).first()
     if receipt:
         if receipt.payload_hash != payload_hash:
+            # Historical receivers ignored Gate's assessments. Accept identical
+            # legacy execution receipts as a no-op; never rewrite their evidence.
+            legacy_payload = {k: v for k, v in receipt_payload.items() if k != "assessments"}
+            legacy_hash = hashlib.sha256(json.dumps(legacy_payload, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")).hexdigest()
+            if receipt.payload_hash == legacy_hash:
+                return {"job_id": job.id, "scan_items_created": receipt.scan_items_created, "evidence_created": receipt.evidence_created, "already_processed": True}
             raise HTTPException(
                 status_code=409,
                 detail="this job already has a different uploaded result",
@@ -1205,6 +1216,7 @@ def upload_job_result(
         **assessments.assess(
             spec, body.executions, created_items, case_verified=verified,
             preflight=[p.model_dump() for p in body.preflight],
+            semantic=[assessments.safe_semantic_row(a) for a in body.assessments],
         ),
         "case_id": queued_case or None,
         "case_ref": template_id or None,
@@ -1247,6 +1259,10 @@ def upload_job_result(
             # Preserve it as evidence without coupling this endpoint to that
             # independently versioned schema.
             detail["response_profile"] = execution["response_profile"]
+        if not is_preflight:
+            semantic_rows = [assessments.safe_semantic_row(a) for a in body.assessments if a.get("identity_id") == execution.get("identity_id")]
+            if semantic_rows:
+                detail["scanner_assessments"] = semantic_rows
         text = json.dumps(redaction.redact_mapping(detail), indent=2, sort_keys=True, default=str)
         db.add(
             Evidence(

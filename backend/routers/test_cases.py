@@ -41,6 +41,14 @@ _SECRET_REFS = ("value_env", "value_keychain")
 _MAX_SPEC_BYTES = 256_000
 
 
+def _case_identities(spec: dict) -> list:
+    identities = list(spec.get("identities") or [])
+    verification = spec.get("write_verification")
+    if isinstance(verification, dict) and "identity" in verification:
+        identities.append(verification["identity"])
+    return identities
+
+
 def _preflight_origin(raw: Any) -> tuple[str, str, int]:
     if not isinstance(raw, str) or len(raw.encode()) > 2000:
         raise ValueError("invalid preflight URL")
@@ -63,7 +71,7 @@ def _preflight_origin(raw: Any) -> tuple[str, str, int]:
 
 
 def _validate_preflight(spec: dict) -> None:
-    for i, identity in enumerate(spec["identities"]):
+    for i, identity in enumerate(_case_identities(spec)):
         p = identity.get("preflight")
         if p is None:
             continue
@@ -161,7 +169,7 @@ def _reject_literal_credentials(spec: dict) -> None:
     An empty `value` is allowed: the anonymous identity in a BOLA case is
     legitimately `{"type": "static_header", "header": "", "value": ""}`.
     """
-    for i, identity in enumerate(spec.get("identities") or []):
+    for i, identity in enumerate(_case_identities(spec)):
         if not isinstance(identity, dict):
             raise HTTPException(status_code=400, detail=f"identities[{i}] must be an object")
         cred = identity.get("credential")

@@ -148,7 +148,7 @@ export type JobAssessment = {
   baseline_valid: boolean; candidate_findings: number; reasons: string[];
   case_id: string | null; case_ref: string | null; case_hash: string | null;
   case_snapshot_verified: boolean;
-  identities: { identity_id: string; expected_decision: string; observed_outcome: string; state: string; reason: string }[];
+  identities: { identity_id: string; expected_decision: string; observed_outcome: string; state: string; reason: string; reported_decision?: string; source?: string; credential_status?: string; write_verification?: string; matched_assertions?: number[]; verification?: { strategy: string; environment: string; reader_identity_id: string; reader_credential_status: string; before_statuses: number[]; after_status: number; reset_status: number } }[];
 };
 
 export type ScanJob = {
