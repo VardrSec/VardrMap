@@ -4,6 +4,11 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Preserve cancellation and reset-baseline failure reasons as inconclusive Gate
+  assessments. Add an opt-in real-worker semantic evidence contract and explicit
+  older-companion compatibility matrix, including the operator-only finding
+  promotion boundary. See `scripts/integration/README.md` for rollout validation.
+
 - Retain bound Gate semantic assessments and value-free readback provenance in
   API assessment/evidence reporting. Show raw HTTP, scanner conclusion, credential
   checks and readback separately. Missing/conflicting proof stays inconclusive;

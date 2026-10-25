@@ -78,3 +78,43 @@ On Unix, pass the virtualenv's `bin/python` path. The launcher preserves that pa
 rather than following its symlink to the base Python, so installed Runner
 packages remain available. Worker failures report redacted stderr and stop the
 harness before a missing journal can mask the actual startup error.
+
+## Semantic evidence and version compatibility
+
+Add `--semantic-evidence` to require the coordinated Gate/Runner/Map evidence
+path. This opt-in keeps the default baseline compatible with the older companion
+commits pinned in CI. It adds three all-200 response-assertion cases (disclosure,
+denial, unknown) and two masked-204 write cases with an independent reader,
+principal preflights, per-identity reset and an owner positive control. The
+complete run has 137 checks and a 140-request ceiling (133 actual requests).
+It verifies raw HTTP separately from scanner conclusions, bound assertion
+indices, value-free reader/reset/readback metadata, and unchanged confirmed
+findings with all uploaded scan candidates still `new`.
+
+Use `--map-ref`, `--runner-ref`, or `--gate-ref` to snapshot an exact local Git
+revision instead of that checkout's working files. Refs must already exist
+locally; the harness does not fetch them. Each run retains resolved commits,
+file hashes, isolated database, worker artifacts and assertion results. Archive
+paths/links are checked before extraction. Historical code is never rewritten.
+
+The compatibility driver runs current sources and one older companion at a time:
+
+```powershell
+backend/venv/Scripts/python.exe scripts/integration/compatibility.py --runner ../VardrRunner --gate ../VardrGate --runner-python ../VardrRunner/venv/Scripts/python.exe --old-map bc4a7320edcc2b3e0907645aab6176740e659f01 --old-runner 5573f2c5e11600ccc817cc7de39240b3a4e36f00 --old-gate 612fa42fc88d2b9dff64c2500c56c0653cb014f9
+```
+
+An older combination is expected to fail the strict semantic contract while
+passing all 104 baseline checks; a crash, incomplete run or baseline regression
+never counts as expected incompatibility. `matrix.json` and each retained
+`acceptance-results.json` identify the actual failed probes. This is a local
+SQLite/loopback contract check, not browser, hosted OAuth or production validation.
+Current sources include uncommitted changes and are identified by file hashes.
+
+Deploy Map's semantic backend handling and the independent-verifier-capable
+Runner before enabling Gate's new evidence path. An old Map may accept raw
+uploads without retaining semantic conclusions. An old Runner may leave the
+reader's `value_env` unresolved. An old Gate may run without the new strategy
+and provenance behavior. Do not treat job completion or zero findings from these
+mixed versions as proof of a clean authorization assessment. Re-run the strict
+contract using the exact release candidates before rollout; do not infer support
+from version strings or the baseline suite alone.
