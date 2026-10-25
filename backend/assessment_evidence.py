@@ -54,6 +54,15 @@ def safe_identity(value):
     return value if isinstance(value, str) and 0 < len(value) <= 200 else ""
 
 
+def status_constraint(rule: dict, status: int) -> bool:
+    codes = rule.get("status_codes", [])
+    return (
+        isinstance(codes, list)
+        and all(type(c) is int and 100 <= c <= 599 for c in codes)
+        and (not codes or status in codes)
+    )
+
+
 def safe_semantic_row(row: dict) -> dict:
     """Drop undeclared metadata and all free-form response/evidence values."""
     out = {
@@ -207,10 +216,7 @@ def apply_semantics(
                     i < len(rules)
                     and isinstance(rules[i], dict)
                     and rules[i].get("decision") == decision
-                    and (
-                        not rules[i].get("status_codes")
-                        or actual[0].get("status_code") in rules[i]["status_codes"]
-                    )
+                    and status_constraint(rules[i], actual[0]["status_code"])
                     for i in indices
                 )
             )
@@ -221,10 +227,12 @@ def apply_semantics(
                 else {}
             )
             evidence = row.get("verification") or {}
+            after_codes = oracle.get("after_status", [])
             valid = (
                 bool(oracle)
-                and evidence.get("reader_identity_id")
-                == (oracle.get("identity") or {}).get("id")
+                and isinstance(after_codes, list)
+                and all(type(c) is int and 400 <= c <= 499 for c in after_codes)
+                and evidence.get("reader_identity_id") == reader.get("id")
                 and evidence.get("strategy")
                 == (oracle.get("strategy") or "legacy_change")
                 and evidence.get("environment")
@@ -247,11 +255,7 @@ def apply_semantics(
                     )
                     for s in before
                 )
-                and (
-                    200 <= after < 300
-                    or after == 404
-                    or after in oracle.get("after_status", [])
-                )
+                and (200 <= after < 300 or after == 404 or after in after_codes)
             )
             if oracle.get("reset"):
                 reset = evidence.get("reset_status", 0)

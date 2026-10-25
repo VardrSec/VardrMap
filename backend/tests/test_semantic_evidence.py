@@ -111,6 +111,17 @@ def test_unbound_duplicate_and_missing_proof_are_unknown():
     )
 
 
+def test_malformed_reviewed_constraints_cannot_establish_a_result():
+    for codes in (None, 404, "404", {}, [True]):
+        spec = semantic_spec()
+        spec["expected_access"][1]["response_assertions"][0]["status_codes"] = codes
+        proof = row(
+            decision="denied", reason="assertion_matched", matched_assertions=[0]
+        )
+        result = assess(spec, [BASELINE, execution()], 0, semantic=[proof])
+        assert result["identities"][1]["state"] == "inconclusive"
+
+
 def test_unknown_metadata_and_observed_values_are_dropped():
     value = row(
         reason="response-secret",
