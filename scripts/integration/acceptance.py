@@ -80,7 +80,8 @@ def token(user):
 
 tokens = {x: "lab-" + x + "-fixture-token" for x in ["owner", "peer", "cross", "admin"]}
 state = {"mode": "vulnerable", "requests": []}
-REQUEST_CEILING = 100
+SEMANTIC_EVIDENCE = os.getenv("INTEGRATION_SEMANTIC_EVIDENCE") == "1"
+REQUEST_CEILING = 140 if SEMANTIC_EVIDENCE else 100
 
 
 class Fixture(BaseHTTPRequestHandler):
@@ -114,6 +115,14 @@ class Fixture(BaseHTTPRequestHandler):
             else:
                 principal = "wrong-principal" if state["mode"] == "session-mismatch" else who
                 status, body = 200, {"user": {"id": principal}, "session_secret": "do-not-retain-session-value"}
+        elif SEMANTIC_EVIDENCE and path == "/semantic/record":
+            status, body = 200, {"access": "allowed"}
+            if who == "peer" and state["mode"] == "fixed":
+                body = {"error": "private"}
+            elif who == "peer" and state["mode"] == "unknown":
+                body = {"message": "unknown"}
+        elif SEMANTIC_EVIDENCE and path == "/verification/state":
+            status, body = (200, {"value": state.get("value", "initial")}) if who == "admin" else (403, {"error": "wrong_reader"})
         elif state["mode"] == "rate-limited":
             status, body = 429, {"error": "rate_limited"}
         elif state["mode"] == "login-redirect":
@@ -143,7 +152,26 @@ class Fixture(BaseHTTPRequestHandler):
                     "role": "admin",
                 },
             )
-        data = json.dumps(body).encode()
+        self.reply(status, body)
+
+    def do_PUT(self):
+        who = next((k for k, v in tokens.items() if self.headers.get("Authorization") == "Bearer " + v), "anonymous")
+        state["requests"].append({"identity": who, "path": self.path, "client": self.client_address[0]})
+        self.rfile.read(int(self.headers.get("Content-Length", "0")))
+        if not SEMANTIC_EVIDENCE or len(state["requests"]) > REQUEST_CEILING:
+            self.reply(503, {"error": "fixture_request_ceiling"})
+        elif self.path == "/verification/reset" and who == "owner":
+            state["value"] = "initial"
+            self.reply(204, None)
+        elif self.path == "/verification/write" and who in ("owner", "peer"):
+            if who == "owner" or state["mode"] == "vulnerable":
+                state["value"] = "changed"
+            self.reply(204, None)  # Masked response; only the reader proves effect.
+        else:
+            self.reply(403, {"error": "forbidden"})
+
+    def reply(self, status, body):
+        data = b"" if status == 204 else json.dumps(body).encode()
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(data)))
@@ -835,6 +863,11 @@ try:
               and all(e["job_id"] == job and e["case_id"] == stored for e in evidence)
               and "do-not-retain-session-value" not in json.dumps(evidence)
               and "do-not-retain-session-value" not in json.dumps(result))
+    if SEMANTIC_EVIDENCE:
+        from semantic import run_semantic
+        run_semantic(check=check, req=req, base=base, queue=queue,
+                     run_worker=run_worker, outputs=outputs, job_row=job_row,
+                     state=state, target=target, results=results, tokens=tokens)
     check("Fixture request ceiling respected", len(state["requests"]) <= REQUEST_CEILING)
     check(
         "Fixture received loopback requests only",

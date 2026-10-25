@@ -145,6 +145,18 @@ def test_unknown_metadata_and_observed_values_are_dropped():
     )
 
 
+def test_verifier_interruption_reasons_remain_inconclusive():
+    for reason in ("execution_cancelled", "reset_baseline_mismatch"):
+        result = assess(
+            semantic_spec(),
+            [BASELINE, execution()],
+            0,
+            semantic=[row(reason=reason, source="write_verification")],
+        )
+        assert result["identities"][1]["state"] == "inconclusive"
+        assert result["identities"][1]["reason"] == reason
+
+
 def test_write_readback_requires_bound_provenance_and_a_control():
     spec = _spec()
     spec["write_verification"] = {

@@ -27,6 +27,8 @@ REASONS = {
     "write_completion_unconfirmed",
     "write_environment_unverified",
     "verifier_reset_failed",
+    "reset_baseline_mismatch",
+    "execution_cancelled",
     "identity_preflight_failed",
 }
 CREDENTIALS = {

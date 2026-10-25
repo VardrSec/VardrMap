@@ -2026,3 +2026,9 @@ assertion or write verifier passed. These are runner-reported conclusions, not
 independent verification of a vulnerability. Credential checks are point-in-time
 observations. Existing receipt replays that predate semantic retention remain
 immutable no-ops; they do not retroactively gain evidence.
+
+`execution_cancelled` and `reset_baseline_mismatch` retain Gate's inconclusive
+verifier diagnostics. They do not establish a denied write. Validate coordinated
+versions with the [strict semantic contract](../scripts/integration/README.md#semantic-evidence-and-version-compatibility)
+before rollout; older Map backends may accept the upload without retaining these
+conclusions, and older companions may lack independent reader/strategy support.
