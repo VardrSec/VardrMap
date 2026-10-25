@@ -27,8 +27,7 @@ deliverable work. Shipped history lives in [CHANGELOG](../CHANGELOG.md).
   session preflight now checks principal metadata before authorization requests
   and retains bound failure diagnostics; automatic login/refresh is not implemented.
   See [identity preflight](identity-preflight.md).
-  See [the platform comparison](platform-comparison-2026-10-11.md) and
-  [starter API playbooks](api-playbooks.md) for priorities and acceptance criteria.
+  See [starter API playbooks](api-playbooks.md) for priorities and acceptance criteria.
 - Settle the [proposed remote MCP authorization design](adr/0002-remote-mcp-authorization.md)
   with VardrRunner before implementation: provider/hosting, grant binding, token
   lifecycle, organization access and whether to expose writes remotely remain open.

@@ -125,7 +125,6 @@ npm run dev
 | [docs/development.md](docs/development.md) | Local setup, env vars, migrations, tests |
 | [docs/api-playbooks.md](docs/api-playbooks.md) | Original versioned API engagement guidance and human review boundaries |
 | [scripts/integration/README.md](scripts/integration/README.md) | Disposable Map → Runner → Gate acceptance and hosted staging boundaries |
-| [docs/platform-comparison-2026-10-11.md](docs/platform-comparison-2026-10-11.md) | Dated ars0n comparison, implementation update and validation limits |
 | [docs/implementation-roadmap.md](docs/implementation-roadmap.md) | Historical phased delivery plan; current backlog lives in roadmap.md |
 | [docs/adr/](docs/adr/) | Architecture decision records |
 | [docs/security-testing.md](docs/security-testing.md) | Manual security testing record — BOLA, XSS, SQLi |

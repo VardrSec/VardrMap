@@ -136,8 +136,7 @@ Clients (`routers/clients.py`) track the organisation being tested — required 
 ## Communication
 
 Report major results, blockers and required decisions. Omit routine command-by-command
-updates to conserve tokens. Revisit the ars0n comparison when the platform changes,
-using inspected code and clearly dated evidence; no weekly polling is requested.
+updates to conserve tokens.
 
 ## Roadmap
 See `docs/roadmap.md` for the current backlog: physical table rename and legacy alias
