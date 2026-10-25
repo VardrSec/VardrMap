@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ScanItem, ScanTriageResult, ScopeItem } from "../types";
 import { useAppContext } from "../context/AppContext";
 import { Panel, SeverityBadge, StatusBadge, SectionHeader } from "./ui";
@@ -131,10 +131,9 @@ export default function ScanningSection({
     } catch { setMessage("AI triage failed."); } finally { setTriaging(false); }
   }
 
-  const visibleItems = useMemo(() => {
-    if (!scopeOnly || !scopeItems?.length) return items;
-    return items.filter((s) => assetMatchesScope(s.asset || "", scopeItems));
-  }, [items, scopeOnly, scopeItems]);
+  const visibleItems = scopeOnly && scopeItems?.length
+    ? items.filter((s) => assetMatchesScope(s.asset || "", scopeItems))
+    : items;
 
   const allSelected = visibleItems.length > 0 && visibleItems.every((i) => selected.has(i.id));
 

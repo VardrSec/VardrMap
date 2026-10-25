@@ -4,6 +4,11 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Align the frontend ESLint 10 configuration with Next 16.4.3 and apply the
+  frontend dependency group. Existing effect diagnostics remain visible as
+  scoped warnings during the documented migration; other lint rules stay active.
+  Derive scanning scope-filter results directly instead of manual memoization.
+
 - **Agent proposals.** An MCP agent can now propose a scope item, an authorization record, or
   the engagement's request-rate ceiling, but cannot apply one. A proposal is created as
   `pending` and does nothing until a full-access operator approves it in the Scope section,
