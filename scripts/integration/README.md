@@ -82,8 +82,8 @@ harness before a missing journal can mask the actual startup error.
 ## Semantic evidence and version compatibility
 
 Add `--semantic-evidence` to require the coordinated Gate/Runner/Map evidence
-path. This opt-in keeps the default baseline compatible with the older companion
-commits pinned in CI. It adds three all-200 response-assertion cases (disclosure,
+path. Local runs retain the baseline default; CI opts in with the exact compatible
+Gate and Runner commits pinned in its workflow. It adds three all-200 response-assertion cases (disclosure,
 denial, unknown) and two masked-204 write cases with an independent reader,
 principal preflights, per-identity reset and an owner positive control. The
 complete run has 137 checks and a 140-request ceiling (133 actual requests).
