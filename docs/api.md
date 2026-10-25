@@ -2009,3 +2009,20 @@ decisions. Empty/absent preflight does not alter legacy receipt fingerprints.
 Required missing/duplicate/inconsistent/unbound checks prevent a conclusive
 assessment. A passed session check cannot substitute for a working allow baseline
 against the tested resource. See [authoring and rollout](identity-preflight.md).
+
+## Gate semantic assessment evidence
+
+`POST /jobs/{id}/upload` additionally accepts `assessments` from Gate results.
+Only declared value-free fields are retained: identity/expected/assessed decisions,
+source/reason codes, credential-check status, write-readback status, execution and
+assertion indices, and reader/status/strategy/environment provenance. Unknown
+metadata and response values are dropped. JSON evidence includes these as
+`scanner_assessments`; the job assessment exposes them alongside raw outcomes.
+
+Semantic conclusions must match the claim-time reviewed case, expected identity,
+assertion indices or verifier configuration. Missing, duplicate, conflicting or
+unbound proof remains inconclusive. A raw 2xx is not evidence that a configured
+assertion or write verifier passed. These are runner-reported conclusions, not
+independent verification of a vulnerability. Credential checks are point-in-time
+observations. Existing receipt replays that predate semantic retention remain
+immutable no-ops; they do not retroactively gain evidence.

@@ -56,7 +56,14 @@ export default function GateAssessmentPanel({ engagementId, job }: { engagementI
       <p>Result matches claimed case snapshot: {a.case_snapshot_verified ? "reported hash matches" : "not confirmed"}.</p>
       <p>Identity preflight: {a.preflight?.status.replaceAll("_", " ") ?? "not recorded"}. A session check does not establish authorization to the resource under test.</p>
       {a.preflight?.identities.map(i => <p key={"preflight-" + i.identity_id}>Session {i.identity_id}: {i.status} ({i.reason.replaceAll("_", " ")}){i.status_code !== null ? ` · HTTP ${i.status_code}` : ""}</p>)}
-      {a.identities.map(i => <p key={i.identity_id}>{i.identity_id}: expected {i.expected_decision}, observed {i.observed_outcome} · {i.state} ({i.reason.replaceAll("_", " ")})</p>)}
+      {a.identities.map(i => <div key={i.identity_id} className="rounded border border-[#2e2e2e] p-3">
+        <p>{i.identity_id}: expected {i.expected_decision} · raw HTTP outcome {i.observed_outcome}</p>
+        <p>Scanner assessment: {i.reported_decision ?? "not recorded"} · completeness {i.state} ({i.reason.replaceAll("_", " ")})</p>
+        <p>Credential check: {(i.credential_status ?? "not recorded").replaceAll("_", " ")} · write readback: {(i.write_verification ?? "not recorded").replaceAll("_", " ")}</p>
+        <p>Evidence source: {i.source ?? "not recorded"}{i.matched_assertions?.length ? ` · assertion indices ${i.matched_assertions.join(", ")}` : ""}</p>
+        {i.verification && <p>Reader {i.verification.reader_identity_id}: {i.verification.reader_credential_status.replaceAll("_", " ")} · before HTTP {i.verification.before_statuses.join(", ")} · after HTTP {i.verification.after_status || "unavailable"} · {i.verification.strategy} / {i.verification.environment}</p>}
+      </div>)}
+      <p>Credential checks describe a point in time. Missing checks and missing readback are unknown; scanner conclusions still need operator confirmation.</p>
     </>}
     {error && <p role="alert" className="text-red-400">{error}</p>}
     {!readOnly && <button className={buttonClass} onClick={() => setLinking(!linking)}>{linking ? "Hide finding selection" : "Link evidence to a finding"}</button>}
