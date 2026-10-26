@@ -4,6 +4,10 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Add configured local/GitHub browser login, cookie and CSRF transport through the
+  shared request helper, Settings password rotation and server-revoking logout.
+  Verify the local flow against disposable HTTPS in browser acceptance.
+
 - Add explicitly configured local authentication alongside GitHub OAuth: one-time
   terminal bootstrap, Argon2id passwords, persisted account/IP throttling,
   revocable secure HTTP-only cookie sessions and Origin/session-bound CSRF checks.

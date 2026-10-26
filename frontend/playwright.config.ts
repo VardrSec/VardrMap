@@ -27,6 +27,7 @@ export default defineConfig({
       timeout: 120_000,
       env: {
         NEXT_PUBLIC_API_URL: "http://127.0.0.1:8765",
+        VARDRMAP_AUTH_METHODS: "github",
         AUTH_URL: "http://127.0.0.1:3006",
         AUTH_SECRET: "browser-fixture-auth-secret-only-32-characters",
         AUTH_GITHUB_ID: "browser-fixture",

@@ -1,6 +1,9 @@
 import NextAuth from "next-auth";
 import GitHub from "next-auth/providers/github";
 import { SignJWT } from "jose";
+import { authMethods } from "./lib/auth-methods";
+
+const methods = authMethods();
 
 const backendJwtSecret = new TextEncoder().encode(
   process.env.BACKEND_JWT_SECRET!
@@ -8,17 +11,22 @@ const backendJwtSecret = new TextEncoder().encode(
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   secret: process.env.AUTH_SECRET,
-  providers: [
+  providers: methods.includes("github") ? [
     GitHub({
       clientId: process.env.AUTH_GITHUB_ID!,
       clientSecret: process.env.AUTH_GITHUB_SECRET!,
     }),
-  ],
+  ] : [],
   session: {
     strategy: "jwt",
   },
   callbacks: {
     async jwt({ token, account, profile }) {
+      if (!methods.includes("github")) {
+        delete token.backendToken;
+        delete token.githubId;
+        return token;
+      }
       if (account && profile) {
         token.githubId = String((profile as { id: string | number }).id);
         token.username =

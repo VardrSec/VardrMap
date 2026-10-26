@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { signIn, signOut } from "next-auth/react";
+import { signOut } from "next-auth/react";
+import LoginPanel from "./components/LoginPanel";
+import { hasWorkspaceSession } from "./auth-client";
 import { Section } from "./types";
 import { AppProvider, useAppContext } from "./context/AppContext";
 import DashboardSection  from "./components/DashboardSection";
@@ -35,10 +37,21 @@ export function AppShell() {
   const {
     state, selectedEngagement, setMessage,
     selectEngagement, navigate, loadEngagements,
+    authFetch, dispatch,
   } = useAppContext();
   const { session, authLoading, engagements, selectedEngagementId, activeSection, message } = state;
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  async function logout() {
+    if (session?.authMethod !== "local") { await signOut({ callbackUrl: "/" }); return; }
+    try {
+      const response = await authFetch("/auth/local/logout", { method: "POST" });
+      if (!response.ok) throw new Error();
+      dispatch({ type: "AUTH_LOADED", session: null });
+      window.location.reload();
+    } catch { setMessage("Unable to sign out. Try again."); }
+  }
 
   const isError = message.toLowerCase().includes("fail") ||
                   message.toLowerCase().includes("error") ||
@@ -59,24 +72,7 @@ export function AppShell() {
     );
   }
 
-  if (!session?.backendToken) {
-    return (
-      <main className="min-h-screen bg-[#161616] text-[#f1f5f9] flex items-center justify-center p-6">
-        <div className="w-full max-w-sm rounded-2xl border border-[#2e2e2e] bg-[#1a1a1a] p-10 text-center shadow-2xl">
-          <div className="mx-auto mb-5 flex h-10 w-10 items-center justify-center rounded-xl bg-[#2e2e2e] text-[#f59e0b]">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-            </svg>
-          </div>
-          <h1 className="text-2xl font-bold tracking-tight text-[#f1f5f9]">VardrMap</h1>
-          <p className="mt-2 text-sm text-muted">Sign in with GitHub to access your authorized security testing workspace.</p>
-          <button onClick={() => signIn("github")} className="mt-7 w-full rounded-lg bg-[#f59e0b] px-4 py-2.5 text-sm font-semibold text-[#161616] transition hover:bg-[#fbbf24] active:scale-[0.98]">
-            Sign in with GitHub
-          </button>
-        </div>
-      </main>
-    );
-  }
+  if (!hasWorkspaceSession(session)) return <LoginPanel />;
 
   // ---------------------------------------------------------------------------
   // App shell
@@ -98,7 +94,7 @@ export function AppShell() {
                   <span className="rounded bg-[#2e2e2e] px-1.5 py-0.5 font-mono text-[9px] text-muted">BETA</span>
                 </div>
                 <p className="mt-0.5 truncate text-[10px] text-muted">
-                  {session.user?.username || session.user?.email || "GitHub user"}
+                  {session?.user?.username || session?.user?.email || "Signed-in user"}
                 </p>
               </div>
             )}
@@ -145,7 +141,7 @@ export function AppShell() {
                   onMessage={setMessage}
                 />
               )}
-              <button onClick={() => signOut({ callbackUrl: "/" })}
+              <button onClick={() => void logout()}
                 className="w-full rounded-md border border-[#2e2e2e] px-3 py-1.5 text-xs text-muted transition hover:border-[#3a3a3a] hover:text-muted-hover">
                 Sign out
               </button>

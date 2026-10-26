@@ -10,6 +10,9 @@ procedure. `0031localauth` creates three new tables without renaming existing us
 IDs or transferring ownership. Keep a verified backup before any real upgrade.
 Automatic downgrade across this revision is refused because it would delete
 credentials/sessions; use a separately reviewed restore/recovery procedure.
+Roll out the backend before the browser changes: the login screen requires the
+new `/auth/methods` endpoint, including in GitHub-only mode. Match authentication
+configuration on both services and build the UI with its intended API URL.
 
 ## First local administrator
 
@@ -38,6 +41,10 @@ and put the exact UI origin in backend `ALLOWED_ORIGINS`. Configure certificate
 trust and trusted reverse-proxy handling deliberately. Do not disable TLS checks
 or trust arbitrary forwarded headers. The browser UI must not send local passwords
 to an HTTP URL. Local sessions are always secure; no localhost exception exists.
+Keep UI and API on the same HTTPS site (one hostname with separate ports, a
+same-site API subdomain, or a reverse proxy). `SameSite=Lax` deliberately does not
+support unrelated UI/API sites. GitHub's bearer transport remains available for
+existing hosted deployments with separate sites.
 
 Passwords use Argon2id at 64 MiB, time cost 3, parallelism 4. Budget memory for
 concurrent checks. Login is limited to ten requests/minute per client IP; five
@@ -73,6 +80,9 @@ flow when required. Protect backend/database access and backups, which include
 password hashes and session digests. No production passwords or credentials belong in
 configuration examples, logs, test fixtures or source control.
 
-Local browser integration is reviewed separately from this backend foundation.
-Existing GitHub deployments retain their current provider and API behavior by
-default. No deployment, image publication or release is performed by these changes.
+The login screen shows the explicitly enabled methods. Sign in locally with the
+initial account, manage its password in Settings, and use Sign out to revoke the
+server session. Reloads retain a valid local session without exposing a bearer
+token to JavaScript; expiry returns the browser to sign-in on the next API request.
+Existing GitHub deployments retain their provider and API behavior by default.
+No deployment, image publication or release is performed by these changes.

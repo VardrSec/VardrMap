@@ -16,6 +16,7 @@ def main() -> None:
             "DATABASE_URL": "sqlite:///" + str(Path(scratch) / "browser.db"),
             "BACKEND_JWT_SECRET": "browser-fixture-signing-key-only-32-characters",
             "ALLOWED_ORIGINS": "http://127.0.0.1:3006",
+            "VARDRMAP_AUTH_METHODS": "github",
         })
         os.environ.pop("ANTHROPIC_API_KEY", None)
         sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))

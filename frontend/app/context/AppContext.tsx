@@ -1,10 +1,9 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef } from "react";
-import { AppSession, AuthFetch, EngagementStatus, EngagementType, Finding, Engagement, ScanItem, Section } from "../types";
+import { AuthFetch, EngagementStatus, EngagementType, Finding, Engagement, ScanItem, Section } from "../types";
 import { AppAction, AppState, appReducer, initialState } from "./appReducer";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+import { API_URL, authenticatedOptions, getFrontendSession, hasWorkspaceSession } from "../auth-client";
 
 // Defensively coerce every field so components never have to deal with undefined
 // coming from the API — e.g. a missing recon_count just becomes 0.
@@ -50,16 +49,6 @@ function normalizeEngagement(raw: unknown): Engagement {
 
 export { normalizeEngagement };
 
-async function getFrontendSession(): Promise<AppSession | null> {
-  try {
-    const res = await fetch("/api/auth/session", { method: "GET", credentials: "include", cache: "no-store" });
-    if (!res.ok) return null;
-    const data = await res.json();
-    if (!data || Object.keys(data).length === 0) return null;
-    return data;
-  } catch { return null; }
-}
-
 export type AppContextValue = {
   state: AppState;
   selectedEngagement: Engagement | null;
@@ -95,14 +84,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const authFetch = useCallback(async (path: string, init: RequestInit = {}) => {
     const current = sessionRef.current ?? (await getFrontendSession());
-    if (!current?.backendToken) throw new Error("Not authenticated");
-    const headers = new Headers(init.headers || {});
-    headers.set("Authorization", `Bearer ${current.backendToken}`);
-    if (!(init.body instanceof FormData) && !headers.has("Content-Type")) {
-      headers.set("Content-Type", "application/json");
-    }
-    const response = await fetch(`${API_URL}${path}`, { ...init, headers, cache: "no-store" });
+    if (!current || !hasWorkspaceSession(current)) throw new Error("Not authenticated");
+    const response = await fetch(`${API_URL}${path}`, authenticatedOptions(current, init));
     if (response.status === 401) {
+      if (current.authMethod === "local") {
+        sessionRef.current = null;
+        dispatch({ type: "AUTH_LOADED", session: null });
+      }
       dispatch({ type: "SET_MESSAGE", message: "Session expired. Please sign in again." });
       throw new Error("Unauthorized");
     }
@@ -208,14 +196,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // Load engagements once auth completes
   useEffect(() => {
-    if (!state.authLoading && state.session?.backendToken) {
+    if (!state.authLoading && hasWorkspaceSession(state.session)) {
       void authFetch("/auth/sync", { method: "POST" }).catch(() => {});
       void loadEngagements();
     }
   // syncUser and loadEngagements are stable (empty or auth-token deps) but including
   // them here would re-fire on every context render. Intentional omission.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.authLoading, state.session?.backendToken]);
+  }, [state.authLoading, state.session?.backendToken, state.session?.authMethod, state.session?.csrfToken]);
 
   const selectedEngagement = useMemo(
     () => state.engagements.find((p) => p.id === state.selectedEngagementId) ?? null,
