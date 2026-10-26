@@ -227,6 +227,8 @@ export type RunnerStatus = RunnerInfo & { runners?: RunnerInfo[] };
 export type UserSettings = { webhook_url: string; notify_min_severity: string };
 export type Section = "dashboard" | "scope" | "overview" | "review" | "findings" | "reports" | "settings";
 export type AppSession = {
+  authMethod?: "local";
+  csrfToken?: string;
   user?: { name?: string | null; email?: string | null; image?: string | null; githubId?: string; username?: string };
   backendToken?: string;
 };

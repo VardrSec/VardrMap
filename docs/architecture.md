@@ -56,6 +56,15 @@ readiness and displays reported status; Gate assesses authorization. The Compose
 distribution and new status UI are not implemented by this endpoint. See
 [readiness API](api.md#get-ready) and [ADR 0003](adr/0003-platform-readiness.md).
 
+Optional local authentication adds `local_credentials` (Argon2id hash and persisted
+failure/lock state), `local_sessions` (hashed opaque token, user, idle/absolute
+timestamps), and a one-row `local_bootstrap` claim. Existing `users.github_id` and
+ownership columns remain intact; local users use reserved `local:<uuid>` IDs.
+The existing organizations and permission predicates apply unchanged. The additive
+`0031localauth` migration has one parent; automatic credential-deleting downgrade
+is refused. See [ADR 0004](adr/0004-local-authentication.md) and the
+[operator guide](local-authentication.md).
+
 The backend is deployed on Railway. On every deploy, Railway runs `bash start.sh`, which:
 
 1. Runs `python wait_for_db.py` — blocks until Postgres accepts a `SELECT 1`, polling every 2s for up to 120s

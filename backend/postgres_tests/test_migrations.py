@@ -143,7 +143,9 @@ def test_assessment_migration_roundtrip_and_provenance_retention(database):
         conn.execute(text("INSERT INTO authorization_test_cases (id, program_id, owner_github_id, name, test_case_id, spec, created_at) VALUES ('case', 'eng', 'fixture', 'Fixture', 'logical-case', '{}', NOW())"))
         conn.execute(text("INSERT INTO scan_jobs (id, program_id, owner_github_id, tool_type, target_source, created_at) VALUES ('job', 'eng', 'fixture', 'vardrgate_api_test', 'scope', NOW())"))
         conn.execute(text("INSERT INTO evidence (id, program_id, kind, body, created_at) VALUES ('proof', 'eng', 'tool_result', 'original retained evidence', NOW())"))
-    migrate(url, "upgrade", "head")
+    # Exercise this older migration's rollback before the credential-preserving
+    # local-auth boundary, whose automatic downgrade is deliberately refused.
+    migrate(url, "upgrade", "0030agentproposals")
     with engine.begin() as conn:
         assert conn.scalar(text("SELECT job_id FROM evidence WHERE id='proof'")) is None
         assert conn.scalar(text("SELECT assessment FROM scan_jobs WHERE id='job'")) is None
@@ -169,6 +171,44 @@ def test_unstamped_nonempty_database_is_refused(database):
     assert "Nonempty unstamped database" in result.stderr
     with engine.connect() as conn:
         assert conn.scalar(text("SELECT value FROM unrelated_data")) == "keep me"
+
+
+def test_local_bootstrap_race_preserves_existing_users(database):
+    engine, url = database
+    migrate(url, "upgrade", "head")
+    with engine.begin() as conn:
+        conn.execute(text("INSERT INTO users (github_id, username) VALUES ('existing-github', 'Existing owner')"))
+    code = """
+from concurrent.futures import ThreadPoolExecutor
+from sqlalchemy import text
+from db import SessionLocal, engine
+from local_auth import bootstrap
+def create(name):
+    with SessionLocal() as db:
+        try:
+            return bootstrap(db, name, 'concurrent fixture passphrase 937!')
+        except ValueError:
+            return None
+with ThreadPoolExecutor(max_workers=2) as pool:
+    results = list(pool.map(create, ['operator-one', 'operator-two']))
+assert sum(result is not None for result in results) == 1
+with engine.connect() as conn:
+    assert conn.scalar(text('SELECT count(*) FROM local_bootstrap')) == 1
+    assert conn.scalar(text('SELECT count(*) FROM local_credentials')) == 1
+    assert conn.scalar(text('SELECT count(*) FROM users')) == 2
+    assert conn.scalar(text("SELECT username FROM users WHERE github_id='existing-github'")) == 'Existing owner'
+    assert conn.scalar(text("SELECT count(*) FROM organization_members WHERE role='owner'")) == 1
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", code], cwd=BACKEND, capture_output=True, text=True, timeout=60,
+        env={**os.environ, "DATABASE_URL": url, "ENV": "staging", "VARDRMAP_AUTH_METHODS": "local"},
+    )
+    assert result.returncode == 0, result.stderr
+    downgrade = migrate(url, "downgrade", "0030agentproposals", success=False)
+    assert "restore a verified backup" in downgrade.stderr
+    with engine.connect() as conn:
+        assert conn.scalar(text("SELECT count(*) FROM local_credentials")) == 1
+        assert conn.scalar(text("SELECT version_num FROM alembic_version")) == "0031localauth"
 
 
 def test_utc_connections_ignore_non_utc_database_default(database):

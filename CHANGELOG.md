@@ -9,6 +9,24 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
   TLS policy, do not apply migrations and return 503 on uncertainty. No migration
   or frontend change is required. See ADR 0003 and the API reference.
 
+- Remember the selected browser login method per tab/API and fail closed on
+  provider errors or expiration instead of silently switching identities. Add
+  sign-in recovery guidance, mixed-session coverage and a trusted local HTTPS
+  distribution release gate.
+
+- Add configured local/GitHub browser login, cookie and CSRF transport through the
+  shared request helper, Settings password rotation and server-revoking logout.
+  Verify the local flow against disposable HTTPS in browser acceptance.
+
+- Return unauthorized when session revocation races with its activity refresh;
+  verify credential lockout and password/recovery races on migrated PostgreSQL.
+
+- Add explicitly configured local authentication alongside GitHub OAuth: one-time
+  terminal bootstrap, Argon2id passwords, persisted account/IP throttling,
+  revocable secure HTTP-only cookie sessions and Origin/session-bound CSRF checks.
+  Preserve existing user/tenant ownership and API-key flows. Additive migration
+  0031 refuses automatic credential-deleting downgrade. See ADR 0004.
+
 - Preserve cancellation and reset-baseline failure reasons as inconclusive Gate
   assessments. Add an opt-in real-worker semantic evidence contract and explicit
   older-companion compatibility matrix, including the operator-only finding

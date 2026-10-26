@@ -2,6 +2,14 @@
 
 ## Prerequisites
 
+For local-account development, install the updated backend requirements and read
+the [local authentication guide](local-authentication.md). Both browser UI and API
+must use HTTPS with trusted certificates and explicit allowed origins. Default
+GitHub-only development is unchanged. Account bootstrap/recovery are explicit
+terminal commands and never run during application startup. The additional
+HTTPS browser acceptance profile uses a disposable self-signed fixture certificate
+and no real user credentials; its TLS exception is limited to that test context.
+
 - Python 3.12+
 - Node.js 20 or 24 (CI tests both; 20 matches the Vercel / `.nvmrc` production runtime)
 - PostgreSQL (or use Railway for a hosted instance)
@@ -379,6 +387,24 @@ inherited database URL and removes the AI provider key. All application API call
 are real; only `/api/auth/session` is intercepted in the test browser with fixture
 identities. No test-login provider or auth bypass is added to the application.
 Real GitHub OAuth and deployed configuration still need hosted staging checks.
+
+Run `npm run test:e2e:local` for the separate local-authentication browser journey.
+It owns HTTPS loopback ports 3007/8766, bootstraps a disposable SQLite account,
+and exercises real login, authorized engagement creation, missing-CSRF rejection,
+password rotation, session replay rejection and logout without session stubs.
+OpenSSL must be available (`openssl` on PATH, or Git for Windows' bundled binary).
+The fixture generates one-day certificates under ignored `.local-auth-e2e/` and
+does not install trust or change global TLS settings. Only this Playwright profile
+accepts its self-signed certificates. Both auth methods are configured; the suite
+checks GitHub remains offered, but does not contact GitHub or replace OAuth
+staging checks. Use one browser suite at a time because both own the Next dev
+output directory. No production database or credentials are used.
+
+The mixed-session extension intercepts only GitHub session metadata with a signed
+fixture identity; the local cookie, backend authorization and API calls remain
+real. It checks provider failure/expiry, explicit local selection with an existing
+GitHub identity, reload and sign-out. This is distinct from a real OAuth callback
+or the [trusted fresh-install HTTPS acceptance](local-https-acceptance.md).
 
 Four browser journeys cover login presentation, pentest/client creation, job
 preview/queueing, synthetic candidate import/promotion, immutable report creation

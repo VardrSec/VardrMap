@@ -30,6 +30,34 @@ class User(Base):
     clients = relationship("Client", back_populates="owner", cascade="all, delete-orphan")
 
 
+class LocalCredential(Base):
+    __tablename__ = "local_credentials"
+
+    user_id = Column(String, ForeignKey("users.github_id", ondelete="CASCADE"), primary_key=True)
+    username = Column(String(64), nullable=False, unique=True)
+    password_hash = Column(Text, nullable=False)
+    failed_attempts = Column(Integer, nullable=False, default=0)
+    last_failure_at = Column(DateTime, nullable=True)
+    locked_until = Column(DateTime, nullable=True)
+
+
+class LocalSession(Base):
+    __tablename__ = "local_sessions"
+
+    token_hash = Column(String(64), primary_key=True)
+    user_id = Column(String, ForeignKey("local_credentials.user_id", ondelete="CASCADE"), nullable=False, index=True)
+    created_at = Column(DateTime, nullable=False)
+    last_seen_at = Column(DateTime, nullable=False)
+    expires_at = Column(DateTime, nullable=False, index=True)
+
+
+class LocalBootstrap(Base):
+    __tablename__ = "local_bootstrap"
+    __table_args__ = (CheckConstraint("id = 1", name="ck_local_bootstrap_singleton"),)
+
+    id = Column(Integer, primary_key=True)
+
+
 class Organization(Base):
     """The tenant. Everything an operator owns hangs off one of these.
 
