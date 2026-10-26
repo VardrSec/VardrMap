@@ -147,6 +147,9 @@ jobs:
       - name: Exercise real UI against disposable backend
         working-directory: frontend
         run: npm run test:e2e
+      - name: Exercise local authentication over disposable HTTPS
+        working-directory: frontend
+        run: npm run test:e2e:local
       - name: Retain failure traces
         if: failure()
         uses: actions/upload-artifact@v7

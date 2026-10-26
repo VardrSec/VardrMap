@@ -1,5 +1,7 @@
 "use client";
 
+import LocalPasswordForm from "./LocalPasswordForm";
+
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { ApiKey } from "../types";
 import { useAppContext } from "../context/AppContext";
@@ -34,7 +36,7 @@ export function engagementCommands(engagementId: string | null): string[] {
 }
 
 export default function SettingsSection() {
-  const { authFetch, setMessage, selectedEngagement } = useAppContext();
+  const { authFetch, setMessage, selectedEngagement, state } = useAppContext();
   const [keys,       setKeys]       = useState<ApiKey[]>([]);
   const [label,      setLabel]      = useState("");
   const [keyScope,   setKeyScope]   = useState<"full" | "runner">("full");
@@ -157,6 +159,7 @@ export default function SettingsSection() {
   return (
     <div className="space-y-7">
       <SectionHeader title="Settings" description="Manage personal API keys for external tools like Burp Suite." />
+      {state.session?.authMethod === "local" && <LocalPasswordForm />}
 
       {newToken && (
         <div className="rounded-xl border border-[#a6e3a1]/30 bg-[#a6e3a1]/5 p-5 space-y-3">

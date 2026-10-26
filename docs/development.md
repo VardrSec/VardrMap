@@ -379,6 +379,24 @@ are real; only `/api/auth/session` is intercepted in the test browser with fixtu
 identities. No test-login provider or auth bypass is added to the application.
 Real GitHub OAuth and deployed configuration still need hosted staging checks.
 
+Run `npm run test:e2e:local` for the separate local-authentication browser journey.
+It owns HTTPS loopback ports 3007/8766, bootstraps a disposable SQLite account,
+and exercises real login, authorized engagement creation, missing-CSRF rejection,
+password rotation, session replay rejection and logout without session stubs.
+OpenSSL must be available (`openssl` on PATH, or Git for Windows' bundled binary).
+The fixture generates one-day certificates under ignored `.local-auth-e2e/` and
+does not install trust or change global TLS settings. Only this Playwright profile
+accepts its self-signed certificates. Both auth methods are configured; the suite
+checks GitHub remains offered, but does not contact GitHub or replace OAuth
+staging checks. Use one browser suite at a time because both own the Next dev
+output directory. No production database or credentials are used.
+
+The mixed-session extension intercepts only GitHub session metadata with a signed
+fixture identity; the local cookie, backend authorization and API calls remain
+real. It checks provider failure/expiry, explicit local selection with an existing
+GitHub identity, reload and sign-out. This is distinct from a real OAuth callback
+or the [trusted fresh-install HTTPS acceptance](local-https-acceptance.md).
+
 Four browser journeys cover login presentation, pentest/client creation, job
 preview/queueing, synthetic candidate import/promotion, immutable report creation
 and Markdown download, viewer access/revocation, and expired backend identities.
