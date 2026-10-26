@@ -1,0 +1,17 @@
+**
+!package.json
+!package-lock.json
+!*.ts
+!*.mjs
+!jest.config.js
+!tsconfig*.json
+!app/
+!app/**
+!lib/
+!lib/**
+!types/
+!types/**
+!public/
+!public/**
+!test-utils/
+!test-utils/**

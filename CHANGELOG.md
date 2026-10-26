@@ -4,6 +4,10 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Add non-root backend/frontend development Dockerfiles, allowlisted build
+  contexts and image CI. Preserve migrated backend startup; require an explicit
+  public API build URL. See [container setup](docs/containers.md).
+
 - Add public, value-free `GET /ready` database/Alembic-marker readiness for Runner
   installation diagnostics. Keep `/health` liveness unchanged; probes preserve
   TLS policy, do not apply migrations and return 503 on uncertainty. No migration
@@ -59,25 +63,25 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
   0.51.0 removed; they link Runner's manual removal steps for a service left by 0.47.0 or
   earlier. The Settings comment notes that `--install-service` no longer exists. No
   behavior change.
-- **Settings → Connect Runner** step 1 offers `vardrrunner update` to update an installed
+- **Settings â†’ Connect Runner** step 1 offers `vardrrunner update` to update an installed
   runner (VardrRunner 0.50.0+, which runs the pipx upgrade and confirms the version), with
   `pipx upgrade vardrrunner` kept as the one-time step for 0.49 and older. README and
   development docs match.
 - Make the composer's **tool list collapsible**, collapsed by default and remembered: it shows
   only the chosen tool, so its settings and Request Controls sit right under the pipelines;
   picking from the open list closes it. Pipelines are unchanged and always visible.
-- Add **ffuf to the Content Discovery pipeline** (subfinder → httpx → ffuf → katana → gau): it
+- Add **ffuf to the Content Discovery pipeline** (subfinder â†’ httpx â†’ ffuf â†’ katana â†’ gau): it
   fuzzes the live hosts' site roots, and katana then crawls from what it found. It can be
   excluded like any stage. dalfox stays out of every pipeline: it attacks parameters rather
   than discovering anything, so it remains its own decision.
-- **Breaking — remove recurring scans.** VardrRunner runs only when invoked (Runner 0.48.0),
+- **Breaking â€” remove recurring scans.** VardrRunner runs only when invoked (Runner 0.48.0),
   so a schedule never fired on its own. The Composer's recurrence picker, the Recurring Scans
   panel, `/engagements/{id}/schedules` (GET/POST/PATCH/DELETE) and schedule materialization in
   `GET /jobs/pending` are removed. **Migration `0029dropschedules` drops the
   `scheduled_scans` table and permanently deletes every stored schedule**; its downgrade
   recreates the table empty. Stop-work no longer has schedules to pause.
 - Remove the Jobs **auto-run** toggle, which only changed a label: nothing ran a job until
-  `vardrrunner jobs run`. The board's `vardrrunner jobs run · N` button is no longer disabled
+  `vardrrunner jobs run`. The board's `vardrrunner jobs run Â· N` button is no longer disabled
   while the runner shows offline, and copies the command.
 - Add **Request Controls** to the job composer: a requests-per-second rate (httpx, nuclei,
   katana, ffuf) and custom headers, one `Name: value` per line (those plus dalfox), validated
@@ -93,18 +97,18 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
   and Copy buttons move from `#52525b` (~2.6:1 contrast, below WCAG AA) to a shared
   `--color-muted` token, `#a1a1aa` (~7.7:1); their hover brightens to `#e4e4e7`. Off-state
   indicator dots, wires and the focus border stay dim on purpose.
-- **Security:** upgrade Next.js 16.4.0 → 16.4.3 (critical: unauthenticated RCE in the Image
+- **Security:** upgrade Next.js 16.4.0 â†’ 16.4.3 (critical: unauthenticated RCE in the Image
   Optimization API with SVG, GHSA-2464-fhr4-w9xw; unauthenticated RCE in `use cache` functions
   returning typed arrays, GHSA-673q-mjm6-r5xr; Server Actions DoS, GHSA-p3m5-59mp-jv5r) and the
-  DOMPurify override ^3.4.16 → ^3.4.17 (critical sanitizer bypasses GHSA-cg2g-xh64-v4q7,
+  DOMPurify override ^3.4.16 â†’ ^3.4.17 (critical sanitizer bypasses GHSA-cg2g-xh64-v4q7,
   GHSA-mrv2-3pqr-j5jr, GHSA-c6gr-qvv4-5v3f; pulled in by jspdf). `npm audit --omit=dev` is clean.
-- Add a **VardrGate install step** to Settings → Connect Runner (now seven steps): one
+- Add a **VardrGate install step** to Settings â†’ Connect Runner (now seven steps): one
   copyable command for Windows PowerShell and one for macOS/Linux. Each downloads the pinned
   VardrGate release (v0.1.0), verifies it against the release's `SHA256SUMS` and refuses it on
   a mismatch, then installs it on `PATH` (`%LOCALAPPDATA%\Programs\VardrGate` or
   `~/.local/bin`, no sudo) and prints its version. Marked as needed only for API assessments;
   the manual download link stays.
-- Fix **Settings → Connect Runner** for VardrRunner's manual-invocation release (Runner
+- Fix **Settings â†’ Connect Runner** for VardrRunner's manual-invocation release (Runner
   PR #60): the connect command is now `vardrrunner init --url <api> --no-install-tools`,
   because Runner now rejects `--install-service` and installs no startup service. Step 5 adds
   `vardrrunner heartbeat` before **Verify connection** (nothing heartbeats in the background
@@ -117,20 +121,20 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
   present, which were skipped and why) without writing; `commit: true` inserts only the new
   items. Asset types map to scope kinds, `eligible_for_submission: false` rows become
   out-of-scope, and `max_severity` is stored as a per-asset advisory cap. Re-importing an
-  updated export only adds what changed. A Scope → "Import from a scope CSV" panel drives it
+  updated export only adds what changed. A Scope â†’ "Import from a scope CSV" panel drives it
   with a preview-before-save step. Adds `scope_items.max_severity` (migration 0028).
 - Add `rate` and `headers` to scan-job config for the tools that send live traffic (`rate`
   on httpx/nuclei/katana; `headers` on those plus ffuf and dalfox), validated at queue time:
-  `rate` 1–1000, and headers with HTTP-token names and no control characters in values so a
+  `rate` 1â€“1000, and headers with HTTP-token names and no control characters in values so a
   job config cannot inject a header or request line. **Pairs with VardrRunner**, which passes
   them to the tools.
 - Add a per-engagement request-rate ceiling, `programs.max_request_rate` (migration 0028,
-  nullable). When set, a job's `rate` for httpx/nuclei/katana/ffuf is capped to it — an
+  nullable). When set, a job's `rate` for httpx/nuclei/katana/ffuf is capped to it â€” an
   explicit rate above the ceiling is refused, and a job with no rate has the ceiling applied
-  (never above the tool's own default) — so a program's rate limit binds. Settable on
+  (never above the tool's own default) â€” so a program's rate limit binds. Settable on
   engagement create/update; `null` clears it. Applies to jobs, pipeline stages and schedules
   at creation; changing the ceiling does not retroactively re-cap existing schedules.
-- Rewrite **Settings → Connect Runner** as six plain steps, each command with a Copy
+- Rewrite **Settings â†’ Connect Runner** as six plain steps, each command with a Copy
   button: install (or upgrade) VardrRunner, get a runner key (shown once), connect the
   machine with `vardrrunner init --url <api> --install-service --no-install-tools`,
   install or check tools with `vardrrunner tools install --all`, verify the connection
@@ -168,7 +172,7 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 - Run CI for stacked PRs as well as PRs targeting main.
 
 - Add real browser acceptance against a disposable backend and run it in CI;
-  expand Map → Runner → Gate fixtures for denial conventions, stale sessions,
+  expand Map â†’ Runner â†’ Gate fixtures for denial conventions, stale sessions,
   pagination, parameter integrity and inconclusive HTTP outcomes.
 - Add original starter API playbooks, with priorities for guidance, assessment
   outcomes and provenance.
@@ -213,50 +217,50 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 |---|---|---|
 | [v0.43.0](changelog/v0.43.0.md) | 2026-10-10 | **Bug fix** - new recon and nuclei imports store URLs exactly as reported. The importers ran them through `strip_html`, which encoded `&` (`?a=1&b=2` became `?a=1&amp;b=2`); recon URLs are read back as scan targets, so runners scanned a URL whose second parameter was named `amp;b`. Existing rows are **not** rewritten (a blind decode is a guess: five originals collapsed to one value); a read-only audit and a recovery plan are provided for review. No migration |
 | [v0.42.0](changelog/v0.42.0.md) | 2026-10-10 | **Behaviour change** - stop-work now pauses a stopped engagement's schedules: they are skipped and left untouched, so release fires one catch-up job instead of a backlog (previously one job per interval queued behind the refused claim and all became claimable on release). No migration |
-| [v0.41.0](changelog/v0.41.0.md) | 2026-10-09 | **dalfox** queueable, with its verification signal preserved — tier in `type`, plus new `detection_method` and `confidence` columns, never folded into severity. Imports land as **candidates** (`status: "new"`); no tier maps to confirmed. dalfox imports are deduplicated on the query-less URL + context/parameter + tier, excluding the per-run payload marker. Fix: `/scans?job_id=` now includes observed rows, matching `/recon` and `/services`, so a deduplicated re-scan no longer looks empty. Pairs with VardrRunner v0.46.0. Migration 0026 (additive) |
-| [v0.40.0](changelog/v0.40.0.md) | 2026-10-09 | **ffuf** is a queueable job type and Composer tool (its output was already importable). `config.wordlist` is a wordlist *name*, never a path — a path would let a job name any file the runner can read for ffuf to replay at a target; `config.rate` is a load cap with a ceiling and no "unlimited" value. Accepted config *types* mirror VardrRunner's exactly, so a job cannot clear queue validation and then fail locally. Pipelines unchanged. Pairs with VardrRunner v0.43.0. No migration |
+| [v0.41.0](changelog/v0.41.0.md) | 2026-10-09 | **dalfox** queueable, with its verification signal preserved â€” tier in `type`, plus new `detection_method` and `confidence` columns, never folded into severity. Imports land as **candidates** (`status: "new"`); no tier maps to confirmed. dalfox imports are deduplicated on the query-less URL + context/parameter + tier, excluding the per-run payload marker. Fix: `/scans?job_id=` now includes observed rows, matching `/recon` and `/services`, so a deduplicated re-scan no longer looks empty. Pairs with VardrRunner v0.46.0. Migration 0026 (additive) |
+| [v0.40.0](changelog/v0.40.0.md) | 2026-10-09 | **ffuf** is a queueable job type and Composer tool (its output was already importable). `config.wordlist` is a wordlist *name*, never a path â€” a path would let a job name any file the runner can read for ffuf to replay at a target; `config.rate` is a load cap with a ceiling and no "unlimited" value. Accepted config *types* mirror VardrRunner's exactly, so a job cannot clear queue validation and then fail locally. Pipelines unchanged. Pairs with VardrRunner v0.43.0. No migration |
 | [v0.39.0](changelog/v0.39.0.md) | 2026-10-09 | **Behavior change** - `job_id` on imports/services must be a job of the same engagement. Execution provenance (what each run observed), finding history with remediation and retest tracking, immutable client report revisions, and reviewed VardrGate case authoring; job/event paging and recon `source` filter. Migration 0025 (additive) |
-| [v0.38.0](changelog/v0.38.0.md) | 2026-10-08 | "Content Discovery" composer pipeline — subfinder → httpx → katana → gau |
+| [v0.38.0](changelog/v0.38.0.md) | 2026-10-08 | "Content Discovery" composer pipeline â€” subfinder â†’ httpx â†’ katana â†’ gau |
 | [v0.37.0](changelog/v0.37.0.md) | 2026-10-08 | **katana** (crawler) and **gau** (archived URLs) as queueable job types and recon imports, with queue-time config validation; composer and import UI entries. Fix: URL recon imports no longer store duplicates from within one upload |
-| [v0.36.0](changelog/v0.36.0.md) | 2026-10-07 | **Security** — replace `python-jose` (unpatched critical CVE-2026-85394, HS256 forgery) with `PyJWT` for JWT verification; drop the obsolete `ecdsa` audit ignore. No auth-behaviour or token-format change |
+| [v0.36.0](changelog/v0.36.0.md) | 2026-10-07 | **Security** â€” replace `python-jose` (unpatched critical CVE-2026-85394, HS256 forgery) with `PyJWT` for JWT verification; drop the obsolete `ecdsa` audit ignore. No auth-behaviour or token-format change |
 | [v0.35.0](changelog/v0.35.0.md) | 2026-10-07 | Relicensed from MIT to **AGPL-3.0**; README License section; `CONTRIBUTING.md` with a Developer Certificate of Origin sign-off requirement. No code or behavior change |
 | [v0.34.1](changelog/v0.34.1.md) | 2026-08-20 | VardrGate result integrity and validation parity; concurrent-safe Burp ingestion; paginated API Surface; richer Burp source metadata |
-| [v0.34.0](changelog/v0.34.0.md) | 2026-08-18 | Burp-assisted API Surface — explicit request/response promotion, canonical operation inventory, identity/status visualization, and two-stage secret redaction |
-| [v0.33.0](changelog/v0.33.0.md) | 2026-08-17 | **Security** — security headers were absent from CORS preflight responses (middleware ordering); HSTS now production-only. **Breaking** — report statuses become a client-deliverable lifecycle. Pentest-first framing and engagement creation, engagement status panel, constant-query engagement list, corrected API contract drift |
-| [v0.32.0](changelog/v0.32.0.md) | 2026-08-17 | VardrGate authorization testing end to end — spec inlined at hand-off (no VardrRunner change), `POST /jobs/{id}/upload` mapping findings to scan items and executions to evidence, `vardrgate_api_test` queueable, API Assessment pipeline |
-| [v0.31.0](changelog/v0.31.0.md) | 2026-08-16 | Authorization test cases — engagement-scoped storage for VardrGate specs, referenced by jobs rather than copied; credential values rejected on write (step 1 of 5 toward queueable `vardrgate_api_test`) |
-| [v0.30.0](changelog/v0.30.0.md) | 2026-08-16 | dnsx and naabu queueable (VardrRunner already had handlers); two named pipelines — Attack Surface and Host Enumeration — replace the single recon chain, with per-pipeline stage selection |
-| [v0.29.0](changelog/v0.29.0.md) | 2026-08-16 | **Breaking** — scope, window and authorization findings are advisory: jobs return `200` with a `warnings` array instead of `403`, and run. Stop-work still refuses; warnings are no longer audited |
-| [v0.28.0](changelog/v0.28.0.md) | 2026-08-15 | **Breaking** — fixes 7 reviewed defects: three scope-matching bypasses, PATCH job-state bypass of the policy engine, viewer job mutation, redaction leaks on spaces/punctuation, unwired asset ingestion, incomplete org tenancy, missing asset FKs |
-| [v0.27.0](changelog/v0.27.0.md) | 2026-08-15 | Evidence entity with centralized secret redaction applied on write — headers, body keys, URL credentials, bare JWTs; content hash, sensitivity and retention |
-| [v0.26.0](changelog/v0.26.0.md) | 2026-08-12 | Asset graph — canonical identity replaces five free-text host columns; nodes, edges, provenance, backfill, and the "everything about this host" query |
-| [v0.25.0](changelog/v0.25.0.md) | 2026-08-12 | Organizations — tenancy moves off the GitHub user id; job/schedule access follows the engagement, so a teammate can finally operate its jobs and share a runner fleet |
-| [v0.24.0](changelog/v0.24.0.md) | 2026-08-12 | **Breaking** — central policy engine enforces authorization, testing windows, scope and stop-work at job creation *and* claim; denials audited with stable reason codes; architecture docs and ADR 0001 |
-| [v0.23.2](changelog/v0.23.2.md) | 2026-08-09 | Fix crash-looping Railway deploys — wait for Postgres to finish starting before running migrations, instead of burning all 3 restart retries inside the database's recovery window |
+| [v0.34.0](changelog/v0.34.0.md) | 2026-08-18 | Burp-assisted API Surface â€” explicit request/response promotion, canonical operation inventory, identity/status visualization, and two-stage secret redaction |
+| [v0.33.0](changelog/v0.33.0.md) | 2026-08-17 | **Security** â€” security headers were absent from CORS preflight responses (middleware ordering); HSTS now production-only. **Breaking** â€” report statuses become a client-deliverable lifecycle. Pentest-first framing and engagement creation, engagement status panel, constant-query engagement list, corrected API contract drift |
+| [v0.32.0](changelog/v0.32.0.md) | 2026-08-17 | VardrGate authorization testing end to end â€” spec inlined at hand-off (no VardrRunner change), `POST /jobs/{id}/upload` mapping findings to scan items and executions to evidence, `vardrgate_api_test` queueable, API Assessment pipeline |
+| [v0.31.0](changelog/v0.31.0.md) | 2026-08-16 | Authorization test cases â€” engagement-scoped storage for VardrGate specs, referenced by jobs rather than copied; credential values rejected on write (step 1 of 5 toward queueable `vardrgate_api_test`) |
+| [v0.30.0](changelog/v0.30.0.md) | 2026-08-16 | dnsx and naabu queueable (VardrRunner already had handlers); two named pipelines â€” Attack Surface and Host Enumeration â€” replace the single recon chain, with per-pipeline stage selection |
+| [v0.29.0](changelog/v0.29.0.md) | 2026-08-16 | **Breaking** â€” scope, window and authorization findings are advisory: jobs return `200` with a `warnings` array instead of `403`, and run. Stop-work still refuses; warnings are no longer audited |
+| [v0.28.0](changelog/v0.28.0.md) | 2026-08-15 | **Breaking** â€” fixes 7 reviewed defects: three scope-matching bypasses, PATCH job-state bypass of the policy engine, viewer job mutation, redaction leaks on spaces/punctuation, unwired asset ingestion, incomplete org tenancy, missing asset FKs |
+| [v0.27.0](changelog/v0.27.0.md) | 2026-08-15 | Evidence entity with centralized secret redaction applied on write â€” headers, body keys, URL credentials, bare JWTs; content hash, sensitivity and retention |
+| [v0.26.0](changelog/v0.26.0.md) | 2026-08-12 | Asset graph â€” canonical identity replaces five free-text host columns; nodes, edges, provenance, backfill, and the "everything about this host" query |
+| [v0.25.0](changelog/v0.25.0.md) | 2026-08-12 | Organizations â€” tenancy moves off the GitHub user id; job/schedule access follows the engagement, so a teammate can finally operate its jobs and share a runner fleet |
+| [v0.24.0](changelog/v0.24.0.md) | 2026-08-12 | **Breaking** â€” central policy engine enforces authorization, testing windows, scope and stop-work at job creation *and* claim; denials audited with stable reason codes; architecture docs and ADR 0001 |
+| [v0.23.2](changelog/v0.23.2.md) | 2026-08-09 | Fix crash-looping Railway deploys â€” wait for Postgres to finish starting before running migrations, instead of burning all 3 restart retries inside the database's recovery window |
 | [v0.23.1](changelog/v0.23.1.md) | 2026-08-09 | Fix `NEXTAUTH_URL` in setup docs (v4 name, never read), retarget the AI triage prompt off bug bounty, drop the now-dead `sharp` override, and rewrite `CLAUDE.md` around the pentest model |
-| [v0.23.0](changelog/v0.23.0.md) | 2026-08-09 | **Breaking** — Submissions tracker removed entirely (nav, API, model, docs) and migration `0015` drops the `submissions` table; `/stats` no longer returns submission keys |
-| [v0.22.1](changelog/v0.22.1.md) | 2026-08-09 | Remove the Recon assets / Findings / Accepted / Paid stat row from the engagement Dashboard — bounty payout framing has no place on a pentest platform |
+| [v0.23.0](changelog/v0.23.0.md) | 2026-08-09 | **Breaking** â€” Submissions tracker removed entirely (nav, API, model, docs) and migration `0015` drops the `submissions` table; `/stats` no longer returns submission keys |
+| [v0.22.1](changelog/v0.22.1.md) | 2026-08-09 | Remove the Recon assets / Findings / Accepted / Paid stat row from the engagement Dashboard â€” bounty payout framing has no place on a pentest platform |
 | [v0.22.0](changelog/v0.22.0.md) | 2026-08-04 | Programs renamed to Engagements (old paths still served); clients, authorization records with testing windows, engagement type/status/dates |
 | [v0.21.2](changelog/v0.21.2.md) | 2026-08-08 | Type-check test files in CI (`npm run typecheck`) and fix three fixtures that had drifted from their types since v0.14 |
-| [v0.21.1](changelog/v0.21.1.md) | 2026-08-08 | Unblock CI — clear all frontend advisories (next-auth, postcss), replace the now-licensed gitleaks action with the pinned MIT binary, remove both TypeScript 7.0 deprecations |
-| [v0.21.0](changelog/v0.21.0.md) | 2026-07-22 | Scan pipelines (subfinder→httpx→nuclei chaining), job→results provenance, AI triage over raw scan output, dry-run target preview, saved scan profiles |
-| [v0.20.3](changelog/v0.20.3.md) | 2026-06-23 | Connect Runner panel in Settings — prefilled commands, copy buttons, .ps1 download, Verify connection |
-| [v0.20.2](changelog/v0.20.2.md) | 2026-06-20 | Review tab badges, manual→finding promotion, scope filter on recon/scans, UX hardening |
-| [v0.20.1](changelog/v0.20.1.md) | 2026-06-20 | Dashboard stats, findings search+severity filter, submissions status+platform filter, finding→submission promotion |
-| [v0.20.0](changelog/v0.20.0.md) | 2026-06-20 | Recon host detail panel — services, vulnerabilities, findings joined by host |
-| [v0.19.9](changelog/v0.19.9.md) | 2026-06-20 | Submissions: linked finding picker in form, ↗ finding badge in table row |
-| [v0.19.8](changelog/v0.19.8.md) | 2026-06-20 | Frontend section tests — FindingsSection (5), SubmissionsSection (5), JobsSection (4); 70 tests total |
-| [v0.19.7](changelog/v0.19.7.md) | 2026-06-20 | TypeScript 6 upgrade — fix tsconfig.test.json rootDir + ignoreDeprecations, migrate jest.config globals→transform |
+| [v0.21.1](changelog/v0.21.1.md) | 2026-08-08 | Unblock CI â€” clear all frontend advisories (next-auth, postcss), replace the now-licensed gitleaks action with the pinned MIT binary, remove both TypeScript 7.0 deprecations |
+| [v0.21.0](changelog/v0.21.0.md) | 2026-07-22 | Scan pipelines (subfinderâ†’httpxâ†’nuclei chaining), jobâ†’results provenance, AI triage over raw scan output, dry-run target preview, saved scan profiles |
+| [v0.20.3](changelog/v0.20.3.md) | 2026-06-23 | Connect Runner panel in Settings â€” prefilled commands, copy buttons, .ps1 download, Verify connection |
+| [v0.20.2](changelog/v0.20.2.md) | 2026-06-20 | Review tab badges, manualâ†’finding promotion, scope filter on recon/scans, UX hardening |
+| [v0.20.1](changelog/v0.20.1.md) | 2026-06-20 | Dashboard stats, findings search+severity filter, submissions status+platform filter, findingâ†’submission promotion |
+| [v0.20.0](changelog/v0.20.0.md) | 2026-06-20 | Recon host detail panel â€” services, vulnerabilities, findings joined by host |
+| [v0.19.9](changelog/v0.19.9.md) | 2026-06-20 | Submissions: linked finding picker in form, â†— finding badge in table row |
+| [v0.19.8](changelog/v0.19.8.md) | 2026-06-20 | Frontend section tests â€” FindingsSection (5), SubmissionsSection (5), JobsSection (4); 70 tests total |
+| [v0.19.7](changelog/v0.19.7.md) | 2026-06-20 | TypeScript 6 upgrade â€” fix tsconfig.test.json rootDir + ignoreDeprecations, migrate jest.config globalsâ†’transform |
 | [v0.19.6](changelog/v0.19.6.md) | 2026-06-20 | Runner-scoped service uploads, settings scope/last-used display, React key fix, docs corrections |
 | [v0.19.5](changelog/v0.19.5.md) | 2026-06-13 | VardrRunner extracted to its own repo; `runner/` removed, CI/Dependabot/docs repointed |
-| [v0.19.4](changelog/v0.19.4.md) | 2026-06-13 | Backend observability — stdout logging, optional Sentry, webhook failures logged |
-| [v0.19.3](changelog/v0.19.3.md) | 2026-06-13 | Webhook SSRF hardening — resolve + block private/metadata addresses at send time |
-| [v0.19.2](changelog/v0.19.2.md) | 2026-06-13 | Dependabot — automated weekly dependency + GitHub Actions updates |
+| [v0.19.4](changelog/v0.19.4.md) | 2026-06-13 | Backend observability â€” stdout logging, optional Sentry, webhook failures logged |
+| [v0.19.3](changelog/v0.19.3.md) | 2026-06-13 | Webhook SSRF hardening â€” resolve + block private/metadata addresses at send time |
+| [v0.19.2](changelog/v0.19.2.md) | 2026-06-13 | Dependabot â€” automated weekly dependency + GitHub Actions updates |
 | [v0.19.1](changelog/v0.19.1.md) | 2026-06-12 | Frontend dependency security (next 16.2.9, 0 audit vulns), Node 24 CI readiness (matrix + action runtimes) |
 | [v0.19.0](changelog/v0.19.0.md) | 2026-06-12 | RBAC program members, recon dedup + new-asset alerts, API key scopes, submissions analytics |
-| [v0.18.0](changelog/v0.18.0.md) | 2026-06-12 | Scheduled scans, webhook notifications, multi-runner, Radar → Program tracking |
+| [v0.18.0](changelog/v0.18.0.md) | 2026-06-12 | Scheduled scans, webhook notifications, multi-runner, Radar â†’ Program tracking |
 | [v0.17.1](changelog/v0.17.1.md) | 2026-06-12 | Daemon Windows fixes (status was killing the daemon), Postgres pool pre-ping |
-| [v0.17.0](changelog/v0.17.0.md) | 2026-06-12 | VardrRunner daemon — continuous background worker |
+| [v0.17.0](changelog/v0.17.0.md) | 2026-06-12 | VardrRunner daemon â€” continuous background worker |
 | [v0.16.0](changelog/v0.16.0.md) | 2026-06-11 | Submission tracker, delete stuck job, CI hardening |
 | [v0.15.0](changelog/v0.15.0.md) | 2026-06-11 | Target Radar, AI triage, service deep-links, rate limits, nmap URL normalization |
 | [v0.14.0](changelog/v0.14.0.md) | 2026-06-11 | Service discovery, atomic job claim, config validation, API key tracking |
@@ -271,8 +275,8 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 | [v0.8.0](changelog/v0.8.0.md) | 2026-06-09 | PDF export, scan job queue, VardrRunner job commands, subfinder |
 | [v0.7.0](changelog/v0.7.0.md) | 2026-06-09 | VardrRunner v1 CLI |
 | [v0.6.0](changelog/v0.6.0.md) | 2026-06-09 | Pagination on findings/reports/manual-tests, recon status_code filter |
-| [v0.5.0](changelog/v0.5.0.md) | 2026-06-09 | Migration hygiene — Alembic as sole production schema authority |
+| [v0.5.0](changelog/v0.5.0.md) | 2026-06-09 | Migration hygiene â€” Alembic as sole production schema authority |
 | [v0.4.0](changelog/v0.4.0.md) | 2026-06-08 | API keys, dual-path auth, Settings section |
 | [v0.3.0](changelog/v0.3.0.md) | 2026-06-07 | Scan review workflow, markdown export, inline editing, JWT refresh |
-| [v0.2.0](changelog/v0.2.0.md) | 2026-06-05 | Security hardening — sanitization, headers, audit logging, BOLA verification |
+| [v0.2.0](changelog/v0.2.0.md) | 2026-06-05 | Security hardening â€” sanitization, headers, audit logging, BOLA verification |
 | [v0.1.0](changelog/v0.1.0.md) | 2026-06-01 | Initial release |
