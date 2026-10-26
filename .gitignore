@@ -28,3 +28,4 @@ Thumbs.db
 .env*
 # Companion checkouts and environments used by the integration CI job.
 .integration/
+.local-auth-deps/

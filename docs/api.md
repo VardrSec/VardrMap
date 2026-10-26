@@ -8,6 +8,37 @@ Responses are JSON unless a streaming endpoint is documented otherwise. Timestam
 
 ---
 
+## Optional local authentication
+
+`VARDRMAP_AUTH_METHODS` explicitly selects `github` (default), `local` or
+`github,local`. Unknown/empty settings fail closed. `GET /auth/methods` is public
+and returns the enabled method names. Existing bearer/API-key authorization is
+retained; local users pass through the same ownership/org/role checks.
+
+Local browser authentication requires HTTPS. Passwords and raw session secrets
+are never returned in JSON. Responses are not cached; authentication validation
+errors use a fixed message without echoing submitted passwords.
+
+| Endpoint | Authentication and behavior |
+|---|---|
+| `POST /auth/local/login` | JSON `username`/`password`, allowed Origin, HTTPS. Generic 401 on invalid/locked credentials; 10 requests/minute per client IP. Sets a new secure HTTP-only session cookie. |
+| `GET /auth/local/session` | Valid local cookie; returns `authMethod: local`, user metadata and session-bound `csrfToken`, never a bearer/session token. |
+| `POST /auth/local/logout` | Local cookie, allowed Origin and `X-CSRF-Token`; revokes the server session and clears the cookie. |
+| `POST /auth/local/password` | Same cookie/Origin/CSRF checks plus `current_password` and `new_password`; rotates the current session and revokes the user's other local browser sessions. Limited to 5 requests/minute per IP. |
+
+Every cookie-authenticated API write, including existing engagement/key/report
+routes, requires an allowed Origin and matching `X-CSRF-Token`. Bearer requests
+retain their existing requirements and never fall back to a cookie when invalid.
+Session cookies are host-only `Secure; HttpOnly; SameSite=Lax; Path=/` with an
+eight-hour absolute limit and 30-minute server-enforced idle limit. Logout,
+password change and terminal recovery revoke sessions immediately for subsequent
+requests. API keys remain separate credentials with their existing revocation flow.
+
+There is no anonymous HTTP bootstrap/registration endpoint. Initial local account
+creation and recovery are explicit terminal operations documented in
+[local authentication](local-authentication.md). The initial administrator is the
+owner of its personal workspace, without a cross-tenant or global permission bypass.
+
 ## Health
 
 ### `GET /`

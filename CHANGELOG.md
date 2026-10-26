@@ -4,6 +4,15 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Return unauthorized when session revocation races with its activity refresh;
+  verify credential lockout and password/recovery races on migrated PostgreSQL.
+
+- Add explicitly configured local authentication alongside GitHub OAuth: one-time
+  terminal bootstrap, Argon2id passwords, persisted account/IP throttling,
+  revocable secure HTTP-only cookie sessions and Origin/session-bound CSRF checks.
+  Preserve existing user/tenant ownership and API-key flows. Additive migration
+  0031 refuses automatic credential-deleting downgrade. See ADR 0004.
+
 - Preserve cancellation and reset-baseline failure reasons as inconclusive Gate
   assessments. Add an opt-in real-worker semantic evidence contract and explicit
   older-companion compatibility matrix, including the operator-only finding

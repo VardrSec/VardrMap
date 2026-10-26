@@ -2,6 +2,14 @@
 
 ## Prerequisites
 
+For local-account development, install the updated backend requirements and read
+the [local authentication guide](local-authentication.md). Both browser UI and API
+must use HTTPS with trusted certificates and explicit allowed origins. Default
+GitHub-only development is unchanged. Account bootstrap/recovery are explicit
+terminal commands and never run during application startup. The additional
+HTTPS browser acceptance profile uses a disposable self-signed fixture certificate
+and no real user credentials; its TLS exception is limited to that test context.
+
 - Python 3.12+
 - Node.js 20 or 24 (CI tests both; 20 matches the Vercel / `.nvmrc` production runtime)
 - PostgreSQL (or use Railway for a hosted instance)
