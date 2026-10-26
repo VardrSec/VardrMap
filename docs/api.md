@@ -26,6 +26,38 @@ Health check. No auth required.
 { "status": "ok", "environment": "production" }
 ```
 
+### `GET /ready`
+
+Value-free API/database readiness, separate from `/health` liveness. No auth is
+required so diagnostics still work when the database needed by API-key auth is
+unavailable. This does not grant access to any engagement or user data. Existing
+authentication and authorization requirements are unchanged.
+
+Returns **200** only when a database read succeeds and its Alembic revision marker
+matches the single head shipped with this backend. Returns **503** otherwise.
+Responses use `Cache-Control: no-store` and include the UTC observation time:
+
+```json
+{
+  "schema_version": 1,
+  "component": "vardrmap-api",
+  "status": "ready",
+  "checked_at": "2026-10-25T00:00:00+00:00",
+  "checks": {"database": "ok", "migrations": "current"}
+}
+```
+
+`database` is `ok` or `unavailable`. `migrations` is `current`, `not_current`,
+`unavailable` (migration package/metadata cannot be read), or `not_checked` (the
+database is unavailable). Missing, older, newer or multiple database revisions
+are `not_current`; missing/multiple packaged heads are `unavailable`. Revision
+identifiers, connection strings, credentials and exception text are never returned.
+
+This endpoint reads state; it never stamps/upgrades a schema, creates user data,
+installs tools or executes scans. It checks a revision marker, not every table or
+the UI/runner/target workflow. A future distribution must test that complete path
+separately. Consume this v1 contract explicitly; older Map versions return 404.
+
 ---
 
 ## User / Auth

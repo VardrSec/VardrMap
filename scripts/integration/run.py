@@ -77,6 +77,8 @@ def main() -> int:
     parser.add_argument("--gate-ref", help="Snapshot this local Gate commit instead of working files")
     parser.add_argument("--semantic-evidence", action="store_true",
                         help="Require assertion and independent write-readback metadata end to end")
+    parser.add_argument("--platform-readiness", action="store_true",
+                        help="Check real Runner doctor against Map readiness without running jobs")
     parser.add_argument(
         "--postgres", action="store_true",
         help="Use INTEGRATION_DATABASE_URL (an empty disposable vardrmap_test* database)",
@@ -98,7 +100,7 @@ def main() -> int:
     ]:
         manifest[name] = snapshot(source.resolve(), root / name, ref)
     (root / "sources.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
-    for name in ("acceptance.py", "worker.py", "semantic.py"):
+    for name in ("acceptance.py", "worker.py", "semantic.py", "diagnostic_cli.py", "platform_checks.py"):
         shutil.copy2(scripts / name, root / name)
     binary = root / ("vardrgate.exe" if os.name == "nt" else "vardrgate")
     subprocess.run(
@@ -115,6 +117,7 @@ def main() -> int:
         "PYTHONDONTWRITEBYTECODE": "1",
         "INTEGRATION_POSTGRES": "1" if args.postgres else "0",
         "INTEGRATION_SEMANTIC_EVIDENCE": "1" if args.semantic_evidence else "0",
+        "INTEGRATION_PLATFORM_READINESS": "1" if args.platform_readiness else "0",
     }
     return subprocess.run(
         [sys.executable, "-B", str(root / "acceptance.py"), str(root)],

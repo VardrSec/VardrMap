@@ -67,7 +67,7 @@ def test_empty_database_migrates_and_app_starts(database):
     # Read every ORM-mapped column against the migrated schema. Unlike create_all
     # fixtures, this catches columns missing from migration history.
     code = """
-from sqlalchemy import select
+from sqlalchemy import select, text
 from db import Base, engine
 from main import app
 from fastapi.testclient import TestClient
@@ -76,6 +76,13 @@ with engine.connect() as conn:
         conn.execute(select(table).limit(0))
 with TestClient(app) as client:
     assert client.get('/health').status_code == 200
+    ready = client.get('/ready')
+    assert ready.status_code == 200, ready.text
+    assert ready.json()['checks'] == {'database': 'ok', 'migrations': 'current'}
+from readiness import probe_engine
+with probe_engine(engine.url).connect() as probe:
+    assert probe.scalar(text('SHOW default_transaction_read_only')) == 'on'
+    assert probe.scalar(text('SHOW statement_timeout')) == '3s'
 """
     result = subprocess.run(
         [sys.executable, "-c", code],
@@ -113,6 +120,18 @@ def test_existing_baseline_upgrade_preserves_records(database):
             conn.scalar(text("SELECT name FROM programs WHERE id='eng'"))
             == "Historical engagement"
         )
+
+
+def test_readiness_does_not_upgrade_an_old_schema(database):
+    from readiness import probe_engine, snapshot
+
+    engine, url = database
+    migrate(url, "upgrade", "0001baseline")
+    result = snapshot(probe_engine(make_url(url)))
+    assert result["status"] == "not_ready"
+    assert result["checks"] == {"database": "ok", "migrations": "not_current"}
+    with engine.connect() as conn:
+        assert conn.scalar(text("SELECT version_num FROM alembic_version")) == "0001baseline"
 
 
 def test_assessment_migration_roundtrip_and_provenance_retention(database):

@@ -81,6 +81,16 @@ harness before a missing journal can mask the actual startup error.
 
 ## Semantic evidence and version compatibility
 
+Add `--platform-readiness` to also execute the real Runner CLI using
+`doctor --platform --offline --json`, with its writable state isolated in the
+retained run directory. The migrated PostgreSQL fixture must report ready and
+exit 0; the create-all SQLite fixture has no Alembic marker and must report
+unready/exit 1 without stamping or upgrading it. Six additional checks cover the
+v1 contract, component reports, exit status, skipped release discovery, secret
+redaction and absence of target traffic. With both feature flags, 143 checks run.
+This flag requires the Runner platform-diagnostics companion revision; baseline
+invocations remain compatible with older Runner versions.
+
 Add `--semantic-evidence` to require the coordinated Gate/Runner/Map evidence
 path. Local runs retain the baseline default; CI opts in with the exact compatible
 Gate and Runner commits pinned in its workflow. It adds three all-200 response-assertion cases (disclosure,

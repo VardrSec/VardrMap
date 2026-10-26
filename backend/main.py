@@ -9,6 +9,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
+import readiness
 from db import Base, engine
 from deps import get_current_user, require_full_scope
 from limiter import limiter
@@ -217,3 +218,13 @@ def read_root():
 @app.get("/health")
 def health_check():
     return {"status": "ok", "environment": ENV}
+
+
+@app.get("/ready")
+def readiness_check():
+    result = readiness.snapshot(readiness.probe_engine(engine.url))
+    return JSONResponse(
+        result,
+        status_code=200 if result["status"] == "ready" else 503,
+        headers={"Cache-Control": "no-store"},
+    )
