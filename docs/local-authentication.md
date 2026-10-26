@@ -51,6 +51,14 @@ eight hours absolutely or 30 minutes idle; requests do not extend the absolute
 deadline. Login rotates the token. Logout revokes it; password changes and terminal
 recovery revoke the user's other/all local browser sessions respectively.
 
+Concurrent login, password change and recovery serialize on the credential row.
+Keep verification and session issuance in that transaction: moving password work
+outside the lock requires revalidating the credential before issuing a session.
+PostgreSQL tests cover simultaneous failures, recovery waiting on an in-flight
+login, competing password changes and revocation during the activity refresh.
+That refresh returns unauthorized if revocation deleted its row. A request already
+authorized before revocation may finish; revocation does not cancel in-flight work.
+
 Fetch the authenticated session metadata to obtain `csrfToken`. All cookie-based
 writes, including existing application endpoints, must send that value as
 `X-CSRF-Token` and an explicitly allowed Origin. Login also requires an allowed
