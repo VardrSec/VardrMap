@@ -14,6 +14,7 @@ from fastapi import HTTPException, Request, Response
 from models import LocalBootstrap, LocalCredential, LocalSession, User, new_uuid
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.exc import StaleDataError
 
 COOKIE_NAME = "__Host-vardrmap.session"
 SESSION_LIFETIME = timedelta(hours=8)
@@ -217,7 +218,12 @@ def resolve_session(request: Request, db: Session) -> dict[str, str]:
         raise HTTPException(status_code=401, detail="Unauthorized")
     if session.last_seen_at <= instant - timedelta(minutes=1):
         session.last_seen_at = instant
-        db.commit()
+        try:
+            db.commit()
+        except StaleDataError:
+            # Logout/recovery may delete this row after the request read it.
+            db.rollback()
+            raise HTTPException(status_code=401, detail="Unauthorized") from None
     return {
         "github_id": user.github_id,
         "username": user.username,

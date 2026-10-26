@@ -8,6 +8,9 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
   shared request helper, Settings password rotation and server-revoking logout.
   Verify the local flow against disposable HTTPS in browser acceptance.
 
+- Return unauthorized when session revocation races with its activity refresh;
+  verify credential lockout and password/recovery races on migrated PostgreSQL.
+
 - Add explicitly configured local authentication alongside GitHub OAuth: one-time
   terminal bootstrap, Argon2id passwords, persisted account/IP throttling,
   revocable secure HTTP-only cookie sessions and Origin/session-bound CSRF checks.
