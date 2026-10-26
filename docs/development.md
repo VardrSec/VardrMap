@@ -176,6 +176,15 @@ The readiness wait is not optional. Railway starts the app container and the dat
 
 ### Local development
 
+`GET /health` continues to report API liveness. The separate `GET /ready` returns
+200 only with a reachable database and the current Alembic marker; a create-all
+development/test database without migration history intentionally returns 503.
+Do not use `alembic stamp` to hide drift. Use the existing migration procedure on
+a disposable development database; restore from a verified backup when recovering
+real data. Readiness probes never run migrations. The PostgreSQL migration suite
+also checks readiness after a real upgrade and confirms that an older schema
+remains unchanged after an unready probe.
+
 `main.py` calls `Base.metadata.create_all()` when `ENV=development` (the default locally). This keeps the local dev loop fast — you don't need to run migrations just to start the server. When you add a new model or column, generate a migration so production can receive it:
 
 ```bash

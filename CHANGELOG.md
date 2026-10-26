@@ -4,6 +4,11 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Add public, value-free `GET /ready` database/Alembic-marker readiness for Runner
+  installation diagnostics. Keep `/health` liveness unchanged; probes preserve
+  TLS policy, do not apply migrations and return 503 on uncertainty. No migration
+  or frontend change is required. See ADR 0003 and the API reference.
+
 - Remember the selected browser login method per tab/API and fail closed on
   provider errors or expiration instead of silently switching identities. Add
   sign-in recovery guidance, mixed-session coverage and a trusted local HTTPS

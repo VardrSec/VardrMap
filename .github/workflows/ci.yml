@@ -73,7 +73,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           repository: VardrSec/VardrRunner
-          ref: a5c797fe42aee599104c53f55a82dadb4d2511a4
+          ref: e8bc3064ac39cac32b0736980a1f34f2c8d6df3f
           path: .integration/runner
       - uses: actions/checkout@v7
         with:
@@ -108,7 +108,7 @@ jobs:
         run: python -m pytest tests -v
       - name: Run Map to Runner to Gate on migrated PostgreSQL
         run: >-
-          python scripts/integration/run.py --postgres --semantic-evidence
+          python scripts/integration/run.py --postgres --semantic-evidence --platform-readiness
           --runner .integration/runner --gate .integration/gate
           --runner-python .integration/runner-venv/bin/python
           --output "${{ runner.temp }}"

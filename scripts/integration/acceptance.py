@@ -868,6 +868,12 @@ try:
         run_semantic(check=check, req=req, base=base, queue=queue,
                      run_worker=run_worker, outputs=outputs, job_row=job_row,
                      state=state, target=target, results=results, tokens=tokens)
+    if os.getenv("INTEGRATION_PLATFORM_READINESS") == "1":
+        from platform_checks import run_platform_checks
+        readiness = req("GET", "/ready", expected=(200 if postgres else 503,))
+        request_mark = len(state["requests"])
+        run_platform_checks(root, backend, runner_key, readiness, postgres, check)
+        check("Platform diagnostics sends no target requests", len(state["requests"]) == request_mark)
     check("Fixture request ceiling respected", len(state["requests"]) <= REQUEST_CEILING)
     check(
         "Fixture received loopback requests only",

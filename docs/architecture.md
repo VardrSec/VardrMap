@@ -41,6 +41,21 @@ Railway (PostgreSQL)
 
 ## Deployment and Schema Management
 
+The public `GET /ready` interface reports value-free database and Alembic-marker
+readiness for installation diagnostics. Runner consumes it over HTTP; it does not
+inspect Map's database or need access to the Docker socket. `/health` remains a
+liveness check. Readiness uses a separate unpooled database connection; PostgreSQL
+connections preserve the configured TLS policy and use read-only transactions,
+three-second connection timeouts and three-second statement timeouts. These are
+per-connection/per-statement budgets, not a whole-request deadline. No migrations
+or data writes occur during a probe. No data-model or migration change is needed.
+
+This begins the agreed responsibility split: VardrSec will manage Compose
+install/start/stop/update; Runner diagnoses and executes explicitly; Map owns API
+readiness and displays reported status; Gate assesses authorization. The Compose
+distribution and new status UI are not implemented by this endpoint. See
+[readiness API](api.md#get-ready) and [ADR 0003](adr/0003-platform-readiness.md).
+
 Optional local authentication adds `local_credentials` (Argon2id hash and persisted
 failure/lock state), `local_sessions` (hashed opaque token, user, idle/absolute
 timestamps), and a one-row `local_bootstrap` claim. Existing `users.github_id` and
