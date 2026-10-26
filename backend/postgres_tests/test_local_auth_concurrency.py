@@ -1,6 +1,7 @@
 """Exercise credential row locks and revocation against migrated PostgreSQL."""
 
 import os
+import secrets
 import subprocess
 import sys
 from pathlib import Path
@@ -32,7 +33,7 @@ def test_local_auth_concurrency(database, scenario):  # noqa: F811 - imported py
             "ENV": "staging",
             "VARDRMAP_AUTH_METHODS": "github,local",
             "ALLOWED_ORIGINS": "https://workspace.example",
-            "BACKEND_JWT_SECRET": "concurrency-fixture-secret-at-least-32-characters",
+            "BACKEND_JWT_SECRET": secrets.token_urlsafe(32),
         },
     )
     assert result.returncode == 0, result.stdout + result.stderr
