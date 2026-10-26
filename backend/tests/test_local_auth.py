@@ -491,3 +491,23 @@ def test_malformed_csrf_is_rejected_without_an_exception(local_setup):
         ).status_code
         == 403
     )
+
+
+def test_cookie_csrf_preflight_allows_only_configured_origins(local_setup):
+    client, _ = local_setup
+    # CORS is configured once at app import by the shared test fixture.
+    from main import ALLOWED_ORIGINS
+
+    headers = {
+        "Origin": ALLOWED_ORIGINS[0],
+        "Access-Control-Request-Method": "POST",
+        "Access-Control-Request-Headers": "content-type,x-csrf-token",
+    }
+    response = client.options("/engagements", headers=headers)
+    assert response.status_code == 200
+    assert "x-csrf-token" in response.headers["access-control-allow-headers"].lower()
+    assert response.headers["access-control-allow-credentials"] == "true"
+    assert response.headers["access-control-allow-origin"] == ALLOWED_ORIGINS[0]
+    response = client.options("/engagements", headers={**headers, "Origin": "https://untrusted.example.test"})
+    assert response.status_code == 400
+    assert "access-control-allow-origin" not in response.headers
