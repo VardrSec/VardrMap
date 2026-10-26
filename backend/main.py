@@ -4,17 +4,23 @@ import os
 from fastapi import Depends, FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
+from fastapi.exception_handlers import request_validation_exception_handler
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from db import Base, engine
+from auth_methods import auth_methods
 from deps import get_current_user, require_full_scope
 from limiter import limiter
 from logging_config import configure_logging
 from routers import api_surface, apikeys, assets, authorizations, clients, engagements, evidence, findings, imports, jobs, manual_tests, members, radar, recon, reports, runner, scan_profiles, scans, scope, services, settings, test_cases
 from routers import case_authoring, deliverables, finding_activity, playbooks, proposals
+from routers import local_auth
+
+auth_methods()  # Invalid provider configuration must fail closed at startup.
 
 ENV = os.getenv("ENV") or os.getenv("RAILWAY_ENVIRONMENT_NAME", "development")
 
@@ -116,6 +122,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         # HTTPS for two years is not something to do on a guess.
         if IS_PRODUCTION:
             response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains; preload"
+        if request.url.path.startswith("/auth/local/"):
+            response.headers["Cache-Control"] = "no-store"
         return response
 
 # -----------------------------------------------------------------------------
@@ -202,6 +210,15 @@ app.include_router(test_cases.router,    dependencies=_full)
 app.include_router(deliverables.router, dependencies=_full)
 app.include_router(finding_activity.router, dependencies=_full)
 app.include_router(settings.router,     dependencies=_full)
+app.include_router(local_auth.router)
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error(request: Request, exc: RequestValidationError):
+    if request.url.path.startswith("/auth/local/"):
+        return JSONResponse({"detail": "Invalid authentication request"}, status_code=422,
+                            headers={"Cache-Control": "no-store"})
+    return await request_validation_exception_handler(request, exc)
 app.include_router(clients.router,        dependencies=_full)
 app.include_router(authorizations.router, dependencies=_full)
 

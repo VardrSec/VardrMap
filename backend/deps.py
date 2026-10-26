@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 import jwt
 from db import get_db
-from fastapi import Depends, Header, HTTPException
+from fastapi import Depends, Header, HTTPException, Request
 from jwt import PyJWTError
 from models import (
     ApiKey,
@@ -31,11 +31,16 @@ _API_KEY_PREFIX = "vmap_"
 #    SHA-256 hash in api_keys table. Used by external tools (e.g. Burp).
 #    The plaintext token is shown once at generation; only the hash is kept.
 def get_current_user(
+    request: Request,
     authorization: str | None = Header(default=None),
     db: Session = Depends(get_db),
 ) -> dict[str, str]:
     if not BACKEND_JWT_SECRET:
         raise HTTPException(status_code=500, detail="Server auth not configured")
+    if not authorization:
+        from local_auth import COOKIE_NAME, resolve_session
+        if request.cookies.get(COOKIE_NAME):
+            return resolve_session(request, db)
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Unauthorized")
     token = authorization.split(" ", 1)[1].strip()
@@ -61,6 +66,9 @@ def _resolve_api_key(token: str, db: Session) -> dict[str, str]:
 
 
 def _resolve_jwt(token: str) -> dict[str, str]:
+    from auth_methods import auth_methods
+    if "github" not in auth_methods():
+        raise HTTPException(status_code=401, detail="Unauthorized")
     try:
         payload = jwt.decode(
             token,
@@ -73,7 +81,7 @@ def _resolve_jwt(token: str) -> dict[str, str]:
     except PyJWTError:
         raise HTTPException(status_code=401, detail="Unauthorized")
     github_id = payload.get("sub")
-    if not github_id:
+    if not github_id or str(github_id).startswith("local:"):
         raise HTTPException(status_code=401, detail="Unauthorized")
     return {
         "github_id": str(github_id),
