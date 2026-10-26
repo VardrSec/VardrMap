@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { signOut } from "next-auth/react";
 import LoginPanel from "./components/LoginPanel";
-import { hasWorkspaceSession } from "./auth-client";
+import { hasWorkspaceSession, selectAuthMethod } from "./auth-client";
 import { Section } from "./types";
 import { AppProvider, useAppContext } from "./context/AppContext";
 import DashboardSection  from "./components/DashboardSection";
@@ -44,10 +44,11 @@ export function AppShell() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   async function logout() {
-    if (session?.authMethod !== "local") { await signOut({ callbackUrl: "/" }); return; }
+    if (session?.authMethod !== "local") { selectAuthMethod("signed-out"); await signOut({ callbackUrl: "/" }); return; }
     try {
       const response = await authFetch("/auth/local/logout", { method: "POST" });
       if (!response.ok) throw new Error();
+      selectAuthMethod("signed-out");
       dispatch({ type: "AUTH_LOADED", session: null });
       window.location.reload();
     } catch { setMessage("Unable to sign out. Try again."); }

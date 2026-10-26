@@ -391,6 +391,12 @@ checks GitHub remains offered, but does not contact GitHub or replace OAuth
 staging checks. Use one browser suite at a time because both own the Next dev
 output directory. No production database or credentials are used.
 
+The mixed-session extension intercepts only GitHub session metadata with a signed
+fixture identity; the local cookie, backend authorization and API calls remain
+real. It checks provider failure/expiry, explicit local selection with an existing
+GitHub identity, reload and sign-out. This is distinct from a real OAuth callback
+or the [trusted fresh-install HTTPS acceptance](local-https-acceptance.md).
+
 Four browser journeys cover login presentation, pentest/client creation, job
 preview/queueing, synthetic candidate import/promotion, immutable report creation
 and Markdown download, viewer access/revocation, and expired backend identities.

@@ -4,6 +4,11 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Remember the selected browser login method per tab/API and fail closed on
+  provider errors or expiration instead of silently switching identities. Add
+  sign-in recovery guidance, mixed-session coverage and a trusted local HTTPS
+  distribution release gate.
+
 - Add configured local/GitHub browser login, cookie and CSRF transport through the
   shared request helper, Settings password rotation and server-revoking logout.
   Verify the local flow against disposable HTTPS in browser acceptance.

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { signIn } from "next-auth/react";
-import { API_URL, isSecureApi } from "../auth-client";
+import { API_URL, isSecureApi, selectAuthMethod } from "../auth-client";
 
 export default function LoginPanel({ onSignedIn = () => window.location.reload() }: { onSignedIn?: () => void }) {
   const [methods, setMethods] = useState<string[] | null>(null);
@@ -10,6 +10,7 @@ export default function LoginPanel({ onSignedIn = () => window.location.reload()
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [retry, setRetry] = useState(0);
   const secure = typeof window !== "undefined" && window.location.protocol === "https:" && isSecureApi(API_URL);
 
   useEffect(() => {
@@ -20,24 +21,33 @@ export default function LoginPanel({ onSignedIn = () => window.location.reload()
         const data = response.ok ? await response.json() : null;
         if (!Array.isArray(data?.methods) || !data.methods.length || data.methods.some((method: unknown) => method !== "local" && method !== "github")) throw new Error();
         if (active) setMethods(data.methods);
-      } catch { if (active) setError("Unable to load sign-in methods. Check platform connectivity."); }
+      } catch { if (active) setError("Unable to load sign-in methods. Start the platform and verify its HTTPS certificate is trusted. The administrator may need to finish the backend update."); }
     })();
     return () => { active = false; };
-  }, []);
+  }, [retry]);
 
   async function login(event: React.FormEvent) {
     event.preventDefault();
     if (!secure || busy) return;
     setBusy(true); setError("");
     try {
+      selectAuthMethod("signed-out");
       const response = await fetch(`${API_URL}/auth/local/login`, {
         method: "POST", credentials: "include", cache: "no-store", redirect: "error",
         headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username, password }),
       });
       if (!response.ok) throw new Error();
+      selectAuthMethod("local");
       onSignedIn();
     } catch { setError("Sign-in failed. Check your credentials or try again later."); }
     finally { setPassword(""); setBusy(false); }
+  }
+
+  async function loginWithGithub() {
+    try {
+      selectAuthMethod("github");
+      await signIn("github");
+    } catch { setError("Unable to start GitHub sign-in. Allow site storage and retry."); }
   }
 
   return (
@@ -47,6 +57,7 @@ export default function LoginPanel({ onSignedIn = () => window.location.reload()
         <p className="mt-2 text-sm text-muted">Access your authorized security testing workspace.</p>
         {!methods && !error && <p className="mt-5 text-sm">Loading sign-in methods…</p>}
         {error && <p role="alert" className="mt-4 text-sm text-red-400">{error}</p>}
+        {!methods && error && <button onClick={() => { setError(""); setRetry(value => value + 1); }} className="mt-4 rounded border border-[#3a3a3a] px-4 py-2 text-sm">Retry connection</button>}
         {methods?.includes("local") && (
           <form onSubmit={login} className="mt-6 space-y-4">
             {!secure && <p role="alert" className="text-sm text-amber-400">Local sign-in requires HTTPS for the application and API.</p>}
@@ -59,7 +70,7 @@ export default function LoginPanel({ onSignedIn = () => window.location.reload()
             <button type="submit" disabled={!secure || busy} className="w-full rounded-lg bg-[#f59e0b] px-4 py-2.5 text-sm font-semibold text-[#161616] disabled:opacity-50">{busy ? "Signing in…" : "Sign in locally"}</button>
           </form>
         )}
-        {methods?.includes("github") && <button onClick={() => signIn("github")} className="mt-6 w-full rounded-lg bg-[#f59e0b] px-4 py-2.5 text-sm font-semibold text-[#161616]">Sign in with GitHub</button>}
+        {methods?.includes("github") && <button onClick={() => void loginWithGithub()} className="mt-6 w-full rounded-lg bg-[#f59e0b] px-4 py-2.5 text-sm font-semibold text-[#161616]">Sign in with GitHub</button>}
       </div>
     </main>
   );

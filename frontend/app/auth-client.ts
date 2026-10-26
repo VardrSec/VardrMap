@@ -2,6 +2,21 @@ import type { AppSession } from "./types";
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
+type AuthSelection = "github" | "local" | "signed-out";
+const selectionKey = (apiUrl: string) => `vardrmap.auth-method:${apiUrl}`;
+
+export function selectAuthMethod(method: AuthSelection, apiUrl = API_URL): void {
+  if (typeof window !== "undefined") window.sessionStorage.setItem(selectionKey(apiUrl), method);
+}
+
+function selectedMethod(apiUrl: string): AuthSelection | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const value = window.sessionStorage.getItem(selectionKey(apiUrl));
+    return value === null || value === "github" || value === "local" ? value : "signed-out";
+  } catch { return "signed-out"; }
+}
+
 export function isSecureApi(apiUrl: string): boolean {
   try { return new URL(apiUrl).protocol === "https:"; } catch { return false; }
 }
@@ -26,11 +41,20 @@ export function authenticatedOptions(session: AppSession, init: RequestInit, api
 }
 
 export async function getFrontendSession(apiUrl = API_URL): Promise<AppSession | null> {
-  try {
-    const response = await fetch("/api/auth/session", { credentials: "include", cache: "no-store" });
-    const data = response.ok ? await response.json() : null;
-    if (typeof data?.backendToken === "string" && data.backendToken) return data;
-  } catch { /* The local cookie is an independent configured login method. */ }
+  const selected = selectedMethod(apiUrl);
+  if (selected === "signed-out") return null;
+  if (selected !== "local") {
+    try {
+      const response = await fetch("/api/auth/session", { credentials: "include", cache: "no-store" });
+      if (!response.ok) return null;
+      const data = await response.json();
+      if (typeof data?.backendToken === "string" && data.backendToken) {
+        selectAuthMethod("github", apiUrl);
+        return data;
+      }
+      if (selected === "github") return null;
+    } catch { return null; }
+  }
   if (!isSecureApi(apiUrl)) return null;
   try {
     const response = await fetch(`${apiUrl}/auth/local/session`, { credentials: "include", cache: "no-store", redirect: "error" });
@@ -38,6 +62,7 @@ export async function getFrontendSession(apiUrl = API_URL): Promise<AppSession |
     const data = await response.json();
     if (data?.authMethod !== "local" || typeof data.csrfToken !== "string" || !/^[0-9a-f]{64}$/.test(data.csrfToken)
       || typeof data.user?.githubId !== "string" || !data.user.githubId.startsWith("local:")) return null;
+    selectAuthMethod("local", apiUrl);
     return { authMethod: "local", csrfToken: data.csrfToken, user: data.user };
   } catch { return null; }
 }

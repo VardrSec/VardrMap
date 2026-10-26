@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { SignJWT } from "jose";
 
 const api = "https://127.0.0.1:8766";
 const originalPassword = "local-browser-fixture-passphrase";
@@ -70,4 +71,35 @@ test("real HTTPS login, CSRF-protected work, password rotation and logout", asyn
   await expect(page.getByRole("alert").filter({ hasText: "Sign-in failed" })).toBeVisible();
   await login(page, replacementPassword);
   await expect(page.getByLabel("Active Engagement")).toBeVisible();
+
+  // Only this mixed-provider scenario stubs GitHub's session response. The local
+  // cookie, JWT verification and all application API requests remain real.
+  const mixed = await context.newPage();
+  const token = await new SignJWT({ sub: "mixed-github", username: "github-fixture" })
+    .setProtectedHeader({ alg: "HS256" }).setIssuer("vardrmap-frontend")
+    .setAudience("vardrmap-backend").setExpirationTime("1h")
+    .sign(new TextEncoder().encode("browser-fixture-signing-key-only-32-characters"));
+  let githubState: "valid" | "failed" | "expired" = "valid";
+  await mixed.route("**/api/auth/session", route => githubState === "failed"
+    ? route.abort("failed") : route.fulfill({ json: githubState === "expired" ? {} : {
+      backendToken: token, user: { githubId: "mixed-github", username: "github-fixture" },
+    } }));
+  await mixed.goto("/");
+  await expect(mixed.getByText("github-fixture", { exact: true })).toBeVisible();
+  githubState = "failed";
+  await mixed.reload();
+  await expect(mixed.getByRole("button", { name: "Sign in locally" })).toBeVisible();
+  await expect(mixed.getByLabel("Active Engagement")).toHaveCount(0);
+  githubState = "expired";
+  await mixed.reload();
+  await expect(mixed.getByRole("button", { name: "Sign in locally" })).toBeVisible();
+  githubState = "valid";
+  await login(mixed, replacementPassword);
+  await expect(mixed.getByText("operator", { exact: true })).toBeVisible();
+  await mixed.reload();
+  await expect(mixed.getByText("operator", { exact: true })).toBeVisible();
+  await mixed.getByRole("button", { name: "Sign out", exact: true }).click();
+  await expect(mixed.getByRole("button", { name: "Sign in locally" })).toBeVisible();
+  await expect(mixed.getByLabel("Active Engagement")).toHaveCount(0);
+  await mixed.close();
 });

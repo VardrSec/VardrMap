@@ -7,18 +7,19 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import LoginPanel from "../LoginPanel";
 import { signIn } from "next-auth/react";
-import { isSecureApi } from "../../auth-client";
+import { isSecureApi, selectAuthMethod } from "../../auth-client";
 
 jest.mock("next-auth/react", () => ({ signIn: jest.fn() }));
-jest.mock("../../auth-client", () => ({ API_URL: "https://api.example.test", isSecureApi: jest.fn(() => true) }));
+jest.mock("../../auth-client", () => ({ API_URL: "https://api.example.test", isSecureApi: jest.fn(() => true), selectAuthMethod: jest.fn() }));
 const fetchMock = jest.fn();
-beforeEach(() => { global.fetch = fetchMock; fetchMock.mockReset(); jest.mocked(isSecureApi).mockReturnValue(true); });
+beforeEach(() => { global.fetch = fetchMock; fetchMock.mockReset(); jest.mocked(selectAuthMethod).mockClear(); jest.mocked(isSecureApi).mockReturnValue(true); });
 
 test("only configured login methods are offered", async () => {
   fetchMock.mockResolvedValue({ ok: true, json: async () => ({ methods: ["github"] }) });
   render(<LoginPanel />);
   await userEvent.click(await screen.findByRole("button", { name: "Sign in with GitHub" }));
   expect(signIn).toHaveBeenCalledWith("github");
+  expect(selectAuthMethod).toHaveBeenCalledWith("github");
   expect(screen.queryByLabelText("Local password")).not.toBeInTheDocument();
 });
 
@@ -37,10 +38,12 @@ test("local login uses cookies, clears the password and keeps failure details ge
     credentials: "include", redirect: "error", body: JSON.stringify({ username: "operator", password: "fixture-password-only" }),
   }));
   expect(signedIn).not.toHaveBeenCalled();
+  expect(selectAuthMethod).toHaveBeenLastCalledWith("signed-out");
   fetchMock.mockResolvedValueOnce({ ok: true });
   await userEvent.type(screen.getByLabelText("Local password"), "fixture-password-only");
   await userEvent.click(screen.getByRole("button", { name: "Sign in locally" }));
   await waitFor(() => expect(signedIn).toHaveBeenCalledTimes(1));
+  expect(selectAuthMethod).toHaveBeenLastCalledWith("local");
 });
 
 test("local credentials cannot be sent to an insecure API", async () => {
@@ -52,9 +55,13 @@ test("local credentials cannot be sent to an insecure API", async () => {
   expect(screen.getByRole("alert")).toHaveTextContent("requires HTTPS");
 });
 
-test("unknown configuration offers no login form", async () => {
+test("unavailable configuration offers recovery instructions and retry without a login form", async () => {
   fetchMock.mockResolvedValue({ ok: true, json: async () => ({ methods: ["anonymous"] }) });
   render(<LoginPanel />);
   expect(await screen.findByRole("alert")).toHaveTextContent("Unable to load sign-in methods");
-  expect(screen.queryByRole("button")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Local password")).not.toBeInTheDocument();
+  expect(screen.getByRole("alert")).toHaveTextContent("HTTPS certificate");
+  fetchMock.mockResolvedValue({ ok: true, json: async () => ({ methods: ["local"] }) });
+  await userEvent.click(screen.getByRole("button", { name: "Retry connection" }));
+  expect(await screen.findByLabelText("Local password")).toBeInTheDocument();
 });
