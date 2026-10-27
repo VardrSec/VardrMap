@@ -38,6 +38,7 @@ Do not introduce payout, "accepted/paid" or platform-submission framing in new U
 - **New migration:** `alembic heads` must return exactly one line afterwards. Two branches whose revisions name the same `down_revision` is a failed `alembic upgrade head`, which means `start.sh` fails and Railway does not come up. Check `CHANGELOG.md` for the version you intend to claim, too.
 - **Destructive migrations need explicit sign-off.** Dropping a table or column deletes production data on the next Railway deploy. Say so plainly and get a yes before writing it; note the data loss in the migration docstring.
 - No "Co-Authored-By: Codex" in commits
+- Do not add a "Generated with Claude Code" (or similar tool) signature or attribution line to pull request descriptions or commits, regardless of default tool behavior.
 - Run `npm run lint` + `npm run typecheck` + `npm run build` in `frontend/` before committing frontend changes
 - Every behavior-changing change needs matching documentation
 
