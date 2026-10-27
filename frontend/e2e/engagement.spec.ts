@@ -101,12 +101,27 @@ test("pentest creation, job preview/queue, candidate review and immutable client
   expect(engagement.engagement_type).toBe("pentest");
   expect(engagement.client_id).toBe(client.id);
   const base = `/engagements/${engagement.id}`;
-  await post(request, base + "/scope/in", headers, { kind: "url", value: "http://127.0.0.1:9876/api?view=full&include=roles" });
-  await post(request, base + "/authorizations", headers, {
-    authorized_by: "Fixture owner", reference: "Synthetic browser fixture",
-    permits: "Loopback test only", window_start: new Date(Date.now() - 3_600_000).toISOString(),
-    window_end: new Date(Date.now() + 3_600_000).toISOString(),
-  });
+  // Scope and written authorization are recorded through the interface, not the API.
+  const local = (ms: number) => {
+    const d = new Date(Date.now() + ms), pad = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+  await page.getByLabel("Active Engagement").selectOption(engagement.id);
+  await page.locator("nav").getByRole("button", { name: /Scope$/ }).click();
+  await page.getByText("Value", { exact: true }).first().locator("xpath=following-sibling::input").fill("http://127.0.0.1:9876/api?view=full&include=roles");
+  await page.getByText("Kind", { exact: true }).first().locator("xpath=following-sibling::input").fill("url");
+  const scoped = page.waitForResponse(r => r.url() === api + base + "/scope/in" && r.request().method() === "POST");
+  await page.getByRole("button", { name: "Add In-Scope Asset", exact: true }).click();
+  expect((await scoped).status()).toBe(201);
+  await page.locator("nav").getByRole("button", { name: /Overview$/ }).click();
+  await page.getByLabel("Authorized by").fill("Fixture owner");
+  await page.getByLabel("Reference").fill("Synthetic browser fixture");
+  await page.getByLabel("Permits").fill("Loopback test only");
+  await page.getByLabel("Authorization window starts").fill(local(-3_600_000));
+  await page.getByLabel("Authorization window ends").fill(local(3_600_000));
+  const authorized = page.waitForResponse(r => r.url() === api + base + "/authorizations" && r.request().method() === "POST");
+  await page.getByRole("button", { name: "Record authorization", exact: true }).click();
+  expect((await authorized).status()).toBe(201);
   await page.reload();
   await page.getByLabel("Active Engagement").selectOption(engagement.id);
   // The tool list starts collapsed to the chosen tool; open it to pick another.
