@@ -1,12 +1,25 @@
 # VardrMap — Codex Instructions
 
-Penetration testing platform. FastAPI backend (Railway) + Next.js 16 frontend (Vercel) + PostgreSQL (Railway). GitHub OAuth login; frontend mints short-lived HS256 JWTs for backend requests.
+Authorized security research and engagement-management platform: FastAPI backend + Next.js 16 frontend + PostgreSQL. It is the researcher interface and control plane of the VardrSec platform (see the parent `CLAUDE.md` and `VardrSec/docs/community-alpha.md`). Map owns engagements, authorization/scope, identities, jobs, findings, evidence and reports. Runner executes tools; Gate performs authorization assessment; the VardrSec distribution repo owns packaging and recovery. Do not duplicate those responsibilities here.
 
-VardrMap started as a bug bounty dashboard and is now a professional pentest engagement platform. Bug bounty is one `engagement_type` among four — it is a supported mode, not the centre of gravity. The unit of work is an **engagement** performed for a **client** under a written **authorization**, and the deliverable is a report handed to that client.
+## Deployment directions
+Both are supported. Do not assume hosted services are mandatory for a local installation.
+- **Local-first (current release focus):** Docker Compose via the VardrSec distribution, local PostgreSQL, local authentication, trusted HTTPS, user-controlled engagement data. Container notes: `docs/containers.md`; readiness/status: `docs/platform-status.md`, ADR 0003.
+- **Hosted compatibility:** Vercel frontend, Railway backend + PostgreSQL, GitHub OAuth with short-lived HS256 JWTs minted by the frontend. Existing organization and tenant controls apply unchanged. Never break this path to simplify local mode.
 
-**Design every feature for the pentest case first**, then check it degrades sensibly for bounty work. A feature that only makes sense for bounty hunting probably does not belong here — the Submissions tracker was removed in v0.23.0 for exactly that reason.
+## Authentication
+`VARDRMAP_AUTH_METHODS` = `github` (default) | `local` | `github,local`, set on backend and frontend; invalid values fail closed. Local authentication (ADR 0004, `docs/local-authentication.md`) is implemented on `main` but listed as unreleased in `CHANGELOG.md`. Preserve:
+- Argon2id password hashing (64 MiB, t=3, p=4); login rate limit and account lockout; generic failure responses.
+- Database-backed revocable sessions (only SHA-256 digests stored), `__Host-` secure HTTP-only cookie, absolute and idle expiry. Local mode requires HTTPS; there is no localhost exception.
+- CSRF: session-bound token plus allowed-Origin check on every cookie-based write.
+- Bootstrap and recovery are terminal-only (`python -m local_accounts ...`); no default password, public bootstrap route or registration endpoint.
+- Local mode never bypasses ownership, organization, tenant or BOLA checks. A local account is not a superuser.
+- Migration `0031localauth` refuses automatic downgrade; keep a verified backup before upgrading real data.
 
-**Do not introduce bounty framing into new UI copy, prompts, or models.** No payouts, no "accepted/paid" outcomes, no platform-submission language. The one legitimate exception is Target Radar (below), which describes genuinely external bounty programmes.
+## Product identity
+An **engagement** is authorized security work: a professional penetration test, an internal assessment, a red-team exercise, or a bug bounty / independent research effort. `engagement_type` has four values (`bug_bounty`, `pentest`, `red_team`, `internal`); self-directed research uses an existing type, and not every engagement has a paying client. Keep the code-enforced rules as they are: clients are required for `pentest`/`internal`, authorization records for `pentest`/`red_team`. Reporting stays to professional standards.
+
+Do not introduce payout, "accepted/paid" or platform-submission framing in new UI copy, prompts or models. The one exception is Target Radar (below), which describes genuinely external bounty programmes. A feature that only suits one workflow should degrade sensibly for the others; the Submissions tracker was removed in v0.23.0 for being bounty-only.
 
 ## Where things live
 - `backend/` — FastAPI app, SQLAlchemy models, Alembic migrations, tests
@@ -101,6 +114,38 @@ from the request.
 `DashboardSection` and `ReviewSection` are thin tab containers rendering child
 sections with `hideHeader`.
 
+Queueable `tool_type`: `httpx` | `nuclei` | `subfinder` | `nmap` | `dnsx` | `naabu` |
+`katana` | `gau` | `ffuf` | `dalfox` | `vardrgate_api_test`. Config keys are allowlisted per
+tool in `routers/jobs.py`, with bounds mirroring VardrRunner's so a bad value is refused at
+queue time rather than failing on the operator's machine after a runner claims the job.
+**`ffuf.wordlist` is a name, never a path** — a path would let the API name any file the
+runner can read for ffuf to read and replay at a target.
+
+**There are no recurring scans.** VardrRunner runs only when invoked, so a schedule could
+never fire on its own; `/schedules` and the `scheduled_scans` table were removed (migration
+`0029dropschedules`). Every job runs once, when the operator runs `vardrrunner jobs run`. Do
+not reintroduce scheduling or anything that implies jobs run unattended.
+
+**Request controls.** The Composer's Request Controls set `rate` (httpx/nuclei/katana/ffuf)
+and `headers` (those plus dalfox) on a job and on every pipeline stage that accepts them.
+`frontend/app/lib/requestControls.ts` mirrors the backend's `_validate_headers` and rate
+bounds; change both together.
+
+**Scanner output is a candidate, not a finding.** nuclei and dalfox imports land as
+`scan_items` with `status: "new"`; promoting one is the operator's act. Keep the scanner's
+own signal separate from our severity — dalfox's tier goes in `type`, with
+`detection_method` and `confidence` in their own columns — and never map a tier to a
+confirmed status, however confident the tool is. dalfox imports are deduplicated on the
+query-less URL + `template_id` + tier; never key that on the payload or PoC URL, which
+carry a fresh per-run marker class.
+**Scanner payload, evidence and PoC URL are stored exactly as reported** (`payload`,
+`match_evidence`, `asset`): never run them through `strip_html`, which deletes anything
+tag-shaped — for an XSS scanner that deletes the evidence. Sanitise prose,
+not data. They are untrusted text: render only as text. **The same goes for recon URLs**
+(`url`/`host`/`path` via `_url_field`): the previous sanitizer turned `?a=1&b=2` into `?a=1&amp;b=2`,
+and recon URLs are read back as scan targets. Existing rows were not rewritten — read
+`docs/recon-url-recovery-plan.md` before touching them; a blind decode is wrong.
+
 ## Engagement types and statuses
 `engagement_type`: `bug_bounty` | `pentest` | `red_team` | `internal`
 `engagement_status`: `planned` | `active` | `reporting` | `closed`
@@ -141,7 +186,19 @@ updates to conserve tokens.
 ## Roadmap
 See `docs/roadmap.md` for the current backlog: physical table rename and legacy alias
 retirement, organization administration, organization-bound runner credentials,
-reviewed identity login/refresh, broader API guidance, engagement-wide execution budgets,
+reviewed login/refresh, broader API guidance, engagement-wide execution budgets,
 signed contracts, running-process cancellation, retention policy and remote MCP OAuth.
-RBAC, client deliverables, finding activity/retests, reviewed case authoring and the
-current unreleased assessment/provenance/playbook work are implemented.
+RBAC, finding activity/retests and reviewed case authoring are implemented.
+
+Client-facing deliverable generation shipped in v0.39.0 (immutable client report revisions).
+
+Agent-facing tools and instruction-only prompts live in VardrRunner's MCP server.
+Case/report drafting and methodology checklists are implemented; the shared playbook
+and evidence reads use Map endpoints. Remote MCP remains a joint design requiring
+backend OAuth. See `docs/roadmap.md` for current gaps rather than treating these
+implemented features as future work.
+
+Remote MCP has a [proposed authorization design](docs/adr/0002-remote-mcp-authorization.md),
+not an accepted implementation plan. Merging that ADR does not settle its provider,
+grant binding, remote writes, consent or token-lifecycle decisions. Do not start
+OAuth implementation until those decisions are explicitly accepted.

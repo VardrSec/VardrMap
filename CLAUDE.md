@@ -1,12 +1,25 @@
 # VardrMap — Claude Instructions
 
-Penetration testing platform. FastAPI backend (Railway) + Next.js 16 frontend (Vercel) + PostgreSQL (Railway). GitHub OAuth login; frontend mints short-lived HS256 JWTs for backend requests.
+Authorized security research and engagement-management platform: FastAPI backend + Next.js 16 frontend + PostgreSQL. It is the researcher interface and control plane of the VardrSec platform (see the parent `CLAUDE.md` and `VardrSec/docs/community-alpha.md`). Map owns engagements, authorization/scope, identities, jobs, findings, evidence and reports. Runner executes tools; Gate performs authorization assessment; the VardrSec distribution repo owns packaging and recovery. Do not duplicate those responsibilities here.
 
-VardrMap started as a bug bounty dashboard and is now a professional pentest engagement platform. Bug bounty is one `engagement_type` among four — it is a supported mode, not the centre of gravity. The unit of work is an **engagement** performed for a **client** under a written **authorization**, and the deliverable is a report handed to that client.
+## Deployment directions
+Both are supported. Do not assume hosted services are mandatory for a local installation.
+- **Local-first (current release focus):** Docker Compose via the VardrSec distribution, local PostgreSQL, local authentication, trusted HTTPS, user-controlled engagement data. Container notes: `docs/containers.md`; readiness/status: `docs/platform-status.md`, ADR 0003.
+- **Hosted compatibility:** Vercel frontend, Railway backend + PostgreSQL, GitHub OAuth with short-lived HS256 JWTs minted by the frontend. Existing organization and tenant controls apply unchanged. Never break this path to simplify local mode.
 
-**Design every feature for the pentest case first**, then check it degrades sensibly for bounty work. A feature that only makes sense for bounty hunting probably does not belong here — the Submissions tracker was removed in v0.23.0 for exactly that reason.
+## Authentication
+`VARDRMAP_AUTH_METHODS` = `github` (default) | `local` | `github,local`, set on backend and frontend; invalid values fail closed. Local authentication (ADR 0004, `docs/local-authentication.md`) is implemented on `main` but listed as unreleased in `CHANGELOG.md`. Preserve:
+- Argon2id password hashing (64 MiB, t=3, p=4); login rate limit and account lockout; generic failure responses.
+- Database-backed revocable sessions (only SHA-256 digests stored), `__Host-` secure HTTP-only cookie, absolute and idle expiry. Local mode requires HTTPS; there is no localhost exception.
+- CSRF: session-bound token plus allowed-Origin check on every cookie-based write.
+- Bootstrap and recovery are terminal-only (`python -m local_accounts ...`); no default password, public bootstrap route or registration endpoint.
+- Local mode never bypasses ownership, organization, tenant or BOLA checks. A local account is not a superuser.
+- Migration `0031localauth` refuses automatic downgrade; keep a verified backup before upgrading real data.
 
-**Do not introduce bounty framing into new UI copy, prompts, or models.** No payouts, no "accepted/paid" outcomes, no platform-submission language. The one legitimate exception is Target Radar (below), which describes genuinely external bounty programmes.
+## Product identity
+An **engagement** is authorized security work: a professional penetration test, an internal assessment, a red-team exercise, or a bug bounty / independent research effort. `engagement_type` has four values (`bug_bounty`, `pentest`, `red_team`, `internal`); self-directed research uses an existing type, and not every engagement has a paying client. Keep the code-enforced rules as they are: clients are required for `pentest`/`internal`, authorization records for `pentest`/`red_team`. Reporting stays to professional standards.
+
+Do not introduce payout, "accepted/paid" or platform-submission framing in new UI copy, prompts or models. The one exception is Target Radar (below), which describes genuinely external bounty programmes. A feature that only suits one workflow should degrade sensibly for the others; the Submissions tracker was removed in v0.23.0 for being bounty-only.
 
 ## Where things live
 - `backend/` — FastAPI app, SQLAlchemy models, Alembic migrations, tests
