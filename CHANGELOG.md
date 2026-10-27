@@ -4,6 +4,12 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Pin backend Python and frontend Node container bases to reviewed Debian Trixie
+  digests. Remove npm/npx from the web runtime stage; the build stage retains npm
+  and its existing lint, type, test and build checks. These image changes address
+  reported base/package-manager findings and still require image rescanning and
+  installed acceptance before alpha release; native setup is unchanged.
+
 - Accept Runner's existing `policy_warning` lifecycle events so advisory policy
   messages persist in the job history instead of returning 422. Existing event
   access checks and job/stop-work behavior are unchanged; no migration is required.

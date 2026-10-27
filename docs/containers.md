@@ -1,5 +1,12 @@
 # Development containers
 
+The backend Python 3.12 and frontend Node 24 bases use reviewed Debian Trixie
+digests. Base-image identity is pinned; dependency resolution and application
+release publication remain separate concerns. Native development commands are
+unchanged. The web runtime removes npm/npx and their global dependency tree;
+Next starts through Node directly. Use the build stage or native checkout for
+package-manager operations, rather than changing a retained runtime container.
+
 Build the backend with `docker build -t vardrmap-api:local backend`. It runs as
 UID 10001 and preserves the existing wait-for-database, Alembic and Uvicorn startup
 sequence. Supply DATABASE_URL, BACKEND_JWT_SECRET, ENV=production, authentication
