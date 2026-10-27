@@ -45,7 +45,7 @@ it("replaces a prior success with unreachable on failed refresh", async () => {
   expect(screen.queryByText("private transport details")).not.toBeInTheDocument();
 });
 
-it("makes a cached success stale while a refresh is pending", async () => {
+it("makes a cached success stale after a suspended clock resumes", async () => {
   jest.useFakeTimers();
   const start = new Date("2026-10-26T12:00:00Z");
   jest.setSystemTime(start);
@@ -60,9 +60,28 @@ it("makes a cached success stale while a refresh is pending", async () => {
     const view = renderWithApp(<PlatformStatusPanel />, {overrides:{authFetch}});
     await act(async () => { await Promise.resolve(); });
     expect(screen.getByText("Ready")).toBeInTheDocument();
-    await act(async () => { jest.advanceTimersByTime(61000); });
+    jest.setSystemTime(new Date(start.getTime() + 61000));
+    await act(async () => { jest.advanceTimersByTime(1000); });
     expect(screen.queryByText("Ready")).not.toBeInTheDocument();
     expect(screen.getAllByText("Stale")).toHaveLength(2);
+    view.unmount();
+  } finally { jest.useRealTimers(); }
+});
+
+it("bounds an authentication/body wait even if it ignores abort and ignores late success", async () => {
+  jest.useFakeTimers();
+  let finish: ((value:Response) => void) | undefined;
+  const authFetch = jest.fn(() => new Promise<Response>(resolve => { finish = resolve; }));
+  try {
+    const view = renderWithApp(<PlatformStatusPanel />, {overrides:{authFetch}});
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.getByRole("button", {name:"Refresh status"})).toBeDisabled();
+    await act(async () => { jest.advanceTimersByTime(8001); });
+    expect(screen.getAllByText("Unreachable")).toHaveLength(2);
+    expect(screen.getByRole("button", {name:"Refresh status"})).toBeEnabled();
+    await act(async () => { finish?.(mockResponse({body:report})); });
+    expect(screen.getAllByText("Unreachable")).toHaveLength(2);
+    expect(screen.queryByText("Recent report")).not.toBeInTheDocument();
     view.unmount();
   } finally { jest.useRealTimers(); }
 });
