@@ -1169,11 +1169,20 @@ VardrRunner posts its status here. Upserts one row per `(user, hostname)` pair â
 ### `GET /runner/status`
 Frontend polls this to check connectivity and display runner details in the Bridge. Returns `online: true` if a heartbeat was received within the last 5 minutes.
 
+Responses are authenticated, account-owned and `Cache-Control: no-store`. Additive
+observation fields are `schema_version: 1`, UTC `checked_at`, and
+`stale_after_seconds: 300`. Each runner includes `freshness` (`recent`, `stale`,
+`unknown`); top-level freshness is recent if any runner is recent, otherwise it
+mirrors the latest row, or unknown if no row exists. A future heartbeat timestamp
+is unknown and never online. `last_seen` is now explicitly offset-aware UTC.
+The existing fields in the examples below remain supported. The Settings panel
+ages cached observations; see [status behavior](platform-status.md).
+
 **Response (runner online)**
 ```json
 {
   "online":    true,
-  "last_seen": "2026-06-10T12:34:56.789012",
+  "last_seen": "2026-06-10T12:34:56.789012+00:00",
   "hostname":  "dev-laptop",
   "version":   "0.1.0",
   "os":        "Linux 6.5",
@@ -1734,6 +1743,10 @@ Updated response shape:
 
 ### `GET /runner/status`
 Now returns a `runners` array â€” one entry per machine that has sent a heartbeat (newest first), each with `online`, `last_seen`, `hostname`, `version`, `os`, and `tools`. Heartbeats are upserted per `(user, hostname)` so a laptop and a VPS report independently. Top-level fields mirror the most recently seen runner for backward compatibility; top-level `online` is true if **any** runner is online.
+
+The observation/freshness metadata described in [Runner Heartbeat](#runner-heartbeat)
+is additive to this response. Contact expires after five minutes; it is not a
+worker-liveness or complete-tool-health assertion.
 
 ---
 

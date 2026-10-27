@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AuthorizationTestCase, JobPreview, PipelineStage, PolicyWarning, RunnerStatus, ScanJob, ScanJobUI, ScanProfile } from "../types";
+import { parseRunnerStatus, runnerFreshness, runnerRecentlySeen } from "../lib/platformStatus";
 import GateAssessmentPanel from "./jobs/GateAssessmentPanel";
 import { useAppContext } from "../context/AppContext";
 import { TOOLS } from "./jobs/mockData";
@@ -99,7 +100,16 @@ export default function JobsSection({
   const [toast,         setToast]         = useState<Toast | null>(null);
   const [liveRecon,     setLiveRecon]     = useState<number | null>(null);
 
-  const runnerOnline = runnerStatus?.online ?? false;
+  const [statusNow, setStatusNow] = useState(Date.now);
+  useEffect(() => {
+    const clock = setInterval(() => setStatusNow(Date.now()), 1000);
+    return () => clearInterval(clock);
+  }, []);
+  const runnerOnline = runnerRecentlySeen(runnerStatus, statusNow);
+  const currentRunnerStatus = runnerStatus ? {
+    ...runnerStatus,
+    runners: runnerStatus.runners?.map(row => ({ ...row, online: runnerFreshness(row, statusNow, runnerStatus.stale_after_seconds) === "recent" })),
+  } : null;
   // Live recon count for the Composer's queue card — refreshed every poll so it
   // reflects assets the runner just imported, not a stale engagement snapshot.
   const reconCount = liveRecon ?? selectedEngagement?.recon_count ?? 0;
@@ -130,8 +140,9 @@ export default function JobsSection({
         setJobs(mapped);
       }
       if (statusRes.ok) {
-        const rs: RunnerStatus = await statusRes.json();
-        setRunnerStatus(rs);
+        setRunnerStatus(parseRunnerStatus(await statusRes.json()));
+      } else {
+        setRunnerStatus(null);
       }
       if (reconRes.ok) {
         const rd = await reconRes.json();
@@ -139,7 +150,7 @@ export default function JobsSection({
       }
       setLastPoll(new Date().toISOString());
       setPulseKey((k) => k + 1);
-    } catch { /* auth errors surfaced by authFetch */ } finally {
+    } catch { setRunnerStatus(null); /* auth errors surfaced by authFetch */ } finally {
       setLoading(false);
     }
   }, [authFetch, engagementId]);
@@ -418,7 +429,7 @@ export default function JobsSection({
       <Bridge
         accent={ACCENT}
         runnerOnline={runnerOnline}
-        runnerStatus={runnerStatus}
+        runnerStatus={currentRunnerStatus}
         lastPoll={lastPoll}
         queueDepth={pendingCount}
         runningCount={runningCount}

@@ -437,3 +437,10 @@ the loopback three-repository harness exercises actual Gate execution.
 ## Container development
 
 See [container setup](containers.md) for build contexts, non-root runtime, build-time API URL and proxy trust. These images retain the existing hosted authentication configuration.
+
+Settings includes [platform/Runner observations](platform-status.md) without new
+configuration or a migration. Update the backend before the frontend for the
+additive heartbeat metadata. The local HTTPS browser journey checks real unready
+SQLite readiness, a real account-owned heartbeat, and an injected readiness
+transport failure. Frontend tests cover stale, unknown, malformed and failed polls.
+These fixtures do not certify fresh-host certificate trust or a full diagnostic run.

@@ -199,7 +199,7 @@ export default function Bridge({
 
       <div className="grid items-stretch gap-3 lg:grid-cols-[1fr_minmax(120px,0.7fr)_1.25fr]">
         {/* Cloud node */}
-        <Node label="VardrMap" sub="cloud · command center" glyph="⬡" glyphColor={accent} active={true}>
+        <Node label="VardrMap" sub="workspace · command center" glyph="⬡" glyphColor={accent} active={true}>
           <div className="mt-3 grid grid-cols-2 gap-2">
             <div className="rounded-lg border border-[#2e2e2e] bg-[#1a1a1a] px-2.5 py-1.5">
               <div className="font-mono text-lg font-bold leading-none" style={{ color: accent }}>{queueDepth}</div>
@@ -250,7 +250,7 @@ export default function Bridge({
           ) : (
             <div className="mt-3 space-y-2">
               <div className="rounded-lg border border-dashed border-[#2e2e2e] bg-[#1a1a1a] px-3 py-3 text-center">
-                <p className="font-mono text-[11px] text-muted">runner offline</p>
+                <p className="font-mono text-[11px] text-muted">{runnerStatus ? "no recent Runner report" : "Runner status unknown"}</p>
                 <button
                   onClick={onSetupRunner}
                   className="mt-2 rounded-md border border-[#2e2e2e] px-3 py-1.5 font-mono text-[10px] uppercase tracking-wider text-[#94a3b8] transition hover:border-[#3a3a3a] hover:text-[#f1f5f9]"
