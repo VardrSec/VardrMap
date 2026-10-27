@@ -4,6 +4,9 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Enforce a hard eight-second status refresh deadline across authentication and
+  response reads, even if the request ignores abort; ignore late success after timeout.
+
 - Add Settings platform/Runner observations with readiness, timestamps, reported
   versions/tools and explicit stale, unknown and unreachable states. Expire cached
   Jobs bridge contact and clear it after failed refreshes. Heartbeat status gains

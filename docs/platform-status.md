@@ -4,6 +4,8 @@ Settings displays API/database readiness and account-owned Runner heartbeat
 reports. It refreshes read-only observations every 30 seconds, with an eight-second
 request deadline and a manual **Refresh status** button. This starts no scans,
 worker, installation, repair or update operation. Runner remains explicitly invoked.
+The deadline covers authentication and response-body waits as well as transport;
+timed-out refreshes enable retry and late success cannot replace the failure.
 
 The backend card consumes the existing v1 `/ready` contract. **Ready** requires
 HTTP 200, a connected database and a current Alembic marker. A valid HTTP 503

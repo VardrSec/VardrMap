@@ -27,24 +27,29 @@ export default function PlatformStatusPanel() {
     let active = true;
     let busy = false;
     let request: AbortController | null = null;
+    let cancelDeadline = () => {};
     async function refresh() {
       if (busy) return;
       busy = true;
       setLoading(true);
       const controller = new AbortController();
       request = controller;
-      const timeout = setTimeout(() => controller.abort(), 8000);
+      let timeout: ReturnType<typeof setTimeout>;
+      const deadline = new Promise<never>((_, reject) => {
+        timeout = setTimeout(() => { controller.abort(); reject(new Error("Status request timed out")); }, 8000);
+      });
+      cancelDeadline = () => clearTimeout(timeout);
       async function read<T>(path: string, parse: (value: unknown, status: number) => T | null, save: (result: Observation<T>) => void) {
         let result: Observation<T>;
         try {
-          const response = await authFetch(path, { cache: "no-store", signal: controller.signal });
-          if (!response.ok && response.status !== 503) {
-            result = { kind: "unreachable", receivedAt: Date.now() };
-          } else {
+          async function load(): Promise<Observation<T>> {
+            const response = await authFetch(path, { cache: "no-store", signal: controller.signal });
+            if (!response.ok && response.status !== 503) return { kind:"unreachable", receivedAt:Date.now() };
             const value = await response.json().catch(() => null);
             const parsed = parse(value, response.status);
-            result = parsed ? { kind: "received", value: parsed, receivedAt: Date.now() } : { kind: "unknown", receivedAt: Date.now() };
+            return parsed ? { kind:"received", value:parsed, receivedAt:Date.now() } : { kind:"unknown", receivedAt:Date.now() };
           }
+          result = await Promise.race([load(), deadline]);
         } catch {
           result = { kind: "unreachable", receivedAt: Date.now() };
         }
@@ -56,7 +61,7 @@ export default function PlatformStatusPanel() {
           read("/runner/status", (value, status) => status === 200 ? parseRunnerStatus(value) : null, setRunners),
         ]);
       } finally {
-        clearTimeout(timeout);
+        cancelDeadline();
         busy = false;
         if (active) { setNow(Date.now()); setLoading(false); }
       }
@@ -69,7 +74,7 @@ export default function PlatformStatusPanel() {
     void start();
     const poll = setInterval(() => { void refresh(); }, 30_000);
     const clock = setInterval(() => setNow(Date.now()), 1000);
-    return () => { active = false; request?.abort(); clearInterval(poll); clearInterval(clock); };
+    return () => { active = false; request?.abort(); cancelDeadline(); clearInterval(poll); clearInterval(clock); };
   }, [authFetch, state.session, refreshIndex]);
 
   const ready = backend?.kind === "received" ? backend.value : null;
