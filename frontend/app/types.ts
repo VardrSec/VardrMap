@@ -215,6 +215,7 @@ export type JobEvent = {
 
 export type RunnerInfo = {
   online: boolean;
+  freshness?: "recent" | "stale" | "unknown";
   last_seen: string | null;
   hostname: string | null;
   version: string | null;
@@ -223,7 +224,12 @@ export type RunnerInfo = {
 };
 // Top-level fields mirror the most recently seen runner (backward compat);
 // `runners` lists every machine that has sent a heartbeat.
-export type RunnerStatus = RunnerInfo & { runners?: RunnerInfo[] };
+export type RunnerStatus = RunnerInfo & {
+  runners?: RunnerInfo[];
+  schema_version?: number;
+  checked_at?: string;
+  stale_after_seconds?: number;
+};
 export type UserSettings = { webhook_url: string; notify_min_severity: string };
 export type Section = "dashboard" | "scope" | "overview" | "review" | "findings" | "reports" | "settings";
 export type AppSession = {

@@ -6,7 +6,7 @@ import asyncio
 import json
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
@@ -25,19 +25,22 @@ router = APIRouter(tags=["runner"])
 _ONLINE_TIMEOUT_SECONDS = 300  # 5 minutes
 
 
-def _age_seconds(last_seen: datetime) -> float:
+def _age_seconds(last_seen: datetime, now: datetime | None = None) -> float:
     """Return seconds since last_seen. Handles both naive (SQLite) and aware datetimes."""
-    now = datetime.now(timezone.utc)
+    now = now or datetime.now(timezone.utc)
     if last_seen.tzinfo is None:
         last_seen = last_seen.replace(tzinfo=timezone.utc)
     return (now - last_seen).total_seconds()
 
 
-def _serialize(hb: RunnerHeartbeat) -> dict:
-    age = _age_seconds(hb.last_seen)
+def _serialize(hb: RunnerHeartbeat, now: datetime) -> dict:
+    age = _age_seconds(hb.last_seen, now)
+    last_seen = hb.last_seen.replace(tzinfo=timezone.utc) if hb.last_seen.tzinfo is None else hb.last_seen.astimezone(timezone.utc)
+    freshness = "unknown" if age < 0 else "recent" if age < _ONLINE_TIMEOUT_SECONDS else "stale"
     return {
-        "online":    age < _ONLINE_TIMEOUT_SECONDS,
-        "last_seen": hb.last_seen.isoformat(),
+        "online":    freshness == "recent",
+        "freshness": freshness,
+        "last_seen": last_seen.isoformat(),
         "hostname":  hb.hostname  or "",
         "version":   hb.version   or "",
         "os":        hb.os_info   or "",
@@ -159,6 +162,7 @@ async def stream_job_events(
 
 @router.get("/runner/status")
 def get_runner_status(
+    response: Response,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -168,6 +172,13 @@ def get_runner_status(
     The top-level fields mirror the most recently seen runner for backward
     compatibility; `online` is true if ANY runner is online.
     """
+    response.headers["Cache-Control"] = "no-store"
+    now = datetime.now(timezone.utc)
+    observation = {
+        "schema_version": 1,
+        "checked_at": now.isoformat(),
+        "stale_after_seconds": _ONLINE_TIMEOUT_SECONDS,
+    }
     rows = (
         db.query(RunnerHeartbeat)
         .filter(RunnerHeartbeat.owner_github_id == current_user["github_id"])
@@ -176,6 +187,8 @@ def get_runner_status(
     )
     if not rows:
         return {
+            **observation,
+            "freshness": "unknown",
             "online":    False,
             "last_seen": None,
             "hostname":  None,
@@ -184,9 +197,11 @@ def get_runner_status(
             "tools":     {},
             "runners":   [],
         }
-    runners = [_serialize(hb) for hb in rows]
+    runners = [_serialize(hb, now) for hb in rows]
     most_recent = runners[0]
     return {
+        **observation,
+        "freshness": "recent" if any(r["online"] for r in runners) else most_recent["freshness"],
         "online":    any(r["online"] for r in runners),
         "last_seen": most_recent["last_seen"],
         "hostname":  most_recent["hostname"],

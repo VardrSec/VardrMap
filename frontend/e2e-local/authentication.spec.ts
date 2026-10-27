@@ -48,6 +48,27 @@ test("real HTTPS login, CSRF-protected work, password rotation and logout", asyn
 
   await page.locator("nav").getByRole("button", { name: /Settings$/ }).click();
   await expect(page.getByRole("heading", { name: "Local account password" })).toBeVisible();
+  // Real readiness/heartbeat APIs; the create-all SQLite fixture deliberately
+  // lacks an Alembic marker and must never appear fully ready.
+  const platform = page.getByRole("heading", { name: "Platform and Runner status" }).locator("..");
+  const backendStatus = page.getByRole("region", { name: "Backend readiness" });
+  await expect(backendStatus.getByText("Not ready", { exact: true })).toBeVisible();
+  await expect(platform.getByText("No Runner has reported for this account.")).toBeVisible();
+  const heartbeat = await context.request.post(api + "/runner/heartbeat", {
+    headers: { Origin: "https://127.0.0.1:3007", "X-CSRF-Token": profile.csrfToken },
+    data: { hostname: "browser-fixture-runner", version: "0.51.0", os: "Linux", tools: { httpx: { ok: true, version: "v1.0" } } },
+  });
+  expect(heartbeat.ok()).toBeTruthy();
+  await platform.getByRole("button", { name: "Refresh status" }).click();
+  await expect(platform.getByText("Recent report", { exact: true })).toBeVisible();
+  await expect(platform.getByText(/Reported version 0.51.0/)).toBeVisible();
+  await platform.screenshot({ path: test.info().outputPath("platform-status.png") });
+  // Only transport failure is injected here; real Runner data must stay distinct.
+  await page.route(api + "/ready", route => route.abort("connectionrefused"));
+  await platform.getByRole("button", { name: "Refresh status" }).click();
+  await expect(backendStatus.getByText("Unreachable", { exact: true })).toBeVisible();
+  await expect(platform.getByText("Recent report", { exact: true })).toBeVisible();
+  await page.unroute(api + "/ready");
   await page.screenshot({ path: test.info().outputPath("local-account-settings.png"), fullPage: true });
   await page.getByLabel("Current password").fill(originalPassword);
   await page.getByLabel("New password", { exact: true }).fill(replacementPassword);

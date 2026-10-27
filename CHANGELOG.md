@@ -4,6 +4,12 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Add Settings platform/Runner observations with readiness, timestamps, reported
+  versions/tools and explicit stale, unknown and unreachable states. Expire cached
+  Jobs bridge contact and clear it after failed refreshes. Heartbeat status gains
+  additive freshness metadata and UTC timestamps; no migration or worker is added.
+  See [status behavior](docs/platform-status.md).
+
 - Add non-root backend/frontend development Dockerfiles, allowlisted build
   contexts and image CI. Preserve migrated backend startup; require an explicit
   public API build URL. See [container setup](docs/containers.md).

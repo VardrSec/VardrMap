@@ -1,14 +1,14 @@
 import "@testing-library/jest-dom";
-import { screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 jest.mock("react-markdown", () => ({ __esModule: true, default: ({ children }: { children: string }) => children }));
 jest.mock("remark-gfm", () => ({ __esModule: true, default: () => {} }));
 // Bridge calls Object.entries on runnerStatus.tools before the first fetch resolves.
 // Mock it to a stable stub so tests focus on JobsSection's data / queue logic.
-jest.mock("../jobs/Bridge", () => ({ __esModule: true, default: () => <div data-testid="bridge-stub" /> }));
+jest.mock("../jobs/Bridge", () => ({ __esModule: true, default: ({runnerOnline, runnerStatus}:{runnerOnline:boolean; runnerStatus:unknown}) => <div data-testid="bridge-stub" data-online={String(runnerOnline)} data-has-report={String(runnerStatus !== null)} /> }));
 
-import { renderWithApp } from "../../../test-utils/renderWithApp";
+import { makeAuthFetch, mockResponse, renderWithApp } from "../../../test-utils/renderWithApp";
 import JobsSection from "../JobsSection";
 
 const PROGRAM_ID = "prog-1";
@@ -48,6 +48,29 @@ const NEW_JOB = {
 };
 
 describe("JobsSection", () => {
+  it("clears previous Runner contact when a later poll fails", async () => {
+    jest.useFakeTimers();
+    const checked = new Date().toISOString();
+    const routes = makeAuthFetch({...BASE_ROUTES, "GET /runner/status": {body:{
+      schema_version:1, checked_at:checked, stale_after_seconds:300, runners:[{
+        online:true, freshness:"recent", last_seen:checked, hostname:"fixture", version:"1.0", os:"Linux", tools:{},
+      }],
+    }}});
+    let failed = false;
+    const authFetch = jest.fn((path: string, init?: RequestInit) => path === "/runner/status" && failed ?
+      Promise.resolve(mockResponse({ok:false, status:503})) : routes(path, init));
+    try {
+      const view = renderWithApp(<JobsSection engagementId={PROGRAM_ID} />, {overrides:{authFetch}});
+      await act(async () => { await Promise.resolve(); });
+      expect(screen.getByTestId("bridge-stub")).toHaveAttribute("data-online", "true");
+      failed = true;
+      await act(async () => { jest.advanceTimersByTime(30000); });
+      expect(screen.getByTestId("bridge-stub")).toHaveAttribute("data-online", "false");
+      expect(screen.getByTestId("bridge-stub")).toHaveAttribute("data-has-report", "false");
+      view.unmount();
+    } finally { jest.useRealTimers(); }
+  });
+
   it("fetches jobs, runner status and recon count on mount, and no schedules", async () => {
     const { authFetch } = renderWithApp(
       <JobsSection engagementId={PROGRAM_ID} />,

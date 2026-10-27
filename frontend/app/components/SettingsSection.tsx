@@ -1,6 +1,7 @@
 "use client";
 
 import LocalPasswordForm from "./LocalPasswordForm";
+import PlatformStatusPanel from "./PlatformStatusPanel";
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { ApiKey } from "../types";
@@ -160,6 +161,7 @@ export default function SettingsSection() {
     <div className="space-y-7">
       <SectionHeader title="Settings" description="Manage personal API keys for external tools like Burp Suite." />
       {state.session?.authMethod === "local" && <LocalPasswordForm />}
+      <PlatformStatusPanel />
 
       {newToken && (
         <div className="rounded-xl border border-[#a6e3a1]/30 bg-[#a6e3a1]/5 p-5 space-y-3">
