@@ -4,6 +4,13 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Add an Overview "Client & testing window" and "Written authorization" panel so a
+  researcher can create/link a client, set the testing window and record a written
+  authorization from the interface. These were previously API-only. Viewers do not
+  see the panel; no backend endpoint, field or migration changes, and scope and
+  authorization remain advisory. The browser acceptance suite now records scope
+  and authorization through the UI.
+
 - Pin backend Python and frontend Node container bases to reviewed Debian Trixie
   digests. Remove npm/npx from the web runtime stage; the build stage retains npm
   and its existing lint, type, test and build checks. These image changes address

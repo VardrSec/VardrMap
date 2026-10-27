@@ -5,6 +5,7 @@ import { Engagement, RadarProgram } from "../types";
 import { useAppContext } from "../context/AppContext";
 import { Panel, SectionHeader, Input, Textarea, PrimaryButton, DangerButton } from "./ui";
 import EngagementStatusPanel from "./EngagementStatusPanel";
+import EngagementSetupPanel from "./EngagementSetupPanel";
 
 const SEVERITY_CONFIG = [
   { key: "critical", color: "#f38ba8", label: "Critical" },
@@ -166,6 +167,7 @@ function RadarWidget({ authFetch, setMessage }: { authFetch: (p: string, i?: Req
 
 export default function OverviewSection({ engagement }: { engagement: Engagement }) {
   const { authFetch, setMessage, refreshSelectedEngagement, deleteEngagement, navigate, navigateToDashboard } = useAppContext();
+  const [statusRevision, setStatusRevision] = useState(0);
 
   const [form, setForm] = useState({
     name: engagement.name, platform: engagement.platform, program_url: engagement.program_url,
@@ -221,7 +223,8 @@ export default function OverviewSection({ engagement }: { engagement: Engagement
       </div>
 
       {/* Operational state — authorization, window, stop-work, setup gaps */}
-      <EngagementStatusPanel engagement={engagement} />
+      <EngagementStatusPanel key={statusRevision} engagement={engagement} />
+      <EngagementSetupPanel engagement={engagement} onChanged={() => setStatusRevision((n) => n + 1)} />
 
       {/* Stats */}
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
