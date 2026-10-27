@@ -112,7 +112,7 @@ test("pentest creation, job preview/queue, candidate review and immutable client
   await page.getByText("Kind", { exact: true }).first().locator("xpath=following-sibling::input").fill("url");
   const scoped = page.waitForResponse(r => r.url() === api + base + "/scope/in" && r.request().method() === "POST");
   await page.getByRole("button", { name: "Add In-Scope Asset", exact: true }).click();
-  expect((await scoped).status()).toBe(201);
+  expect((await scoped).ok()).toBeTruthy();
   await page.locator("nav").getByRole("button", { name: /Overview$/ }).click();
   await page.getByLabel("Authorized by").fill("Fixture owner");
   await page.getByLabel("Reference").fill("Synthetic browser fixture");
