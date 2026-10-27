@@ -4,6 +4,10 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Accept Runner's existing `policy_warning` lifecycle events so advisory policy
+  messages persist in the job history instead of returning 422. Existing event
+  access checks and job/stop-work behavior are unchanged; no migration is required.
+
 - Enforce a hard eight-second status refresh deadline across authentication and
   response reads, even if the request ignores abort; ignore late success after timeout.
 

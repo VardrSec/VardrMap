@@ -1224,6 +1224,7 @@ VardrRunner posts a lifecycle event for a job it owns.
 |---|---|
 | `started` | Runner claims the job and begins execution |
 | `targets_resolved` | Target list has been built (text: count and source) |
+| `policy_warning` | Runner reports advisory engagement/authorization/scope warnings; recording the event does not change job state or grant permission |
 | `running` | Tool subprocess has been launched (text: tool + target count) |
 | `uploaded` | Results uploaded successfully (text: count of imported items) |
 | `done` | Job completed successfully |

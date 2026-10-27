@@ -65,14 +65,29 @@ class TestPostJobEvent:
         assert res.status_code == 201
         assert res.json()["text"] == ""
 
-    def test_unauthorized(self, client, program_id, auth_headers):
+    @pytest.mark.parametrize("kind", ["started", "policy_warning"])
+    def test_unauthorized(self, client, program_id, auth_headers, kind):
         jid = _make_job(client, program_id, auth_headers)
-        res = _post_event(client, jid, {})
+        res = _post_event(client, jid, {}, kind=kind)
         assert res.status_code == 401
 
-    def test_wrong_user_404(self, client, program_id, auth_headers, other_headers):
+    def test_runner_policy_warning_is_retained_without_changing_job(self, client, program_id, auth_headers):
         jid = _make_job(client, program_id, auth_headers)
-        res = _post_event(client, jid, other_headers)
+        token = client.post("/auth/apikeys", headers=auth_headers,
+                            json={"label": "warning contract", "scope": "runner"}).json()["token"]
+        text = "Engagement status is planned; operator review required."
+        response = _post_event(client, jid, {"Authorization": "Bearer " + token},
+                               kind="policy_warning", text=text)
+        assert response.status_code == 201
+        events = client.get(f"/jobs/{jid}/events", headers=auth_headers).json()["events"]
+        assert [(e["kind"], e["text"]) for e in events] == [("policy_warning", text)]
+        job = client.get(f"/engagements/{program_id}/jobs", headers=auth_headers).json()["jobs"][0]
+        assert job["status"] == "pending"
+
+    @pytest.mark.parametrize("kind", ["started", "policy_warning"])
+    def test_wrong_user_404(self, client, program_id, auth_headers, other_headers, kind):
+        jid = _make_job(client, program_id, auth_headers)
+        res = _post_event(client, jid, other_headers, kind=kind)
         assert res.status_code == 404
 
     def test_nonexistent_job_404(self, client, auth_headers):

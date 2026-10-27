@@ -38,7 +38,7 @@ from notifications import send_webhook
 router = APIRouter(tags=["jobs"])
 
 
-EventKind = Literal["started", "targets_resolved", "target_stats", "target_warning", "blocked", "running", "uploaded", "done", "failed", "log"]
+EventKind = Literal["started", "targets_resolved", "target_stats", "target_warning", "policy_warning", "blocked", "running", "uploaded", "done", "failed", "log"]
 
 
 class EventCreate(BaseModel):
