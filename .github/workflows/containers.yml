@@ -1,0 +1,19 @@
+name: Development containers
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  images:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build backend image
+        run: docker build -t vardrmap-api:smoke backend
+      - name: Verify backend migrations are packaged
+        run: docker run --rm --network none --entrypoint alembic vardrmap-api:smoke heads
+      - name: Build and verify frontend image
+        run: docker build --build-arg NEXT_PUBLIC_API_URL=https://localhost:8443/backend -t vardrmap-web:smoke frontend

@@ -433,3 +433,7 @@ Backend regression tests cover unknown/partial decisions and case edit races.
 PostgreSQL checks include upgrade/downgrade and SET NULL retention. Browser
 acceptance exercises playbook guidance, partial assessments and evidence linking;
 the loopback three-repository harness exercises actual Gate execution.
+
+## Container development
+
+See [container setup](containers.md) for build contexts, non-root runtime, build-time API URL and proxy trust. These images retain the existing hosted authentication configuration.

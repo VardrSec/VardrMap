@@ -4,6 +4,10 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Add non-root backend/frontend development Dockerfiles, allowlisted build
+  contexts and image CI. Preserve migrated backend startup; require an explicit
+  public API build URL. See [container setup](docs/containers.md).
+
 - Add public, value-free `GET /ready` database/Alembic-marker readiness for Runner
   installation diagnostics. Keep `/health` liveness unchanged; probes preserve
   TLS policy, do not apply migrations and return 503 on uncertainty. No migration

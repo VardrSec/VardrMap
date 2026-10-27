@@ -1,0 +1,12 @@
+**
+!*.py
+!requirements.txt
+!start.sh
+!alembic.ini
+!api_playbooks.json
+!routers/
+!routers/**
+!migrations/
+!migrations/**
+**/__pycache__/
+**/*.pyc
