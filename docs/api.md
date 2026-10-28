@@ -1980,6 +1980,11 @@ for this operation: `evaluated`, `inconclusive`, `missing`, `skipped`, `reviewed
 or `not_reviewed` (not in a reviewed case for this operation: a gap in what was
 reviewed, not a claim about what should be allowed).
 
+Operations with a violation candidate also carry `candidate_evidence` (at most 10 references:
+`evidence_id`, `job_id`, `case_id`, `identity_id`, `content_hash` and the reviewed/observed pair). They are
+metadata only; the redacted record itself is read through `GET /engagements/{id}/evidence` with the
+same `job_id`, `case_id` and `identity_id`, and its `content_hash` can be compared with the reference.
+
 Each operation also carries `priority_reasons`, the captured facts that make its boundary worth
 testing, each with a `code` and a plain-language `detail`: `object_identifier_in_path`,
 `state_changing_method`, `boundary_fields_in_requests` (request parameter names such as `role`,
