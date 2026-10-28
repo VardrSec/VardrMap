@@ -4,6 +4,14 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Let a case draft reuse the engagement's existing identities: `POST /engagements/{id}/test-cases/preview`
+  accepts optional `identity_ids` and copies only each identity's id and credential reference from
+  the engagement's stored cases (never a value, a preflight or another engagement's identity;
+  unknown ids are refused). Every expected access stays `skip` until a person decides. The
+  authorization coverage panel gains a "Draft test" action on operations with identities that
+  have not been evaluated, which selects the operation and those identities in the case builder.
+  Omitting `identity_ids` keeps the generic anonymous/member template.
+
 - Add authorization coverage to the API Surface: a read-only `GET /engagements/{id}/api/coverage`
   and a panel that join observed operations, reviewed cases, executed Gate assessments,
   candidates and evidence, so a researcher can see which operations are untested, reviewed but

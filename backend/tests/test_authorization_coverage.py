@@ -268,3 +268,64 @@ def test_cases_from_another_engagement_never_count(client, auth_headers, program
         assert data["identities"] == []
     finally:
         client.delete(f"/programs/{other}", headers=auth_headers)
+
+
+# --------------------------------------------------------------------------- #
+# Drafting a case for an operation from the engagement's existing identities
+# --------------------------------------------------------------------------- #
+
+def preview(client, headers, pid, **body):
+    return client.post(f"/engagements/{pid}/test-cases/preview", headers=headers, json=body)
+
+
+def test_draft_reuses_engagement_identities_as_references_only(client, auth_headers, program_id):
+    capture(client, auth_headers, program_id, "GET", "/orders/7")
+    store(client, auth_headers, program_id, spec("orders", "GET", "/orders/42", [OWNER, PEER, TENANT_B, ANONYMOUS], EXPECT))
+    endpoint = coverage(client, auth_headers, program_id)["operations"][0]["endpoint_id"]
+
+    res = preview(client, auth_headers, program_id, endpoint_ids=[endpoint], identity_ids=["tenant-b", "owner", "anonymous"])
+    assert res.status_code == 200, res.text
+    draft = res.json()["drafts"][0]["spec"]
+    assert [i["id"] for i in draft["identities"]] == ["tenant-b", "owner", "anonymous"]
+    assert draft["identities"][0]["credential"] == {"type": "bearer", "value_env": "TENANT_B_TOKEN"}
+    assert draft["identities"][2]["credential"] == {"type": "static_header"}
+    # Access policy is never inferred: every decision stays at skip until a human sets it.
+    assert {e["decision"] for e in draft["expected_access"]} == {"skip"}
+    assert not any("preflight" in i or "value" in i["credential"] for i in draft["identities"])
+
+
+def test_drafts_without_identity_ids_are_unchanged(client, auth_headers, program_id):
+    capture(client, auth_headers, program_id, "GET", "/orders/7")
+    endpoint = coverage(client, auth_headers, program_id)["operations"][0]["endpoint_id"]
+    draft = preview(client, auth_headers, program_id, endpoint_ids=[endpoint]).json()["drafts"][0]["spec"]
+    assert [i["id"] for i in draft["identities"]] == ["anonymous", "member"]
+
+
+def test_unknown_identities_are_refused_and_other_engagements_never_leak(client, auth_headers, program_id):
+    capture(client, auth_headers, program_id, "GET", "/orders/7")
+    endpoint = coverage(client, auth_headers, program_id)["operations"][0]["endpoint_id"]
+    other = client.post("/programs", json={"name": "Elsewhere"}, headers=auth_headers).json()["id"]
+    try:
+        store(client, auth_headers, other, spec("secret-case", "GET", "/x/1", [identity("elsewhere-only")], {"elsewhere-only": "allow"}))
+        res = preview(client, auth_headers, program_id, endpoint_ids=[endpoint], identity_ids=["elsewhere-only"])
+        assert res.status_code == 400 and "elsewhere-only" in res.text
+    finally:
+        client.delete(f"/programs/{other}", headers=auth_headers)
+
+
+def test_drafting_stores_nothing_and_respects_engagement_access(client, auth_headers, other_headers, program_id):
+    capture(client, auth_headers, program_id, "GET", "/orders/7")
+    store(client, auth_headers, program_id, spec("orders", "GET", "/orders/42", [OWNER, PEER], EXPECT))
+    endpoint = coverage(client, auth_headers, program_id)["operations"][0]["endpoint_id"]
+    db = SessionLocal()
+    try:
+        before = db.query(AuthorizationTestCase).count()
+    finally:
+        db.close()
+    assert preview(client, auth_headers, program_id, endpoint_ids=[endpoint], identity_ids=["owner"]).status_code == 200
+    assert preview(client, other_headers, program_id, endpoint_ids=[endpoint], identity_ids=["owner"]).status_code == 404
+    db = SessionLocal()
+    try:
+        assert db.query(AuthorizationTestCase).count() == before
+    finally:
+        db.close()

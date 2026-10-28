@@ -1616,6 +1616,11 @@ required for OpenAPI documents without a `servers` entry), `limit` (1-100, defau
 Each draft has an `anonymous` and a `member` identity (the member's token is a `value_env`
 reference, never a value). `404` for endpoint ids not in this engagement.
 
+Optional `identity_ids` (max 20) replaces that template with identities this engagement already
+declared in its stored cases: only each identity's `id` and credential reference are copied (never a
+value, never a preflight) and every expected access is `skip`. An id that no case of this engagement
+declares is `400`; other engagements' identities are never consulted.
+
 ### `POST /engagements/{program_id}/test-cases/reviewed`
 Save drafts after review (`201`). Members and owners only. The body must carry **`"reviewed": true`**
 and 1-100 `cases`. Each case is validated like a normal create, and additionally must have a

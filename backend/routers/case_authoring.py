@@ -25,6 +25,9 @@ class DraftRequest(BaseModel):
     endpoint_ids: list[str] = Field(default_factory=list, max_length=100)
     openapi: dict | None = None
     base_url: str = Field(default="", max_length=2000)
+    # Reuse identities this engagement already declared (id and credential reference
+    # only), instead of the generic anonymous/member template.
+    identity_ids: list[str] = Field(default_factory=list, max_length=20)
     limit: int = Field(default=50, ge=1, le=100)
     offset: int = Field(default=0, ge=0)
 
@@ -79,8 +82,34 @@ def _openapi_operations(document, override):
     return operations
 
 
-def _draft(method, url, source):
-    identities = [
+def _known_identities(db, program_id, wanted):
+    """Identity declarations from this engagement's stored cases, minus anything secret.
+
+    Only the id and the credential *reference* are copied. Preflight checks are tied
+    to a specific URL and expected principal, so they are never carried over, and a
+    literal credential value is dropped even though stored cases cannot contain one.
+    """
+    found = {}
+    rows = (
+        db.query(AuthorizationTestCase)
+        .filter(AuthorizationTestCase.program_id == program_id)
+        .order_by(AuthorizationTestCase.created_at, AuthorizationTestCase.id)
+        .all()
+    )
+    for row in rows:
+        for identity in (row.spec or {}).get("identities") or []:
+            ident = identity.get("id") if isinstance(identity, dict) else None
+            if ident in wanted and ident not in found:
+                credential = identity.get("credential") if isinstance(identity.get("credential"), dict) else {}
+                found[ident] = {"id": ident, "credential": {k: v for k, v in credential.items() if k != "value"}}
+    missing = [i for i in wanted if i not in found]
+    if missing:
+        raise HTTPException(400, f"Unknown identity in this engagement: {', '.join(sorted(set(missing)))}")
+    return [found[i] for i in dict.fromkeys(wanted)]
+
+
+def _draft(method, url, source, identities=None):
+    identities = identities or [
         {"id": "anonymous", "credential": {"type": "static_header", "header": "", "value": ""}},
         {"id": "member", "credential": {"type": "bearer", "value_env": "VARDRGATE_MEMBER_TOKEN"}},
     ]
@@ -113,7 +142,8 @@ def preview_cases(program_id: str, body: DraftRequest, current_user: dict = Depe
             operations.append((row.method, base + row.path_template, "observed API operation"))
     page = operations[body.offset:body.offset + body.limit]
     end = body.offset + len(page)
-    return {"drafts": [_draft(*op) for op in page], "total": len(operations), "offset": body.offset, "limit": body.limit, "next_offset": end if end < len(operations) else None,
+    reuse = _known_identities(db, program_id, body.identity_ids) if body.identity_ids else None
+    return {"drafts": [_draft(*op, copy.deepcopy(reuse) if reuse else None) for op in page], "total": len(operations), "offset": body.offset, "limit": body.limit, "next_offset": end if end < len(operations) else None,
             "review_notes": ["No cases have been stored or queued.", "Replace path variables and review request bodies for mutating operations.", "Set identity secret references and decide expected access; observed responses do not determine authorization policy."]}
 
 
