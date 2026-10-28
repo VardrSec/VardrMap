@@ -357,6 +357,7 @@ def _operation(
             "expected": decisions,
             "queued_jobs": queued_by_case.get(case.id, 0),
             "executed": latest is not None,
+            "identity_states": {},
             "stale_runs": len(stale),
             "latest_job_id": latest.id if latest else None,
             "assessment_status": (latest.assessment or {}).get("status") if latest else None,
@@ -373,6 +374,7 @@ def _operation(
                         "reason": str(item.get("reason") or ""),
                         "expected": str(item.get("expected_decision") or "unknown"),
                     }
+        case_entries[-1]["identity_states"] = {i: rows[i]["state"] for i in identities if i in rows}
         for identity in identities:
             declared[identity].append(case.id)
             per_case_identity[identity][case.id] = (

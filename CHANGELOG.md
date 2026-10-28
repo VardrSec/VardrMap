@@ -4,6 +4,13 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Add Authorization Relationship Intelligence: a read-only `GET /engagements/{id}/api/relationships` and a
+  Boundary questions panel. From the tenants, roles and resource owners declared in reviewed cases it
+  classifies callers (different tenant, same-tenant peer, higher role than the owner, no credentials) and lists
+  the boundaries on each worth-testing operation that have no current, evaluated result, with the facts that
+  make each question askable. It infers nothing from traffic, never assumes an undeclared tenant or role, treats
+  an edited case's earlier run as history, and presents hypotheses, not findings. No migration or new table.
+
 - Fix authorization coverage attribution. A case edited after it ran no longer inherits the old run's
   coverage: a run is current only if its claim-time snapshot hashes to the case's present spec and was
   verified; otherwise it is kept as `historical_assessments` (case modified, case deleted or snapshot

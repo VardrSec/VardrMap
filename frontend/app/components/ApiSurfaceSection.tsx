@@ -6,6 +6,7 @@ import { useAppContext } from "../context/AppContext";
 import { Panel } from "./ui";
 import AuthorizationCaseBuilder from "./AuthorizationCaseBuilder";
 import AuthorizationCoveragePanel from "./AuthorizationCoveragePanel";
+import AuthorizationRelationshipsPanel from "./AuthorizationRelationshipsPanel";
 
 const methodColor: Record<string, string> = {
   GET: "#4ade80", POST: "#89b4fa", PUT: "#f59e0b", PATCH: "#c084fc", DELETE: "#f87171",
@@ -71,6 +72,8 @@ export default function ApiSurfaceSection({ engagementId }: { engagementId: stri
 
     <AuthorizationCoveragePanel key={engagementId} engagementId={engagementId}
       onDraft={(endpointId, identityIds) => { setDraftIds([endpointId]); setDraftIdentityIds(identityIds); setMessage("Operation selected for drafting with this engagement's identities. Generate drafts above, then set every access decision yourself."); }} />
+
+    <AuthorizationRelationshipsPanel key={`rel-${engagementId}`} engagementId={engagementId} />
 
     <Panel title="Observed API operations">
       <div className="mb-4 flex flex-wrap gap-2">
