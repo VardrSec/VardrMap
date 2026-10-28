@@ -49,7 +49,7 @@ function StateBadge({ state }: { state: CoverageState }) {
     style={{ color: STATE_COLOR[state], background: `${STATE_COLOR[state]}1f` }}>{STATE_LABEL[state]}</span>;
 }
 
-export default function AuthorizationCoveragePanel({ engagementId }: { engagementId: string }) {
+export default function AuthorizationCoveragePanel({ engagementId, onDraft }: { engagementId: string; onDraft?: (endpointId: string, identityIds: string[]) => void }) {
   const { authFetch, setMessage } = useAppContext();
   const [state, setState] = useState<CoverageState | "">("");
   // Loading is derived from which request the stored result answers, so the effect
@@ -102,7 +102,7 @@ export default function AuthorizationCoveragePanel({ engagementId }: { engagemen
     {loading && <p className="py-6 text-center text-sm text-muted">Computing coverage…</p>}
     {!loading && operations.length === 0 && <p className="py-6 text-center text-sm text-muted">No operations in this state.</p>}
     {!loading && operations.length > 0 && <div className="overflow-x-auto"><table className="w-full text-left text-xs">
-      <thead><tr className="border-b border-[#2e2e2e]">{["Operation", "State", "Candidates", "Identities"].map((h) =>
+      <thead><tr className="border-b border-[#2e2e2e]">{["Operation", "State", "Candidates", "Identities", ""].map((h) =>
         <th key={h} className="pb-2 pr-4 font-semibold uppercase tracking-widest text-muted">{h}</th>)}</tr></thead>
       <tbody>{operations.map((op) => <tr key={op.endpoint_id} className="border-b border-[#1e1e1e] align-top">
         <td className="py-2.5 pr-4"><div className="font-mono text-[#f1f5f9]">{op.method} {op.path_template}</div>
@@ -117,6 +117,10 @@ export default function AuthorizationCoveragePanel({ engagementId }: { engagemen
             style={{ color: IDENTITY_COLOR[row.state] ?? "#94a3b8", borderColor: `${IDENTITY_COLOR[row.state] ?? "#94a3b8"}55` }}>
             {row.identity_id} · {IDENTITY_LABEL[row.state] ?? row.state}
           </span>)}{op.identity_coverage.length === 0 && <span className="text-muted">no identities declared in this engagement</span>}</div></td>
+        <td className="py-2.5 pl-3 text-right">{onDraft && op.identity_coverage.some((row) => row.state !== "evaluated") &&
+          <button type="button" onClick={() => onDraft(op.endpoint_id, op.identity_coverage.map((row) => row.identity_id))}
+            aria-label={`Draft a test for ${op.method} ${op.path_template}`}
+            className="rounded px-2 py-1 text-[10px] text-[#89b4fa] hover:bg-[#2e2e2e]">Draft test</button>}</td>
       </tr>)}</tbody>
     </table></div>}
     {!loading && (data?.unmatched_cases.length ?? 0) > 0 && <details className="mt-4 rounded border border-[#2e2e2e] bg-[#111] p-3 text-xs text-[#94a3b8]">

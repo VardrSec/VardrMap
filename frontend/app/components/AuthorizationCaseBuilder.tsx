@@ -5,7 +5,7 @@ import { useAppContext } from "../context/AppContext";
 import { Panel } from "./ui";
 import { buttonClass, errorText, Field, fieldClass, Pages, requestJson } from "./workflowUi";
 
-export default function AuthorizationCaseBuilder({ engagementId, endpointIds }: { engagementId: string; endpointIds: string[] }) {
+export default function AuthorizationCaseBuilder({ engagementId, endpointIds, identityIds = [] }: { engagementId: string; endpointIds: string[]; identityIds?: string[] }) {
   const { authFetch, selectedEngagement } = useAppContext();
   const [source, setSource] = useState("operations");
   const [document, setDocument] = useState("");
@@ -24,7 +24,7 @@ export default function AuthorizationCaseBuilder({ engagementId, endpointIds }: 
   async function preview(nextOffset = 0) {
     setBusy(true); setError(""); setMessage(""); setReviewed(false);
     try {
-      const input = source === "operations" ? { endpoint_ids: endpointIds } : { openapi: JSON.parse(document) };
+      const input = source === "operations" ? { endpoint_ids: endpointIds, ...(identityIds.length ? { identity_ids: identityIds } : {}) } : { openapi: JSON.parse(document) };
       const data = await requestJson<{ drafts: unknown[]; total: number }>(authFetch, path + "/preview", { method: "POST", body: JSON.stringify({ ...input, base_url: baseUrl, limit: 50, offset: nextOffset }) });
       setDrafts(JSON.stringify(data.drafts, null, 2)); setTotal(data.total); setCount(data.drafts.length); setOffset(nextOffset);
       setMessage("Drafts are ready for review. No cases have been stored or queued.");
@@ -45,7 +45,7 @@ export default function AuthorizationCaseBuilder({ engagementId, endpointIds }: 
       <p className="text-sm text-[#94a3b8]">Choose observed Burp operations below or load an OpenAPI 3.x JSON document. Review concrete URLs, request bodies, identity references, and expected access before saving.</p>
       {error && <p role="alert" className="text-sm text-red-400">{error}</p>}{message && <p role="status" className="text-sm text-[#a6e3a1]">{message}</p>}
       <fieldset className="space-y-3" disabled={busy}>
-        <Field label="Draft source"><select className={fieldClass} value={source} onChange={e => { setSource(e.target.value); setDrafts(""); setReviewed(false); }}><option value="operations">Selected observed operations ({endpointIds.length})</option><option value="openapi">OpenAPI JSON</option></select></Field>
+        <Field label="Draft source"><select className={fieldClass} value={source} onChange={e => { setSource(e.target.value); setDrafts(""); setReviewed(false); }}><option value="operations">Selected observed operations ({endpointIds.length}){identityIds.length ? ` · ${identityIds.length} engagement identities` : ""}</option><option value="openapi">OpenAPI JSON</option></select></Field>
         {source === "openapi" && <><Field label="OpenAPI JSON file"><input type="file" accept=".json,application/json" className={fieldClass} onChange={async e => {
           const file = e.target.files?.[0]; if (!file) return;
           if (file.size > 2 * 1024 * 1024) { setError("OpenAPI file exceeds 2 MiB."); return; }

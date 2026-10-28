@@ -102,3 +102,36 @@ describe("AuthorizationCoveragePanel", () => {
     await waitFor(() => expect(screen.queryByText("Computing coverage…")).not.toBeInTheDocument());
   });
 });
+
+describe("AuthorizationCoveragePanel drafting", () => {
+  it("offers a draft only where an identity has not been evaluated, passing every engagement identity", async () => {
+    const onDraft = jest.fn();
+    renderWithApp(<AuthorizationCoveragePanel engagementId="eng-1" onDraft={onDraft} />, {
+      routes: { "GET /engagements/eng-1/api/coverage?limit=500": { body: coverage } },
+    });
+    await screen.findByText("GET /orders/{id}");
+    // All three fixture operations have an identity that is not evaluated.
+    expect(screen.getAllByRole("button", { name: /Draft a test for/ })).toHaveLength(3);
+    await userEvent.click(screen.getByRole("button", { name: "Draft a test for GET /orders/{id}" }));
+    expect(onDraft).toHaveBeenCalledWith("e1", ["owner", "peer", "tenant-b"]);
+  });
+
+  it("offers no draft when every identity already has an evaluated result", async () => {
+    const complete = {
+      ...coverage,
+      summary: { ...coverage.summary, total: 1 },
+      operations: [{
+        ...coverage.operations[0],
+        identity_coverage: [
+          { identity_id: "owner", state: "evaluated", reason: "reported_allow_or_deny", expected: "allow" },
+          { identity_id: "peer", state: "evaluated", reason: "reported_allow_or_deny", expected: "deny" },
+        ],
+      }],
+    };
+    renderWithApp(<AuthorizationCoveragePanel engagementId="eng-1" onDraft={jest.fn()} />, {
+      routes: { "GET /engagements/eng-1/api/coverage?limit=500": { body: complete } },
+    });
+    await screen.findByText("GET /orders/{id}");
+    expect(screen.queryByRole("button", { name: /Draft a test for/ })).not.toBeInTheDocument();
+  });
+});
