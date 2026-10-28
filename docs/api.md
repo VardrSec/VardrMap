@@ -1980,6 +1980,15 @@ for this operation: `evaluated`, `inconclusive`, `missing`, `skipped`, `reviewed
 or `not_reviewed` (not in a reviewed case for this operation: a gap in what was
 reviewed, not a claim about what should be allowed).
 
+Each operation also carries `priority_reasons`, the captured facts that make its boundary worth
+testing, each with a `code` and a plain-language `detail`: `object_identifier_in_path`,
+`state_changing_method`, `boundary_fields_in_requests` (request parameter names such as `role`,
+`tenant_id` or `price`), `success_for_multiple_identities` and `anonymous_success_observed` (both from
+captured 2xx responses; a refused request is never counted). They are read from stored captures and are
+not a verdict or a score. `sort=priority` orders operations deterministically: violation candidates,
+then untested, reviewed-not-executed, inconclusive, partial and conclusive, with more reasons first
+within a state; it never hides an operation.
+
 ### `DELETE /engagements/{program_id}/api/exchanges/{exchange_id}`
 
 Delete one retained exchange and decrement its operation's observation count.

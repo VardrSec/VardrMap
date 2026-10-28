@@ -4,6 +4,12 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Add `priority_reasons` and `sort=priority` to authorization coverage. Each operation lists the stored
+  facts that make its boundary worth testing (object identifier in the route, state-changing method,
+  boundary-style request fields, 2xx captured for several identities or without credentials), and the
+  panel can order operations least-tested first. Reasons come only from captured records, are
+  explained rather than scored, and never remove an operation from the list.
+
 - Let a case draft reuse the engagement's existing identities: `POST /engagements/{id}/test-cases/preview`
   accepts optional `identity_ids` and copies only each identity's id and credential reference from
   the engagement's stored cases (never a value, a preflight or another engagement's identity;

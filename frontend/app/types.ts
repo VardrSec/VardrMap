@@ -103,6 +103,7 @@ export type CoverageIdentity = {
 export type CoverageOperation = {
   endpoint_id: string; method: string; scheme: string; host: string; port: number | null;
   path_template: string; observed_identities: string[]; state: CoverageState;
+  priority_reasons: { code: string; detail: string }[];
   cases: {
     case_id: string; name: string; test_case_id: string; identities: string[];
     expected: Record<string, string>; queued_jobs: number; executed: boolean;

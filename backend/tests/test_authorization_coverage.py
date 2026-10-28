@@ -50,11 +50,11 @@ def clean_run(people=CAST):
     return rows
 
 
-def capture(client, headers, pid, method, path, label="owner"):
+def capture(client, headers, pid, method, path, label="owner", body="", status=200):
     res = client.post(
         f"/engagements/{pid}/api/exchanges",
         headers=headers,
-        json={"method": method, "url": f"{HOST}{path}", "identity_label": label, "response_status": 200},
+        json={"method": method, "url": f"{HOST}{path}", "identity_label": label, "response_status": status, "request_body": body},
     )
     assert res.status_code == 201, res.text
 
@@ -329,3 +329,53 @@ def test_drafting_stores_nothing_and_respects_engagement_access(client, auth_hea
         assert db.query(AuthorizationTestCase).count() == before
     finally:
         db.close()
+
+
+# --------------------------------------------------------------------------- #
+# Why a boundary may matter, and the order to look in
+# --------------------------------------------------------------------------- #
+
+def reasons(op):
+    return {r["code"] for r in op["priority_reasons"]}
+
+
+def test_priority_reasons_come_only_from_captured_facts(client, auth_headers, program_id):
+    capture(client, auth_headers, program_id, "GET", "/orders/7", label="owner")
+    capture(client, auth_headers, program_id, "GET", "/orders/8", label="peer")
+    capture(client, auth_headers, program_id, "POST", "/orders/7/refund", body='{"amount": 5, "role": "admin"}')
+    capture(client, auth_headers, program_id, "GET", "/health", label="anonymous")
+    capture(client, auth_headers, program_id, "GET", "/denied/1", label="peer", status=403)
+    data = coverage(client, auth_headers, program_id)
+
+    orders = operation(data, "GET", "/orders/{id}")
+    assert reasons(orders) == {"object_identifier_in_path", "success_for_multiple_identities"}
+    refund = operation(data, "POST", "/orders/{id}/refund")
+    assert reasons(refund) == {"object_identifier_in_path", "state_changing_method", "boundary_fields_in_requests"}
+    assert "role" in next(r for r in refund["priority_reasons"] if r["code"] == "boundary_fields_in_requests")["detail"]
+    assert reasons(operation(data, "GET", "/health")) == {"anonymous_success_observed"}
+    # A refused request is not evidence of access, and a plain static route has no reason to flag.
+    assert reasons(operation(data, "GET", "/denied/{id}")) == {"object_identifier_in_path"}
+
+
+def test_priority_sort_is_deterministic_and_never_hides_operations(client, auth_headers, program_id):
+    build_engagement(client, auth_headers, program_id)
+    capture(client, auth_headers, program_id, "GET", "/orders/8", label="peer")
+    default = coverage(client, auth_headers, program_id)
+    ranked = coverage(client, auth_headers, program_id, sort="priority")
+    assert ranked["filtered_total"] == default["filtered_total"] == 6
+    assert {o["endpoint_id"] for o in ranked["operations"]} == {o["endpoint_id"] for o in default["operations"]}
+    order = [o["state"] for o in ranked["operations"]]
+    assert order[0] == "violation_candidate"
+    assert order.index("untested") < order.index("reviewed_not_executed") < order.index("inconclusive")
+    assert order.index("inconclusive") < order.index("partial") < order.index("conclusive")
+    assert [o["endpoint_id"] for o in ranked["operations"]] == [
+        o["endpoint_id"] for o in coverage(client, auth_headers, program_id, sort="priority")["operations"]
+    ]
+    assert client.get(f"/engagements/{program_id}/api/coverage", headers=auth_headers, params={"sort": "random"}).status_code == 422
+
+
+def test_more_captured_reasons_rank_first_within_a_state(client, auth_headers, program_id):
+    capture(client, auth_headers, program_id, "GET", "/plain")
+    capture(client, auth_headers, program_id, "DELETE", "/orders/7")
+    ranked = coverage(client, auth_headers, program_id, sort="priority")["operations"]
+    assert [o["path_template"] for o in ranked] == ["/orders/{id}", "/plain"]
