@@ -54,7 +54,8 @@ export default function AuthorizationCoveragePanel({ engagementId, onDraft }: { 
   const [state, setState] = useState<CoverageState | "">("");
   // Loading is derived from which request the stored result answers, so the effect
   // never sets state synchronously (only after the response arrives).
-  const requestKey = `${engagementId}|${state}`;
+  const [byPriority, setByPriority] = useState(false);
+  const requestKey = `${engagementId}|${state}|${byPriority}`;
   const [result, setResult] = useState<{ key: string; data: AuthorizationCoverage | null }>({ key: "", data: null });
 
   useEffect(() => {
@@ -63,6 +64,7 @@ export default function AuthorizationCoveragePanel({ engagementId, onDraft }: { 
       try {
         const params = new URLSearchParams({ limit: "500" });
         if (state) params.set("state", state);
+        if (byPriority) params.set("sort", "priority");
         const res = await authFetch(`/engagements/${engagementId}/api/coverage?${params}`);
         if (!res.ok) throw new Error();
         const body = (await res.json()) as AuthorizationCoverage;
@@ -75,7 +77,7 @@ export default function AuthorizationCoveragePanel({ engagementId, onDraft }: { 
       }
     })();
     return () => { cancelled = true; };
-  }, [authFetch, engagementId, requestKey, setMessage, state]);
+  }, [authFetch, byPriority, engagementId, requestKey, setMessage, state]);
 
   const loading = result.key !== requestKey;
   const data = result.data;
@@ -99,6 +101,10 @@ export default function AuthorizationCoveragePanel({ engagementId, onDraft }: { 
         <div className="mt-1 text-[10px] uppercase tracking-widest text-muted">{STATE_LABEL[key]}</div>
       </button>)}
     </div>}
+    <label className="mb-3 flex items-center gap-2 text-xs text-[#94a3b8]">
+      <input type="checkbox" checked={byPriority} onChange={(e) => setByPriority(e.target.checked)} />
+      Look here first: least-tested states first, then operations with more reasons to look.
+    </label>
     {loading && <p className="py-6 text-center text-sm text-muted">Computing coverage…</p>}
     {!loading && operations.length === 0 && <p className="py-6 text-center text-sm text-muted">No operations in this state.</p>}
     {!loading && operations.length > 0 && <div className="overflow-x-auto"><table className="w-full text-left text-xs">
@@ -106,7 +112,9 @@ export default function AuthorizationCoveragePanel({ engagementId, onDraft }: { 
         <th key={h} className="pb-2 pr-4 font-semibold uppercase tracking-widest text-muted">{h}</th>)}</tr></thead>
       <tbody>{operations.map((op) => <tr key={op.endpoint_id} className="border-b border-[#1e1e1e] align-top">
         <td className="py-2.5 pr-4"><div className="font-mono text-[#f1f5f9]">{op.method} {op.path_template}</div>
-          <div className="mt-0.5 text-[10px] text-muted">{op.host}</div></td>
+          <div className="mt-0.5 text-[10px] text-muted">{op.host}</div>
+          {(op.priority_reasons ?? []).length > 0 && <ul className="mt-1 space-y-0.5 text-[10px] text-[#a1a1aa]">
+            {op.priority_reasons.map((reason) => <li key={reason.code}>{reason.detail}</li>)}</ul>}</td>
         <td className="py-2.5 pr-4"><StateBadge state={op.state} />
           {op.cases.length > 0 && <div className="mt-1 text-[10px] text-muted">{op.cases.length} reviewed case{op.cases.length === 1 ? "" : "s"}</div>}</td>
         <td className="py-2.5 pr-4 font-mono text-[#94a3b8]">{op.candidates.open + op.candidates.promoted > 0

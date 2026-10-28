@@ -135,3 +135,32 @@ describe("AuthorizationCoveragePanel drafting", () => {
     expect(screen.queryByRole("button", { name: /Draft a test for/ })).not.toBeInTheDocument();
   });
 });
+
+describe("AuthorizationCoveragePanel priority", () => {
+  const withReasons = {
+    ...coverage,
+    operations: coverage.operations.map((op, i) => ({
+      ...op,
+      priority_reasons: i === 0 ? [{ code: "object_identifier_in_path", detail: "The route addresses an object by identifier (object-level access)." }] : [],
+    })),
+  };
+
+  it("explains why an operation may matter using the reasons the backend captured", async () => {
+    renderWithApp(<AuthorizationCoveragePanel engagementId="eng-1" />, {
+      routes: { "GET /engagements/eng-1/api/coverage?limit=500": { body: withReasons } },
+    });
+    expect(await screen.findByText(/addresses an object by identifier/)).toBeInTheDocument();
+  });
+
+  it("requests the backend's priority order when asked", async () => {
+    const { authFetch } = renderWithApp(<AuthorizationCoveragePanel engagementId="eng-1" />, {
+      routes: {
+        "GET /engagements/eng-1/api/coverage?limit=500": { body: withReasons },
+        "GET /engagements/eng-1/api/coverage?limit=500&sort=priority": { body: withReasons },
+      },
+    });
+    await screen.findByText("GET /orders/{id}");
+    await userEvent.click(screen.getByRole("checkbox", { name: /Look here first/ }));
+    await waitFor(() => expect(authFetch).toHaveBeenCalledWith("/engagements/eng-1/api/coverage?limit=500&sort=priority"));
+  });
+});

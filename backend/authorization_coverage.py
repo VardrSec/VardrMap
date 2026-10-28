@@ -22,6 +22,7 @@ Semantics that must not drift:
 """
 from __future__ import annotations
 
+import re
 from collections import defaultdict
 from urllib.parse import urlsplit
 
@@ -39,6 +40,20 @@ STATES = (
     "reviewed_not_executed",
     "untested",
 )
+# Order in which a researcher should look at operations: a flagged candidate, then what
+# was never tested, then what ran without a definite answer, then what is settled.
+STATE_ATTENTION = (
+    "violation_candidate", "untested", "reviewed_not_executed", "inconclusive", "partial", "conclusive",
+)
+# Facts that make an authorization boundary worth testing first. Each is read from
+# the stored inventory and is explained to the researcher; none is a verdict.
+_STATE_CHANGING = {"POST", "PUT", "PATCH", "DELETE"}
+_OBJECT_SEGMENT = re.compile(r"^\{.+\}$")
+_BOUNDARY_FIELDS = {
+    "role", "roles", "is_admin", "admin", "permissions", "scope", "scopes",
+    "tenant_id", "org_id", "organization_id", "account_id", "owner_id", "user_id",
+    "price", "balance", "credit", "status",
+}
 # Scan item statuses (schemas.ScanStatus). A false positive is a closed question.
 _OPEN_CANDIDATE = {"new", "reviewed"}
 _IDENTITY_RANK = {"evaluated": 4, "inconclusive": 3, "missing": 2, "skipped": 1}
@@ -167,8 +182,18 @@ def build_coverage(db: Session, program_id: str) -> dict:
             evidence_by_job[job_id] += 1
 
     observed: dict[str, set[str]] = defaultdict(set)
-    for endpoint_id, label in db.query(ApiExchange.endpoint_id, ApiExchange.identity_label).filter(ApiExchange.program_id == program_id).distinct().all():
-        observed[endpoint_id].add(label or "anonymous")
+    success_by: dict[str, set[str]] = defaultdict(set)
+    fields_by: dict[str, set[str]] = defaultdict(set)
+    for endpoint_id, label, status, names in db.query(
+        ApiExchange.endpoint_id, ApiExchange.identity_label, ApiExchange.response_status, ApiExchange.parameter_names
+    ).filter(ApiExchange.program_id == program_id).all():
+        label = label or "anonymous"
+        observed[endpoint_id].add(label)
+        if status is not None and 200 <= status < 300:
+            success_by[endpoint_id].add(label)
+        for name in names or []:
+            if str(name).lower() in _BOUNDARY_FIELDS:
+                fields_by[endpoint_id].add(str(name).lower())
 
     case_rows = []
     unreviewed = []
@@ -187,7 +212,7 @@ def build_coverage(db: Session, program_id: str) -> dict:
     for endpoint in endpoints:
         matched = [(c, s) for c, s, r in case_rows if r and operation_matches(endpoint, r)]
         matched_case_ids.update(c.id for c, _ in matched)
-        operations.append(_operation(endpoint, matched, jobs_by_case, candidates_by_job, evidence_by_job, universe, sorted(observed.get(endpoint.id, ()))))
+        operations.append(_operation(endpoint, matched, jobs_by_case, candidates_by_job, evidence_by_job, universe, sorted(observed.get(endpoint.id, ())), priority_reasons(endpoint, success_by.get(endpoint.id, set()), fields_by.get(endpoint.id, set()))))
 
     unmatched = [
         {
@@ -213,7 +238,23 @@ def build_coverage(db: Session, program_id: str) -> dict:
     }
 
 
-def _operation(endpoint, matched, jobs_by_case, candidates_by_job, evidence_by_job, universe, observed_identities) -> dict:
+def priority_reasons(endpoint, success_identities: set[str], boundary_fields: set[str]) -> list[dict]:
+    """Why an operation's authorization boundary may matter, from stored facts only."""
+    reasons = []
+    if any(_OBJECT_SEGMENT.match(part) for part in _segments(endpoint.path_template)):
+        reasons.append({"code": "object_identifier_in_path", "detail": "The route addresses an object by identifier (object-level access)."})
+    if endpoint.method in _STATE_CHANGING:
+        reasons.append({"code": "state_changing_method", "detail": f"{endpoint.method} changes server state."})
+    if boundary_fields:
+        reasons.append({"code": "boundary_fields_in_requests", "detail": "Captured requests carry: " + ", ".join(sorted(boundary_fields)) + "."})
+    if len(success_identities) >= 2:
+        reasons.append({"code": "success_for_multiple_identities", "detail": "Captured 2xx responses for: " + ", ".join(sorted(success_identities)) + "."})
+    if "anonymous" in success_identities:
+        reasons.append({"code": "anonymous_success_observed", "detail": "A captured request without credentials returned 2xx."})
+    return reasons
+
+
+def _operation(endpoint, matched, jobs_by_case, candidates_by_job, evidence_by_job, universe, observed_identities, reasons) -> dict:
     case_entries = []
     executed_jobs: list[ScanJob] = []
     identity_state: dict[str, dict] = {}
@@ -292,6 +333,7 @@ def _operation(endpoint, matched, jobs_by_case, candidates_by_job, evidence_by_j
         "port": endpoint.port,
         "path_template": endpoint.path_template,
         "observed_identities": observed_identities,
+        "priority_reasons": reasons,
         "state": state,
         "cases": case_entries,
         "identity_coverage": identity_rows,
