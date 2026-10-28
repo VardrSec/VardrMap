@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useAppContext } from "../context/AppContext";
 import type { AuthorizationCoverage, CoverageOperation, CoverageState } from "../types";
 import { Panel } from "./ui";
@@ -51,23 +51,34 @@ function StateBadge({ state }: { state: CoverageState }) {
 
 export default function AuthorizationCoveragePanel({ engagementId }: { engagementId: string }) {
   const { authFetch, setMessage } = useAppContext();
-  const [data, setData] = useState<AuthorizationCoverage | null>(null);
   const [state, setState] = useState<CoverageState | "">("");
-  const [loading, setLoading] = useState(true);
+  // Loading is derived from which request the stored result answers, so the effect
+  // never sets state synchronously (only after the response arrives).
+  const requestKey = `${engagementId}|${state}`;
+  const [result, setResult] = useState<{ key: string; data: AuthorizationCoverage | null }>({ key: "", data: null });
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams({ limit: "500" });
-      if (state) params.set("state", state);
-      const res = await authFetch(`/engagements/${engagementId}/api/coverage?${params}`);
-      if (!res.ok) throw new Error();
-      setData(await res.json());
-    } catch { setMessage("Failed to load authorization coverage."); }
-    finally { setLoading(false); }
-  }, [authFetch, engagementId, setMessage, state]);
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const params = new URLSearchParams({ limit: "500" });
+        if (state) params.set("state", state);
+        const res = await authFetch(`/engagements/${engagementId}/api/coverage?${params}`);
+        if (!res.ok) throw new Error();
+        const body = (await res.json()) as AuthorizationCoverage;
+        if (!cancelled) setResult({ key: requestKey, data: body });
+      } catch {
+        if (!cancelled) {
+          setMessage("Failed to load authorization coverage.");
+          setResult({ key: requestKey, data: null });
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [authFetch, engagementId, requestKey, setMessage, state]);
 
-  useEffect(() => { void load(); }, [load]);
+  const loading = result.key !== requestKey;
+  const data = result.data;
 
   const operations: CoverageOperation[] = data?.operations ?? [];
   const summary = data?.summary;
