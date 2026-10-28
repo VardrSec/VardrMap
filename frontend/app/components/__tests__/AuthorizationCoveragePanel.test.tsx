@@ -212,3 +212,47 @@ describe("AuthorizationCoveragePanel evidence", () => {
     expect(await screen.findByText("The record could not be loaded.")).toBeInTheDocument();
   });
 });
+
+describe("AuthorizationCoveragePanel integrity", () => {
+  const stale = {
+    ...coverage,
+    summary: { ...coverage.summary, total: 2, stale: 1, violation_candidate: 1, reviewed_not_executed: 0, untested: 0 },
+    operations: [
+      {
+        ...coverage.operations[0], endpoint_id: "e5", method: "GET", path_template: "/invoices/{id}", state: "stale",
+        cases: [{ case_id: "c5", name: "invoices", test_case_id: "inv", identities: ["owner", "peer"], expected: {}, queued_jobs: 0,
+          executed: false, stale_runs: 1, latest_job_id: null, assessment_status: null, reasons: [] }],
+        identity_coverage: [
+          { identity_id: "owner", state: "reviewed_not_run", reason: "case_changed_since_last_run", expected: null },
+          { identity_id: "peer", state: "mixed", reason: "evaluated_in_some_cases_only", expected: "deny" },
+        ],
+        candidates: { open: 0, promoted: 0, false_positive: 0, backing_evidence: 0 }, candidate_evidence: [], historical_assessments: [],
+      },
+      {
+        ...coverage.operations[0], endpoint_id: "e6", method: "GET", path_template: "/orders/{id}", state: "violation_candidate", cases: [],
+        identity_coverage: [], candidate_evidence: [],
+        candidates: { open: 1, promoted: 0, false_positive: 0, backing_evidence: 0 },
+        historical_assessments: [{ job_id: "job-abcdef12", case_id: "c1", case_name: "orders", reason: "case_modified",
+          assessment_status: "conclusive", completed_at: "2026-10-27T00:00:00", candidates: { open: 1, promoted: 0, false_positive: 0 } }],
+      },
+    ],
+  };
+
+  it("labels a case changed since its last run and an identity evaluated in only some cases", async () => {
+    renderWithApp(<AuthorizationCoveragePanel engagementId="eng-1" />, {
+      routes: { "GET /engagements/eng-1/api/coverage?limit=500": { body: stale } },
+    });
+    expect((await screen.findAllByText("Case changed since last run")).length).toBeGreaterThan(0);
+    expect(screen.getByText("peer · evaluated in some cases only")).toBeInTheDocument();
+    expect(screen.getByText("owner · reviewed, not run")).toBeInTheDocument();
+  });
+
+  it("keeps earlier assessments visible but says they are not current coverage, with unresolved candidates", async () => {
+    renderWithApp(<AuthorizationCoveragePanel engagementId="eng-1" />, {
+      routes: { "GET /engagements/eng-1/api/coverage?limit=500": { body: stale } },
+    });
+    expect(await screen.findByText(/1 earlier assessment not counted as current coverage/)).toBeInTheDocument();
+    expect(screen.getByText(/the case was edited after this run/)).toBeInTheDocument();
+    expect(screen.getByText(/1 open candidate still unresolved/)).toBeInTheDocument();
+  });
+});

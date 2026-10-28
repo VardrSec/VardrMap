@@ -96,7 +96,7 @@ export type ApiExchange = {
   parameter_names: string[]; note: string; captured_at: string | null; created_at: string | null;
 };
 export type CoverageState =
-  | "violation_candidate" | "inconclusive" | "partial" | "conclusive" | "reviewed_not_executed" | "untested";
+  | "violation_candidate" | "inconclusive" | "partial" | "conclusive" | "reviewed_not_executed" | "stale" | "untested";
 export type CoverageIdentity = {
   identity_id: string; state: string; reason: string; expected: string | null;
 };
@@ -106,12 +106,19 @@ export type CoverageOperation = {
   priority_reasons: { code: string; detail: string }[];
   cases: {
     case_id: string; name: string; test_case_id: string; identities: string[];
-    expected: Record<string, string>; queued_jobs: number; executed: boolean;
+    expected: Record<string, string>; queued_jobs: number; executed: boolean; stale_runs: number;
     latest_job_id: string | null; assessment_status: string | null; reasons: string[];
   }[];
   identity_coverage: CoverageIdentity[];
   candidates: { open: number; promoted: number; false_positive: number; backing_evidence: number };
   candidate_evidence: CoverageEvidenceRef[];
+  historical_assessments: CoverageHistory[];
+};
+export type CoverageHistory = {
+  job_id: string; case_id: string | null; case_name: string | null;
+  reason: "case_modified" | "case_deleted" | "snapshot_unverified";
+  assessment_status: string | null; completed_at: string | null;
+  candidates: { open: number; promoted: number; false_positive: number };
 };
 export type CoverageEvidenceRef = {
   evidence_id: string; job_id: string; case_id: string | null; identity_id: string | null;
@@ -122,6 +129,7 @@ export type AuthorizationCoverage = {
   summary: Record<CoverageState, number> & { total: number };
   identities: string[];
   unmatched_cases: { case_id: string; name: string; reason: string; request: string | null }[];
+  unattributed_assessments?: { job_id: string; case_id: string | null; assessment_status: string | null; reason: string }[];
   filtered_total?: number;
 };
 export type ApiEndpoint = {

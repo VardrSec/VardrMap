@@ -4,6 +4,14 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Fix authorization coverage attribution. A case edited after it ran no longer inherits the old run's
+  coverage: a run is current only if its claim-time snapshot hashes to the case's present spec and was
+  verified; otherwise it is kept as `historical_assessments` (case modified, case deleted or snapshot
+  unverified), attributed to the operation it actually exercised, and its candidates stay flagged there.
+  A reviewed case whose only runs predate its definition shows the new `stale` state. An identity
+  evaluated by some matching cases but not others is `mixed`, not `evaluated`. No migration, and no
+  assessment, finding or evidence is changed or removed.
+
 - Let a researcher go from an authorization-coverage violation candidate to the proof behind it:
   operations now carry `candidate_evidence` references (job, case, identity, reviewed and observed
   decision, content hash), and the panel loads the redacted record through the existing evidence

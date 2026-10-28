@@ -1967,17 +1967,28 @@ with no `allow`/`deny` expectation reviews nothing and appears in `unmatched_cas
 (`no_reviewed_expectation`), as does a case whose request matches no observed
 operation (`no_observed_operation`).
 
+A run counts as **current** coverage for a case only when the spec frozen at claim
+(`case_snapshot`) hashes to the case's present spec and the assessment verified that snapshot. An edited
+case (a changed request, identity, expected access or context; renaming it does not count), a deleted
+case or an unverified snapshot leaves its earlier runs as **historical**: they stay available in
+`historical_assessments` (reason `case_modified`, `case_deleted` or `snapshot_unverified`), keep their
+candidates, and are attributed to the operation their own snapshot exercised, but they never credit the
+changed definition. Executed runs that cannot be placed on any observed operation are listed in
+`unattributed_assessments`.
+
 Each operation has one `state`: `violation_candidate` (an open or promoted `vardrgate`
 scan item from an executed job), `conclusive` (every matched case executed and every
 latest assessment is conclusive), `partial` (some evaluated results, not conclusive),
 `inconclusive` (executed, nothing evaluated), `reviewed_not_executed` (a reviewed case
-but no job reported an assessment; queued, running and failed jobs do not count) and
-`untested`. `conclusive` repeats the stored assessment and is never a statement that the
+but no job reported an assessment; queued, running and failed jobs do not count), `stale` (a reviewed
+case whose only runs predate its current definition) and `untested`. An unresolved candidate keeps
+`violation_candidate` even when its case was later edited or deleted. `conclusive` requires every matching
+case to have a current, conclusive run. `conclusive` repeats the stored assessment and is never a statement that the
 operation is secure. `candidates` reports `open`, `promoted`, `false_positive` and
 `backing_evidence` (reviewed-deny executions observed as allow). `identity_coverage`
 lists every identity declared in any case of the engagement with its best latest state
-for this operation: `evaluated`, `inconclusive`, `missing`, `skipped`, `reviewed_not_run`
-or `not_reviewed` (not in a reviewed case for this operation: a gap in what was
+for this operation: `evaluated`, `mixed` (evaluated by some matching cases but not all), `inconclusive`, `missing`,
+`skipped`, `reviewed_not_run` or `not_reviewed` (not in a reviewed case for this operation: a gap in what was
 reviewed, not a claim about what should be allowed).
 
 Operations with a violation candidate also carry `candidate_evidence` (at most 10 references:

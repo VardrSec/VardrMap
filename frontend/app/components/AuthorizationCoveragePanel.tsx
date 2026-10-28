@@ -18,6 +18,7 @@ const STATE_LABEL: Record<CoverageState, string> = {
   partial: "Partial",
   conclusive: "Conclusive",
   reviewed_not_executed: "Reviewed, not executed",
+  stale: "Case changed since last run",
   untested: "No reviewed test",
 };
 const STATE_COLOR: Record<CoverageState, string> = {
@@ -26,22 +27,30 @@ const STATE_COLOR: Record<CoverageState, string> = {
   partial: "#fbbf24",
   conclusive: "#4ade80",
   reviewed_not_executed: "#89b4fa",
+  stale: "#c084fc",
   untested: "#6b7280",
 };
 const STATE_ORDER: CoverageState[] = [
-  "violation_candidate", "inconclusive", "partial", "conclusive", "reviewed_not_executed", "untested",
+  "violation_candidate", "inconclusive", "partial", "conclusive", "reviewed_not_executed", "stale", "untested",
 ];
 const IDENTITY_LABEL: Record<string, string> = {
   evaluated: "evaluated",
   inconclusive: "inconclusive",
+  mixed: "evaluated in some cases only",
   missing: "no result reported",
   skipped: "no expectation",
   reviewed_not_run: "reviewed, not run",
   not_reviewed: "not reviewed",
 };
 const IDENTITY_COLOR: Record<string, string> = {
-  evaluated: "#4ade80", inconclusive: "#f59e0b", missing: "#f59e0b",
+  evaluated: "#4ade80", inconclusive: "#f59e0b", mixed: "#fbbf24", missing: "#f59e0b",
   skipped: "#6b7280", reviewed_not_run: "#89b4fa", not_reviewed: "#52525b",
+};
+
+const HISTORY_REASON: Record<string, string> = {
+  case_modified: "the case was edited after this run",
+  case_deleted: "the case was deleted",
+  snapshot_unverified: "the case snapshot was not verified",
 };
 
 function StateBadge({ state }: { state: CoverageState }) {
@@ -118,7 +127,7 @@ export default function AuthorizationCoveragePanel({ engagementId, onDraft }: { 
       <strong className="text-[#94a3b8]"> Conclusive describes reported outcomes with a working baseline; it does not mean the operation is secure.</strong>{" "}
       Identities listed as <em>not reviewed</em> exist elsewhere in this engagement but not in a test for that operation.
     </p>
-    {summary && <div className="mb-4 grid grid-cols-2 gap-2 md:grid-cols-6">
+    {summary && <div className="mb-4 grid grid-cols-2 gap-2 md:grid-cols-7">
       {STATE_ORDER.map((key) => <button key={key} type="button" aria-pressed={state === key}
         onClick={() => setState(state === key ? "" : key)}
         className="rounded-lg border bg-[#171717] p-3 text-left transition hover:border-[#3a3a3a]"
@@ -139,6 +148,12 @@ export default function AuthorizationCoveragePanel({ engagementId, onDraft }: { 
       <tbody>{operations.map((op) => <tr key={op.endpoint_id} className="border-b border-[#1e1e1e] align-top">
         <td className="py-2.5 pr-4"><div className="font-mono text-[#f1f5f9]">{op.method} {op.path_template}</div>
           <div className="mt-0.5 text-[10px] text-muted">{op.host}</div>
+          {(op.historical_assessments ?? []).length > 0 && <details className="mt-1 text-[10px] text-[#a1a1aa]">
+            <summary className="cursor-pointer text-[#c084fc]">{op.historical_assessments.length} earlier assessment{op.historical_assessments.length === 1 ? "" : "s"} not counted as current coverage</summary>
+            <ul className="mt-1 space-y-0.5">{op.historical_assessments.map((item) => <li key={item.job_id}>
+              <span className="font-mono">{item.job_id.slice(0, 8)}</span> · {item.assessment_status ?? "no status"} · {HISTORY_REASON[item.reason] ?? item.reason}
+              {item.case_name ? ` (${item.case_name})` : ""}{item.candidates.open + item.candidates.promoted > 0 ? ` · ${item.candidates.open} open candidate${item.candidates.open === 1 ? "" : "s"} still unresolved` : ""}</li>)}</ul>
+          </details>}
           {(op.priority_reasons ?? []).length > 0 && <ul className="mt-1 space-y-0.5 text-[10px] text-[#a1a1aa]">
             {op.priority_reasons.map((reason) => <li key={reason.code}>{reason.detail}</li>)}</ul>}</td>
         <td className="py-2.5 pr-4"><StateBadge state={op.state} />

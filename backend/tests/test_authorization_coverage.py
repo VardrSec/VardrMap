@@ -402,3 +402,196 @@ def test_operations_without_a_candidate_carry_no_evidence_references(client, aut
     data = coverage(client, auth_headers, program_id)
     assert operation(data, "GET", "/reports/{id}")["candidate_evidence"] == []
     assert operation(data, "GET", "/profile")["candidate_evidence"] == []
+
+
+# --------------------------------------------------------------------------- #
+# Integrity: a changed case must not inherit the coverage of what it never ran
+# --------------------------------------------------------------------------- #
+
+def edit_case(client, headers, pid, case_id, new_spec):
+    res = client.patch(f"/engagements/{pid}/test-cases/{case_id}", headers=headers, json={"spec": new_spec})
+    assert res.status_code == 200, res.text
+
+
+def prepared(client, headers, pid, paths=("/orders/7", "/invoices/9", "/profile")):
+    for path in paths:
+        capture(client, headers, pid, "GET", path)
+    original = spec("orders", "GET", "/orders/42", [OWNER, PEER], EXPECT)
+    case_id = store(client, headers, pid, original, "orders")
+    return original, case_id
+
+
+def clean_pair():
+    return [run("allow", 200, "owner"), run("deny", 403, "peer")]
+
+
+def test_a_baseline_run_of_an_unchanged_case_is_current_coverage(client, auth_headers, program_id):
+    original, case_id = prepared(client, auth_headers, program_id)
+    execute(client, auth_headers, program_id, case_id, original, clean_pair())
+    op = operation(coverage(client, auth_headers, program_id), "GET", "/orders/{id}")
+    assert op["state"] == "conclusive" and op["historical_assessments"] == []
+
+
+def test_repointing_a_case_does_not_credit_the_new_operation(client, auth_headers, program_id):
+    original, case_id = prepared(client, auth_headers, program_id)
+    execute(client, auth_headers, program_id, case_id, original, clean_pair())
+    moved = spec("orders", "GET", "/invoices/55", [OWNER, PEER], EXPECT)
+    edit_case(client, auth_headers, program_id, case_id, moved)
+    data = coverage(client, auth_headers, program_id)
+    invoices = operation(data, "GET", "/invoices/{id}")
+    assert invoices["state"] == "stale"  # reviewed, but the current definition was never run
+    assert invoices["cases"][0]["executed"] is False
+    assert all(
+        row["state"] == "reviewed_not_run"
+        for row in invoices["identity_coverage"]
+        if row["identity_id"] in {"owner", "peer"}
+    )
+    # What did run is still attributed to the operation it actually exercised.
+    orders = operation(data, "GET", "/orders/{id}")
+    assert orders["state"] == "untested"
+    assert [h["reason"] for h in orders["historical_assessments"]] == ["case_modified"]
+    assert orders["historical_assessments"][0]["assessment_status"] == "conclusive"
+
+
+def test_changing_the_method_identities_or_expectations_makes_a_run_stale(client, auth_headers, program_id):
+    changes = {
+        "method": lambda s: {**s, "request": {**s["request"], "method": "HEAD"}},
+        "identity added": lambda s: {
+            **s,
+            "identities": s["identities"] + [ADMIN],
+            "expected_access": s["expected_access"] + [{"identity_id": "admin", "decision": "allow"}],
+        },
+        "identity removed": lambda s: {
+            **s,
+            "identities": s["identities"][:1],
+            "expected_access": s["expected_access"][:1],
+        },
+        "decision changed": lambda s: {
+            **s,
+            "expected_access": [
+                {"identity_id": "owner", "decision": "allow"},
+                {"identity_id": "peer", "decision": "allow"},
+            ],
+        },
+        "context added": lambda s: {**s, "resource": {"owner_identity": "owner", "type": "order", "object_id": "42"}},
+    }
+    for label, change in changes.items():
+        original, case_id = prepared(client, auth_headers, program_id)
+        execute(client, auth_headers, program_id, case_id, original, clean_pair())
+        edit_case(client, auth_headers, program_id, case_id, change(original))
+        data = coverage(client, auth_headers, program_id)
+        assert all(o["state"] != "conclusive" for o in data["operations"]), label
+        orders = operation(data, "GET", "/orders/{id}")
+        if label == "method":
+            # HEAD /orders/{id} was never observed: the edited case now covers nothing.
+            assert [c["reason"] for c in data["unmatched_cases"]] == ["no_observed_operation"]
+            assert orders["state"] == "untested"
+            assert [h["reason"] for h in orders["historical_assessments"]] == ["case_modified"]
+        else:
+            assert orders["state"] == "stale", f"{label}: the edited case inherited the old run"
+            assert orders["cases"][0]["executed"] is False and orders["cases"][0]["stale_runs"] == 1
+        client.delete(f"/engagements/{program_id}/test-cases/{case_id}", headers=auth_headers)
+
+
+def test_renaming_a_case_does_not_invalidate_its_run(client, auth_headers, program_id):
+    original, case_id = prepared(client, auth_headers, program_id)
+    execute(client, auth_headers, program_id, case_id, original, clean_pair())
+    res = client.patch(
+        f"/engagements/{program_id}/test-cases/{case_id}",
+        headers=auth_headers,
+        json={"name": "renamed", "description": "notes"},
+    )
+    assert res.status_code == 200
+    assert operation(coverage(client, auth_headers, program_id), "GET", "/orders/{id}")["state"] == "conclusive"
+
+
+def test_a_recorded_candidate_stays_attached_to_the_operation_it_was_found_on(client, auth_headers, program_id):
+    original, case_id = prepared(client, auth_headers, program_id)
+    finding = {"category": "potential_bola", "severity": "high", "message": "peer read the order"}
+    execute(client, auth_headers, program_id, case_id, original,
+            [run("allow", 200, "owner"), run("allow", 200, "peer")], [finding])
+    edit_case(client, auth_headers, program_id, case_id, spec("orders", "GET", "/invoices/55", [OWNER, PEER], EXPECT))
+    data = coverage(client, auth_headers, program_id)
+    orders = operation(data, "GET", "/orders/{id}")
+    assert orders["state"] == "violation_candidate" and orders["candidates"]["open"] == 1
+    assert len(orders["candidate_evidence"]) == 1
+    invoices = operation(data, "GET", "/invoices/{id}")
+    assert invoices["candidates"]["open"] == 0 and invoices["state"] == "stale"
+
+
+def test_a_deleted_case_leaves_its_history_and_findings_visible(client, auth_headers, program_id):
+    original, case_id = prepared(client, auth_headers, program_id)
+    execute(client, auth_headers, program_id, case_id, original, clean_pair())
+    finding = {"category": "potential_bola", "severity": "high", "message": "x"}
+    second = spec("orders-2", "GET", "/orders/43", [OWNER, PEER], EXPECT)
+    second_id = store(client, auth_headers, program_id, second, "orders two")
+    execute(client, auth_headers, program_id, second_id, second,
+            [run("allow", 200, "owner"), run("allow", 200, "peer")], [finding])
+    for doomed in (case_id, second_id):
+        assert client.delete(f"/engagements/{program_id}/test-cases/{doomed}", headers=auth_headers).status_code in {200, 204}
+    orders = operation(coverage(client, auth_headers, program_id), "GET", "/orders/{id}")
+    assert orders["state"] == "violation_candidate"  # an unresolved finding outlives its case
+    assert {h["reason"] for h in orders["historical_assessments"]} == {"case_deleted"}
+    assert len(orders["historical_assessments"]) == 2
+
+
+def test_a_run_whose_case_snapshot_was_not_verified_never_counts_as_current(client, auth_headers, program_id):
+    original, case_id = prepared(client, auth_headers, program_id)
+    job = queue(client, auth_headers, program_id, case_id)
+    assert client.post(f"/jobs/{job}/claim", headers=auth_headers).status_code == 200
+    legacy = {"test_case_id": original["id"], "executions": clean_pair(), "findings": []}  # no case_hash
+    assert client.post(f"/jobs/{job}/upload", headers=auth_headers, json=legacy).status_code == 200
+    client.patch(f"/jobs/{job}", headers=auth_headers, json={"status": "done"})
+    op = operation(coverage(client, auth_headers, program_id), "GET", "/orders/{id}")
+    assert op["state"] == "stale"
+    assert [h["reason"] for h in op["historical_assessments"]] == ["snapshot_unverified"]
+
+
+# --------------------------------------------------------------------------- #
+# Integrity: combining several cases must not manufacture certainty
+# --------------------------------------------------------------------------- #
+
+def two_cases(client, headers, pid):
+    capture(client, headers, pid, "GET", "/orders/7")
+    first = spec("orders-a", "GET", "/orders/42", [OWNER, PEER], EXPECT)
+    second = spec("orders-b", "GET", "/orders/43", [OWNER, PEER], EXPECT)
+    return first, store(client, headers, pid, first, "a"), second, store(client, headers, pid, second, "b")
+
+
+def test_one_inconclusive_case_prevents_a_conclusive_operation(client, auth_headers, program_id):
+    first, first_id, second, second_id = two_cases(client, auth_headers, program_id)
+    execute(client, auth_headers, program_id, first_id, first, clean_pair())
+    execute(client, auth_headers, program_id, second_id, second,
+            [run("allow", 200, "owner"), run("server_error", 503, "peer")])
+    op = operation(coverage(client, auth_headers, program_id), "GET", "/orders/{id}")
+    assert op["state"] == "partial"
+    peer = identity_states(op)["peer"]
+    assert peer["state"] == "mixed" and peer["reason"] == "evaluated_in_some_cases_only"
+    assert identity_states(op)["owner"]["state"] == "evaluated"
+
+
+def test_an_unrun_second_case_keeps_the_operation_from_being_conclusive(client, auth_headers, program_id):
+    first, first_id, second, second_id = two_cases(client, auth_headers, program_id)
+    execute(client, auth_headers, program_id, first_id, first, clean_pair())
+    op = operation(coverage(client, auth_headers, program_id), "GET", "/orders/{id}")
+    assert op["state"] == "partial"
+    assert identity_states(op)["peer"]["state"] == "mixed"
+
+
+def test_every_case_conclusive_and_current_is_conclusive(client, auth_headers, program_id):
+    first, first_id, second, second_id = two_cases(client, auth_headers, program_id)
+    execute(client, auth_headers, program_id, first_id, first, clean_pair())
+    execute(client, auth_headers, program_id, second_id, second, clean_pair())
+    op = operation(coverage(client, auth_headers, program_id), "GET", "/orders/{id}")
+    assert op["state"] == "conclusive"
+    assert identity_states(op)["peer"]["state"] == "evaluated"
+
+
+def test_a_candidate_from_one_case_outweighs_a_conclusive_other(client, auth_headers, program_id):
+    first, first_id, second, second_id = two_cases(client, auth_headers, program_id)
+    execute(client, auth_headers, program_id, first_id, first, clean_pair())
+    finding = {"category": "potential_bola", "severity": "high", "message": "peer"}
+    execute(client, auth_headers, program_id, second_id, second,
+            [run("allow", 200, "owner"), run("allow", 200, "peer")], [finding])
+    op = operation(coverage(client, auth_headers, program_id), "GET", "/orders/{id}")
+    assert op["state"] == "violation_candidate" and op["candidates"]["open"] == 1
