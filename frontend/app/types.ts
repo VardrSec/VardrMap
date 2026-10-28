@@ -138,10 +138,11 @@ export type RelationshipHypothesis = {
   question: string; basis: string[];
 };
 export type AuthorizationRelationships = {
-  identities: { identity_id: string; role: string | null; tenant_id: string | null; anonymous: boolean }[];
+  identities: { identity_id: string; role: string | null; tenant_id: string | null; anonymous: boolean; conflicts?: string[] }[];
   tenants: string[];
   askable_boundaries: Record<string, boolean>;
   identities_without_tenant: string[];
+  identity_conflicts?: { identity_id: string; attribute: string; values: string[] }[];
   hypotheses: RelationshipHypothesis[];
   summary: Record<string, number>;
   filtered_total?: number;

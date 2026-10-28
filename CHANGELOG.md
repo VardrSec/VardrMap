@@ -4,6 +4,14 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Make boundary questions actionable and fix relationship integrity. A question's **Draft authorization test**
+  opens the existing case builder for that operation with the identities, credential references (never values),
+  tenant/role and resource owner that are unambiguous in reviewed cases, lists what is still missing, and keeps
+  every expected access at `skip` (new `boundary` option on the existing preview endpoint; nothing is stored or
+  queued). Relationship analysis no longer takes an identity's first declaration: contradictory tenant, role or
+  credential declarations are reported in `identity_conflicts` and excluded, cases are classified only from their
+  own declarations, and an `identity_ids` draft refuses contradictory identities.
+
 - Add Authorization Relationship Intelligence: a read-only `GET /engagements/{id}/api/relationships` and a
   Boundary questions panel. From the tenants, roles and resource owners declared in reviewed cases it
   classifies callers (different tenant, same-tenant peer, higher role than the owner, no credentials) and lists

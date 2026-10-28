@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
+from authorization_relationships import draft_for_boundary, merge_identities
 from db import get_db
 from deps import get_current_user, get_engagement_or_404, log_action, require_member_write
 from models import ApiEndpoint, AuthorizationTestCase
@@ -28,6 +29,10 @@ class DraftRequest(BaseModel):
     # Reuse identities this engagement already declared (id and credential reference
     # only), instead of the generic anonymous/member template.
     identity_ids: list[str] = Field(default_factory=list, max_length=20)
+    # Draft one reviewed-boundary question for exactly one observed operation: identities,
+    # credential references and resource context come only from unambiguous reviewed
+    # declarations, and whatever is missing is reported, never guessed.
+    boundary: Literal["cross_tenant", "same_tenant_peer", "higher_privilege", "anonymous"] | None = None
     limit: int = Field(default=50, ge=1, le=100)
     offset: int = Field(default=0, ge=0)
 
@@ -102,13 +107,18 @@ def _known_identities(db, program_id, wanted):
             if ident in wanted and ident not in found:
                 credential = identity.get("credential") if isinstance(identity.get("credential"), dict) else {}
                 found[ident] = {"id": ident, "credential": {k: v for k, v in credential.items() if k != "value"}}
+    # Never pick one of several contradictory declarations: refuse and say which.
+    _, conflicts = merge_identities([r.spec for r in rows if isinstance(r.spec, dict)])
+    contradictory = sorted({c["identity_id"] for c in conflicts if c["identity_id"] in set(wanted)})
+    if contradictory:
+        raise HTTPException(400, "Contradictory declarations for: " + ", ".join(contradictory) + ". Resolve them in the stored cases first.")
     missing = [i for i in wanted if i not in found]
     if missing:
         raise HTTPException(400, f"Unknown identity in this engagement: {', '.join(sorted(set(missing)))}")
     return [found[i] for i in dict.fromkeys(wanted)]
 
 
-def _draft(method, url, source, identities=None):
+def _draft(method, url, source, identities=None, context=None):
     identities = identities or [
         {"id": "anonymous", "credential": {"type": "static_header", "header": "", "value": ""}},
         {"id": "member", "credential": {"type": "bearer", "value_env": "VARDRGATE_MEMBER_TOKEN"}},
@@ -118,7 +128,9 @@ def _draft(method, url, source, identities=None):
         "description": f"Draft from {source}; review URL, identities, request body and access decisions before saving.",
         "spec": {"id": f"case-{uuid4()}", "request": {"method": method, "url": url},
                  "mutating": method in {"POST", "PUT", "PATCH", "DELETE"}, "identities": identities,
-                 "expected_access": [{"identity_id": i["id"], "decision": "skip"} for i in identities]},
+                 "expected_access": [{"identity_id": i["id"], "decision": "skip"} for i in identities],
+                 **({"resource": context["resource"]} if context and context.get("resource") else {}),
+                 **({"role_hierarchy": context["role_hierarchy"]} if context and context.get("role_hierarchy") else {})},
     }
 
 
@@ -143,7 +155,21 @@ def preview_cases(program_id: str, body: DraftRequest, current_user: dict = Depe
     page = operations[body.offset:body.offset + body.limit]
     end = body.offset + len(page)
     reuse = _known_identities(db, program_id, body.identity_ids) if body.identity_ids else None
-    return {"drafts": [_draft(*op, copy.deepcopy(reuse) if reuse else None) for op in page], "total": len(operations), "offset": body.offset, "limit": body.limit, "next_offset": end if end < len(operations) else None,
+    context = None
+    if body.boundary:
+        if body.openapi is not None or len(body.endpoint_ids) != 1 or body.identity_ids:
+            raise HTTPException(400, "A boundary draft needs exactly one observed operation and no separate identity_ids")
+        context = draft_for_boundary(db, program_id, body.endpoint_ids[0], body.boundary)
+        reuse = context["identities"] or None
+    boundary_context = None if context is None else {
+        "boundary": body.boundary,
+        "missing_context": context["missing_context"],
+        "conflicts": context["conflicts"],
+        # Every expected decision is skip until a person reviews it, so a draft is never ready to run.
+        "ready_to_run": False,
+    }
+    return {"drafts": [_draft(*op, copy.deepcopy(reuse) if reuse else None, context) for op in page],
+            "boundary_context": boundary_context, "total": len(operations), "offset": body.offset, "limit": body.limit, "next_offset": end if end < len(operations) else None,
             "review_notes": ["No cases have been stored or queued.", "Replace path variables and review request bodies for mutating operations.", "Set identity secret references and decide expected access; observed responses do not determine authorization policy."]}
 
 

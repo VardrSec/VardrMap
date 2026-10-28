@@ -26,6 +26,7 @@ export default function ApiSurfaceSection({ engagementId }: { engagementId: stri
   const [exchangeOffset, setExchangeOffset] = useState(0);
   const [draftIds, setDraftIds] = useState<string[]>([]);
   const [draftIdentityIds, setDraftIdentityIds] = useState<string[]>([]);
+  const [draftBoundary, setDraftBoundary] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -61,7 +62,7 @@ export default function ApiSurfaceSection({ engagementId }: { engagementId: stri
   }), [endpoints]);
 
   return <div className="space-y-5">
-    <AuthorizationCaseBuilder key={engagementId} engagementId={engagementId} endpointIds={draftIds} identityIds={draftIdentityIds} />
+    <AuthorizationCaseBuilder key={engagementId} engagementId={engagementId} endpointIds={draftIds} identityIds={draftIdentityIds} boundary={draftBoundary} />
     <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
       {[["Operations", total], ["Visible exchanges", stats.exchanges], ["Visible hosts", stats.hosts], ["Visible identities", stats.identities]].map(([label, value]) =>
         <div key={label} className="rounded-lg border border-[#2e2e2e] bg-[#171717] p-4">
@@ -71,9 +72,10 @@ export default function ApiSurfaceSection({ engagementId }: { engagementId: stri
     </div>
 
     <AuthorizationCoveragePanel key={engagementId} engagementId={engagementId}
-      onDraft={(endpointId, identityIds) => { setDraftIds([endpointId]); setDraftIdentityIds(identityIds); setMessage("Operation selected for drafting with this engagement's identities. Generate drafts above, then set every access decision yourself."); }} />
+      onDraft={(endpointId, identityIds) => { setDraftBoundary(""); setDraftIds([endpointId]); setDraftIdentityIds(identityIds); setMessage("Operation selected for drafting with this engagement's identities. Generate drafts above, then set every access decision yourself."); }} />
 
-    <AuthorizationRelationshipsPanel key={`rel-${engagementId}`} engagementId={engagementId} />
+    <AuthorizationRelationshipsPanel key={`rel-${engagementId}`} engagementId={engagementId}
+      onDraft={(endpointId, boundary) => { setDraftIdentityIds([]); setDraftIds([endpointId]); setDraftBoundary(boundary); setMessage("Boundary question selected for drafting. Generate drafts above, then review every decision yourself."); }} />
 
     <Panel title="Observed API operations">
       <div className="mb-4 flex flex-wrap gap-2">
@@ -93,7 +95,7 @@ export default function ApiSurfaceSection({ engagementId }: { engagementId: stri
       {!loading && endpoints.length > 0 && <div className="overflow-x-auto"><table className="w-full text-left text-xs">
         <thead><tr className="border-b border-[#2e2e2e]">{["Draft", "Method", "Operation", "Responses", "Identities", "Seen", ""].map((h) => <th key={h} className="pb-2 pr-4 font-semibold uppercase tracking-widest text-muted">{h}</th>)}</tr></thead>
         <tbody>{endpoints.map((item) => <tr key={item.id} className="border-b border-[#1e1e1e] hover:bg-[#161616]">
-          <td className="pr-4"><input aria-label={`Draft ${item.method} ${item.host}${item.path_template}`} type="checkbox" checked={draftIds.includes(item.id)} disabled={draftIds.length >= 100 && !draftIds.includes(item.id)} onChange={e => { setDraftIdentityIds([]); setDraftIds(ids => e.target.checked ? [...ids, item.id] : ids.filter(id => id !== item.id)); }} /></td>
+          <td className="pr-4"><input aria-label={`Draft ${item.method} ${item.host}${item.path_template}`} type="checkbox" checked={draftIds.includes(item.id)} disabled={draftIds.length >= 100 && !draftIds.includes(item.id)} onChange={e => { setDraftIdentityIds([]); setDraftBoundary(""); setDraftIds(ids => e.target.checked ? [...ids, item.id] : ids.filter(id => id !== item.id)); }} /></td>
           <td className="py-2.5 pr-4 font-mono font-bold" style={{ color: methodColor[item.method] ?? "#94a3b8" }}>{item.method}</td>
           <td className="py-2.5 pr-4"><div className="font-mono text-[#f1f5f9]">{item.path_template}</div><div className="mt-0.5 text-[10px] text-muted">{item.host}</div></td>
           <td className="py-2.5 pr-4 font-mono text-[#94a3b8]">{item.statuses.join(" · ") || "—"}</td>
