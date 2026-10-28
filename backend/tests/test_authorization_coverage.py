@@ -379,3 +379,26 @@ def test_more_captured_reasons_rank_first_within_a_state(client, auth_headers, p
     capture(client, auth_headers, program_id, "DELETE", "/orders/7")
     ranked = coverage(client, auth_headers, program_id, sort="priority")["operations"]
     assert [o["path_template"] for o in ranked] == ["/orders/{id}", "/plain"]
+
+
+def test_candidate_evidence_points_at_the_retained_redacted_record(client, auth_headers, program_id):
+    build_engagement(client, auth_headers, program_id)
+    op = operation(coverage(client, auth_headers, program_id), "GET", "/orders/{id}")
+    assert op["candidates"]["backing_evidence"] == len(op["candidate_evidence"]) == 1
+    ref = op["candidate_evidence"][0]
+    assert (ref["identity_id"], ref["expected"], ref["observed"]) == ("peer", "deny", "allow")
+    # The reference resolves through the ordinary evidence endpoint, redacted and hash-checked.
+    rows = client.get(
+        f"/engagements/{program_id}/evidence",
+        headers=auth_headers,
+        params={"job_id": ref["job_id"], "case_id": ref["case_id"], "identity_id": ref["identity_id"]},
+    ).json()["evidence"]
+    assert [r["id"] for r in rows] == [ref["evidence_id"]]
+    assert rows[0]["content_hash"] == ref["content_hash"] and rows[0]["redacted"] is True
+
+
+def test_operations_without_a_candidate_carry_no_evidence_references(client, auth_headers, program_id):
+    build_engagement(client, auth_headers, program_id)
+    data = coverage(client, auth_headers, program_id)
+    assert operation(data, "GET", "/reports/{id}")["candidate_evidence"] == []
+    assert operation(data, "GET", "/profile")["candidate_evidence"] == []

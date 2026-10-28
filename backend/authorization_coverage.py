@@ -159,7 +159,7 @@ def build_coverage(db: Session, program_id: str) -> dict:
             jobs_by_case[case_id].append(job)
     job_ids = [j.id for j in jobs]
     candidates_by_job: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
-    evidence_by_job: dict[str, int] = defaultdict(int)
+    evidence_by_job: dict[str, list[dict]] = defaultdict(list)
     if job_ids:
         for job_id, status in (
             db.query(ScanItem.job_id, ScanItem.status)
@@ -169,17 +169,23 @@ def build_coverage(db: Session, program_id: str) -> dict:
             candidates_by_job[job_id][status or "new"] += 1
         # Backing proof of a violation candidate: a reviewed deny that was observed
         # as an allow, retained as evidence for the same job.
-        for (job_id,) in (
-            db.query(Evidence.job_id)
+        for row in (
+            db.query(Evidence.id, Evidence.job_id, Evidence.case_id, Evidence.identity_id, Evidence.content_hash, Evidence.collected_at)
             .filter(
                 Evidence.program_id == program_id,
                 Evidence.job_id.in_(job_ids),
                 Evidence.expected_decision == "deny",
                 Evidence.observed_outcome == "allow",
             )
+            .order_by(Evidence.collected_at, Evidence.id)
             .all()
         ):
-            evidence_by_job[job_id] += 1
+            # Metadata only: the redacted record itself is read through the evidence endpoint.
+            evidence_by_job[row.job_id].append({
+                "evidence_id": row.id, "job_id": row.job_id, "case_id": row.case_id,
+                "identity_id": row.identity_id, "content_hash": row.content_hash,
+                "expected": "deny", "observed": "allow",
+            })
 
     observed: dict[str, set[str]] = defaultdict(set)
     success_by: dict[str, set[str]] = defaultdict(set)
@@ -304,13 +310,13 @@ def _operation(endpoint, matched, jobs_by_case, candidates_by_job, evidence_by_j
             identity_rows.append({"identity_id": identity, "state": "not_reviewed", "reason": "not_in_a_reviewed_case_for_this_operation", "expected": None})
 
     open_candidates = promoted = dismissed = 0
-    backing = 0
+    backing_rows: list[dict] = []
     for job in executed_jobs:
         counts = candidates_by_job.get(job.id, {})
         open_candidates += sum(n for status, n in counts.items() if status in _OPEN_CANDIDATE)
         promoted += counts.get("promoted", 0)
         dismissed += counts.get("false_positive", 0)
-        backing += evidence_by_job.get(job.id, 0)
+        backing_rows.extend(evidence_by_job.get(job.id, []))
 
     statuses = [(j.assessment or {}).get("status") for j in executed_jobs]
     if not matched:
@@ -337,5 +343,6 @@ def _operation(endpoint, matched, jobs_by_case, candidates_by_job, evidence_by_j
         "state": state,
         "cases": case_entries,
         "identity_coverage": identity_rows,
-        "candidates": {"open": open_candidates, "promoted": promoted, "false_positive": dismissed, "backing_evidence": backing},
+        "candidates": {"open": open_candidates, "promoted": promoted, "false_positive": dismissed, "backing_evidence": len(backing_rows)},
+        "candidate_evidence": backing_rows[:10],
     }

@@ -111,6 +111,11 @@ export type CoverageOperation = {
   }[];
   identity_coverage: CoverageIdentity[];
   candidates: { open: number; promoted: number; false_positive: number; backing_evidence: number };
+  candidate_evidence: CoverageEvidenceRef[];
+};
+export type CoverageEvidenceRef = {
+  evidence_id: string; job_id: string; case_id: string | null; identity_id: string | null;
+  content_hash: string; expected: string; observed: string;
 };
 export type AuthorizationCoverage = {
   operations: CoverageOperation[];

@@ -4,6 +4,11 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Let a researcher go from an authorization-coverage violation candidate to the proof behind it:
+  operations now carry `candidate_evidence` references (job, case, identity, reviewed and observed
+  decision, content hash), and the panel loads the redacted record through the existing evidence
+  endpoint on request, showing whether its hash matches the reference. Nothing new is stored.
+
 - Add `priority_reasons` and `sort=priority` to authorization coverage. Each operation lists the stored
   facts that make its boundary worth testing (object identifier in the route, state-changing method,
   boundary-style request fields, 2xx captured for several identities or without credentials), and the

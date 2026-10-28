@@ -164,3 +164,51 @@ describe("AuthorizationCoveragePanel priority", () => {
     await waitFor(() => expect(authFetch).toHaveBeenCalledWith("/engagements/eng-1/api/coverage?limit=500&sort=priority"));
   });
 });
+
+describe("AuthorizationCoveragePanel evidence", () => {
+  const reference = {
+    evidence_id: "ev-1", job_id: "job-12345678", case_id: "c1", identity_id: "peer",
+    content_hash: "abc123", expected: "deny", observed: "allow",
+  };
+  const withEvidence = {
+    ...coverage,
+    operations: [{ ...coverage.operations[0], candidate_evidence: [reference] }, ...coverage.operations.slice(1).map((op) => ({ ...op, candidate_evidence: [] }))],
+  };
+  const url = "GET /engagements/eng-1/evidence?job_id=job-12345678&limit=1&case_id=c1&identity_id=peer";
+
+  it("states what was reviewed against what was observed and loads the redacted record on request", async () => {
+    renderWithApp(<AuthorizationCoveragePanel engagementId="eng-1" />, {
+      routes: {
+        "GET /engagements/eng-1/api/coverage?limit=500": { body: withEvidence },
+        [url]: { body: { evidence: [{ id: "ev-1", body: '{"status_code": 200, "identity_id": "peer"}', content_hash: "abc123" }], total: 1 } },
+      },
+    });
+    expect(await screen.findByText(/was reviewed as/)).toBeInTheDocument();
+    expect(screen.queryByText(/status_code/)).not.toBeInTheDocument(); // not fetched until asked
+    await userEvent.click(screen.getByRole("button", { name: "View redacted record" }));
+    expect(await screen.findByText(/"status_code": 200/)).toBeInTheDocument();
+    expect(screen.getByText(/sha256 abc123 \(matches\)/)).toBeInTheDocument();
+  });
+
+  it("flags a record whose hash differs from the coverage reference", async () => {
+    renderWithApp(<AuthorizationCoveragePanel engagementId="eng-1" />, {
+      routes: {
+        "GET /engagements/eng-1/api/coverage?limit=500": { body: withEvidence },
+        [url]: { body: { evidence: [{ id: "ev-1", body: "{}", content_hash: "different" }], total: 1 } },
+      },
+    });
+    await userEvent.click(await screen.findByRole("button", { name: "View redacted record" }));
+    expect(await screen.findByText(/differs from the coverage reference/)).toBeInTheDocument();
+  });
+
+  it("says so when the record cannot be loaded", async () => {
+    renderWithApp(<AuthorizationCoveragePanel engagementId="eng-1" />, {
+      routes: {
+        "GET /engagements/eng-1/api/coverage?limit=500": { body: withEvidence },
+        [url]: { body: { evidence: [], total: 0 } },
+      },
+    });
+    await userEvent.click(await screen.findByRole("button", { name: "View redacted record" }));
+    expect(await screen.findByText("The record could not be loaded.")).toBeInTheDocument();
+  });
+});

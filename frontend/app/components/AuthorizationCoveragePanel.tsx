@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useAppContext } from "../context/AppContext";
-import type { AuthorizationCoverage, CoverageOperation, CoverageState } from "../types";
+import type { AuthorizationCoverage, CoverageEvidenceRef, CoverageOperation, CoverageState } from "../types";
 import { Panel } from "./ui";
 
 /**
@@ -47,6 +47,32 @@ const IDENTITY_COLOR: Record<string, string> = {
 function StateBadge({ state }: { state: CoverageState }) {
   return <span className="rounded px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider"
     style={{ color: STATE_COLOR[state], background: `${STATE_COLOR[state]}1f` }}>{STATE_LABEL[state]}</span>;
+}
+
+/** The retained, redacted record behind a candidate, loaded only when asked for. */
+function EvidenceRecord({ engagementId, reference }: { engagementId: string; reference: CoverageEvidenceRef }) {
+  const { authFetch } = useAppContext();
+  const [record, setRecord] = useState<{ body: string; content_hash: string } | "failed" | null>(null);
+  async function open() {
+    try {
+      const params = new URLSearchParams({ job_id: reference.job_id, limit: "1" });
+      if (reference.case_id) params.set("case_id", reference.case_id);
+      if (reference.identity_id) params.set("identity_id", reference.identity_id);
+      const res = await authFetch(`/engagements/${engagementId}/evidence?${params}`);
+      if (!res.ok) throw new Error();
+      const row = ((await res.json()).evidence ?? [])[0];
+      setRecord(row ? { body: String(row.body ?? ""), content_hash: String(row.content_hash ?? "") } : "failed");
+    } catch { setRecord("failed"); }
+  }
+  return <div className="mt-1 rounded border border-[#2e2e2e] bg-[#111] p-2 text-[10px] text-[#94a3b8]">
+    <div><span className="font-mono text-[#f1f5f9]">{reference.identity_id ?? "unknown identity"}</span> was reviewed as <strong>{reference.expected}</strong> and observed as <strong>{reference.observed}</strong>
+      {" "}(job <span className="font-mono">{reference.job_id.slice(0, 8)}</span>)
+      {record === null && <button type="button" onClick={() => void open()} className="ml-2 text-[#89b4fa] hover:underline">View redacted record</button>}</div>
+    {record === "failed" && <div className="mt-1 text-[#f87171]">The record could not be loaded.</div>}
+    {record && record !== "failed" && <>
+      <pre className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap font-mono">{record.body}</pre>
+      <div className="mt-1 font-mono text-muted">sha256 {record.content_hash}{record.content_hash === reference.content_hash ? " (matches)" : " (differs from the coverage reference)"}</div></>}
+  </div>;
 }
 
 export default function AuthorizationCoveragePanel({ engagementId, onDraft }: { engagementId: string; onDraft?: (endpointId: string, identityIds: string[]) => void }) {
@@ -118,7 +144,8 @@ export default function AuthorizationCoveragePanel({ engagementId, onDraft }: { 
         <td className="py-2.5 pr-4"><StateBadge state={op.state} />
           {op.cases.length > 0 && <div className="mt-1 text-[10px] text-muted">{op.cases.length} reviewed case{op.cases.length === 1 ? "" : "s"}</div>}</td>
         <td className="py-2.5 pr-4 font-mono text-[#94a3b8]">{op.candidates.open + op.candidates.promoted > 0
-          ? `${op.candidates.open} open · ${op.candidates.promoted} promoted · ${op.candidates.backing_evidence} with evidence` : "—"}</td>
+          ? `${op.candidates.open} open · ${op.candidates.promoted} promoted · ${op.candidates.backing_evidence} with evidence` : "—"}
+          {(op.candidate_evidence ?? []).map((reference) => <EvidenceRecord key={reference.evidence_id} engagementId={engagementId} reference={reference} />)}</td>
         <td className="py-2.5"><div className="flex flex-wrap gap-1.5">{op.identity_coverage.map((row) =>
           <span key={row.identity_id} title={row.reason ? `${IDENTITY_LABEL[row.state] ?? row.state}: ${row.reason.replace(/_/g, " ")}` : IDENTITY_LABEL[row.state] ?? row.state}
             className="rounded border px-1.5 py-0.5 font-mono text-[10px]"
