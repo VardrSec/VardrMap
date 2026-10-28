@@ -95,6 +95,29 @@ export type ApiExchange = {
   response_length: number | null; response_mime: string; response_time_ms: number | null;
   parameter_names: string[]; note: string; captured_at: string | null; created_at: string | null;
 };
+export type CoverageState =
+  | "violation_candidate" | "inconclusive" | "partial" | "conclusive" | "reviewed_not_executed" | "untested";
+export type CoverageIdentity = {
+  identity_id: string; state: string; reason: string; expected: string | null;
+};
+export type CoverageOperation = {
+  endpoint_id: string; method: string; scheme: string; host: string; port: number | null;
+  path_template: string; observed_identities: string[]; state: CoverageState;
+  cases: {
+    case_id: string; name: string; test_case_id: string; identities: string[];
+    expected: Record<string, string>; queued_jobs: number; executed: boolean;
+    latest_job_id: string | null; assessment_status: string | null; reasons: string[];
+  }[];
+  identity_coverage: CoverageIdentity[];
+  candidates: { open: number; promoted: number; false_positive: number; backing_evidence: number };
+};
+export type AuthorizationCoverage = {
+  operations: CoverageOperation[];
+  summary: Record<CoverageState, number> & { total: number };
+  identities: string[];
+  unmatched_cases: { case_id: string; name: string; reason: string; request: string | null }[];
+  filtered_total?: number;
+};
 export type ApiEndpoint = {
   id: string; program_id: string; method: string; scheme: string; host: string;
   port: number | null; path_template: string; source: string; notes: string;

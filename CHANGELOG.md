@@ -4,6 +4,14 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Add authorization coverage to the API Surface: a read-only `GET /engagements/{id}/api/coverage`
+  and a panel that join observed operations, reviewed cases, executed Gate assessments,
+  candidates and evidence, so a researcher can see which operations are untested, reviewed but
+  not run, partially or inconclusively assessed, conclusive, or carrying a violation candidate,
+  and which identities were never reviewed against each. It invents no expectation, treats a
+  completed job without an assessment as not executed, and never reads `conclusive` as secure.
+  No migration, new table or new execution path.
+
 - Add an Overview "Client & testing window" and "Written authorization" panel so a
   researcher can create/link a client, set the testing window and record a written
   authorization from the interface. These were previously API-only. Viewers do not

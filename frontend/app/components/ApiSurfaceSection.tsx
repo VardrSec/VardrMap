@@ -5,6 +5,7 @@ import { ApiEndpoint } from "../types";
 import { useAppContext } from "../context/AppContext";
 import { Panel } from "./ui";
 import AuthorizationCaseBuilder from "./AuthorizationCaseBuilder";
+import AuthorizationCoveragePanel from "./AuthorizationCoveragePanel";
 
 const methodColor: Record<string, string> = {
   GET: "#4ade80", POST: "#89b4fa", PUT: "#f59e0b", PATCH: "#c084fc", DELETE: "#f87171",
@@ -66,6 +67,8 @@ export default function ApiSurfaceSection({ engagementId }: { engagementId: stri
           <div className="mt-1 text-[10px] uppercase tracking-widest text-muted">{label}</div>
         </div>)}
     </div>
+
+    <AuthorizationCoveragePanel key={engagementId} engagementId={engagementId} />
 
     <Panel title="Observed API operations">
       <div className="mb-4 flex flex-wrap gap-2">
