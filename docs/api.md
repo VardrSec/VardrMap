@@ -1616,6 +1616,15 @@ required for OpenAPI documents without a `servers` entry), `limit` (1-100, defau
 Each draft has an `anonymous` and a `member` identity (the member's token is a `value_env`
 reference, never a value). `404` for endpoint ids not in this engagement.
 
+Optional `boundary` (`cross_tenant`, `same_tenant_peer`, `higher_privilege` or `anonymous`) drafts one
+boundary question for **exactly one** observed operation (`endpoint_ids` with a single id, no `openapi`, no
+`identity_ids`). Identities, credential references, `role`/`tenant_id` and the `resource` owner come only from
+unambiguous reviewed declarations (the owner only from this operation's own reviewed cases); an identity with
+contradictory declarations is left out. The response adds `boundary_context` with `missing_context` (what the
+researcher must still supply, e.g. the resource owner or concrete object), `conflicts` and `ready_to_run`, which is
+always `false`: every expected access stays `skip`, nothing is stored or queued, and saving still goes through
+the reviewed-save checks (including the explicit `mutating` flag for unsafe methods).
+
 Optional `identity_ids` (max 20) replaces that template with identities this engagement already
 declared in its stored cases: only each identity's `id` and credential reference are copied (never a
 value, never a preflight) and every expected access is `skip`. An id that no case of this engagement
@@ -2021,6 +2030,12 @@ owner, so the class cannot be told apart), `reviewed_not_run` or `inconclusive`,
 `question` and the `basis` facts that make it askable. Hypotheses are questions to test, never findings, and
 say nothing about who should have access. `identities_without_tenant` lists identities that blunt
 cross-tenant reasoning. Supports `limit` (default 100, maximum 500) and `offset`.
+
+Declarations are never silently reconciled. If stored cases disagree about an identity's `role`,
+`tenant_id` or credential, its engagement-wide value is unknown, the disagreement is returned in
+`identity_conflicts` and nothing is built on it (an omitted attribute does not contradict a declared one).
+A case is classified only from its own declarations: an identity id that matches in another case lends it no
+tenant or role. `boundary_evidence` lists, per operation, the boundary classes with a current, evaluated result.
 
 ### `DELETE /engagements/{program_id}/api/exchanges/{exchange_id}`
 

@@ -67,3 +67,31 @@ describe("AuthorizationRelationshipsPanel", () => {
     await waitFor(() => expect(container.textContent).not.toContain("Boundary questions"));
   });
 });
+
+
+describe("AuthorizationRelationshipsPanel drafting and conflicts", () => {
+  it("offers Draft authorization test on each question and passes the operation and boundary", async () => {
+    const onDraft = jest.fn();
+    renderWithApp(<AuthorizationRelationshipsPanel engagementId="eng-1" onDraft={onDraft} />, {
+      routes: route({ ...base, hypotheses: [hypothesis("a"), hypothesis("b", "untested", "anonymous")] }),
+    });
+    const buttons = await screen.findAllByRole("button", { name: /Draft authorization test:/ });
+    expect(buttons).toHaveLength(2);
+    await userEvent.click(buttons[1]);
+    expect(onDraft).toHaveBeenCalledWith("e-b", "anonymous");
+  });
+
+  it("does not offer the action when no handler is wired", async () => {
+    renderWithApp(<AuthorizationRelationshipsPanel engagementId="eng-1" />, { routes: route({ ...base, hypotheses: [hypothesis("a")] }) });
+    await screen.findByText(/Has a caller from a different tenant/);
+    expect(screen.queryByRole("button", { name: /Draft authorization test/ })).not.toBeInTheDocument();
+  });
+
+  it("names contradictory identity declarations and says they are not used", async () => {
+    renderWithApp(<AuthorizationRelationshipsPanel engagementId="eng-1" />, {
+      routes: route({ ...base, identity_conflicts: [{ identity_id: "peer", attribute: "tenant_id", values: ["tenant-a", "tenant-b"] }], hypotheses: [] }),
+    });
+    expect(await screen.findByText(/Contradictory identity declarations \(not used until you resolve them\)/)).toBeInTheDocument();
+    expect(screen.getByText(/tenant id: tenant-a vs tenant-b/)).toBeInTheDocument();
+  });
+});

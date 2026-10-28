@@ -28,7 +28,7 @@ const STATUS_COLOR: Record<string, string> = {
 };
 const SHOWN = 12;
 
-export default function AuthorizationRelationshipsPanel({ engagementId }: { engagementId: string }) {
+export default function AuthorizationRelationshipsPanel({ engagementId, onDraft }: { engagementId: string; onDraft?: (endpointId: string, boundary: string) => void }) {
   const { authFetch, setMessage } = useAppContext();
   const [result, setResult] = useState<{ key: string; data: AuthorizationRelationships | null }>({ key: "", data: null });
   const [all, setAll] = useState(false);
@@ -65,6 +65,10 @@ export default function AuthorizationRelationshipsPanel({ engagementId }: { enga
         : askable.map((label) => <span key={label} className="rounded bg-[#242424] px-2 py-0.5 text-[#f1f5f9]">{label}</span>)}
       {data.tenants.length > 0 && <span>· tenants: <span className="font-mono">{data.tenants.join(", ")}</span></span>}
     </div>
+    {(data.identity_conflicts ?? []).length > 0 && <div className="mb-3 rounded border border-[#4a1f1f] bg-[#1a0d0d] p-2 text-[11px] text-[#f87171]">
+      <div className="font-semibold">Contradictory identity declarations (not used until you resolve them):</div>
+      <ul className="mt-1 list-disc pl-4">{data.identity_conflicts!.map((c) => <li key={`${c.identity_id}-${c.attribute}`}>
+        <span className="font-mono">{c.identity_id}</span> {c.attribute.replace("_", " ")}: {c.values.join(" vs ")}</li>)}</ul></div>}
     {(data.identities_without_tenant ?? []).length > 0 && <p className="mb-3 rounded border border-[#3f2f12] bg-[#1a1408] p-2 text-[11px] text-[#fbbf24]">
       No tenant is declared for {data.identities_without_tenant.join(", ")}, so their cross-tenant relationships cannot be established.</p>}
     {hypotheses.length === 0 && <p className="py-4 text-center text-sm text-muted">Every testable boundary has a current, evaluated result on the operations that matter.</p>}
@@ -75,6 +79,8 @@ export default function AuthorizationRelationshipsPanel({ engagementId }: { enga
         <span className="text-[10px]" style={{ color: STATUS_COLOR[h.status] ?? "#94a3b8" }}>{STATUS_LABEL[h.status] ?? h.status}</span>
       </div>
       <p className="mt-1 text-[#cbd5e1]">{h.question}</p>
+      {onDraft && <button type="button" onClick={() => onDraft(h.endpoint_id, h.boundary)} aria-label={`Draft authorization test: ${h.operation} · ${BOUNDARY_LABEL[h.boundary] ?? h.boundary}`}
+        className="mt-1 rounded border border-[#2e2e2e] px-2 py-1 text-[10px] text-[#89b4fa] hover:bg-[#2e2e2e]">Draft authorization test</button>}
       <ul className="mt-1 list-disc pl-4 text-[10px] text-muted">{h.basis.map((line) => <li key={line}>{line}</li>)}</ul>
     </li>)}</ul>
     {hypotheses.length > SHOWN && <button type="button" onClick={() => setAll(!all)} className="mt-3 text-xs text-[#89b4fa] hover:underline">
