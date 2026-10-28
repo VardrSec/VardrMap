@@ -2005,6 +2005,23 @@ not a verdict or a score. `sort=priority` orders operations deterministically: v
 then untested, reviewed-not-executed, inconclusive, partial and conclusive, with more reasons first
 within a state; it never hides an operation.
 
+### `GET /engagements/{program_id}/api/relationships`
+
+Read-only boundary hypotheses. It reads only what a person reviewed and saved in stored Gate cases: each
+identity's declared `role` and `tenant_id`, a case's `resource` context (`owner_identity`, `tenant_id`) and
+`role_hierarchy`, plus the current coverage result for each case (a run of an edited case does not count).
+Nothing is inferred from traffic and an identity whose tenant or role was never declared stays unclassified.
+
+A caller is classified relative to the reviewed owner of the object as `cross_tenant`, `same_tenant_peer`,
+`higher_privilege` or `anonymous` (no credentials, which needs no owner). `askable_boundaries` reports which
+classes the declared identities make testable at all. For each operation that has a captured reason to look
+(see `priority_reasons`) and each testable class without a current, evaluated result, a hypothesis is
+returned with `status` `untested`, `owner_context_missing` (the operation's reviewed cases declare no resource
+owner, so the class cannot be told apart), `reviewed_not_run` or `inconclusive`, a plain-language
+`question` and the `basis` facts that make it askable. Hypotheses are questions to test, never findings, and
+say nothing about who should have access. `identities_without_tenant` lists identities that blunt
+cross-tenant reasoning. Supports `limit` (default 100, maximum 500) and `offset`.
+
 ### `DELETE /engagements/{program_id}/api/exchanges/{exchange_id}`
 
 Delete one retained exchange and decrement its operation's observation count.

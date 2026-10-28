@@ -132,6 +132,20 @@ export type AuthorizationCoverage = {
   unattributed_assessments?: { job_id: string; case_id: string | null; assessment_status: string | null; reason: string }[];
   filtered_total?: number;
 };
+export type RelationshipHypothesis = {
+  id: string; endpoint_id: string; operation: string; boundary: string;
+  status: "untested" | "owner_context_missing" | "reviewed_not_run" | "inconclusive";
+  question: string; basis: string[];
+};
+export type AuthorizationRelationships = {
+  identities: { identity_id: string; role: string | null; tenant_id: string | null; anonymous: boolean }[];
+  tenants: string[];
+  askable_boundaries: Record<string, boolean>;
+  identities_without_tenant: string[];
+  hypotheses: RelationshipHypothesis[];
+  summary: Record<string, number>;
+  filtered_total?: number;
+};
 export type ApiEndpoint = {
   id: string; program_id: string; method: string; scheme: string; host: string;
   port: number | null; path_template: string; source: string; notes: string;
