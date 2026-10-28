@@ -3,6 +3,8 @@
 Synthetic data only. Tenants and roles exist solely where a case declared them:
 the module must not guess either.
 """
+import pytest
+
 from db import SessionLocal
 from models import AuthorizationTestCase
 from tests.test_authorization_coverage import (
@@ -413,3 +415,44 @@ def test_a_modified_case_with_history_still_drafts_from_its_current_declarations
     assert body["drafts"][0]["spec"]["resource"]["tenant_id"] == "tenant-b"  # the current reviewed declaration
     data = relationships(client, auth_headers, program_id)
     assert hypotheses(data), "the earlier run must not hide the questions the edited case reopens"
+
+
+@pytest.mark.parametrize("boundary, expected_ids", [
+    ("cross_tenant", {"owner", "peer", "admin"}),
+    ("same_tenant_peer", {"owner", "tenant-b"}),
+])
+def test_boundary_draft_uses_resource_tenant_instead_of_owner_tenant(client, auth_headers, program_id, boundary, expected_ids):
+    capture(client, auth_headers, program_id, "GET", "/orders/7")
+    reviewed = case("orders", "/orders/42")
+    reviewed["resource"]["tenant_id"] = "tenant-b"
+    store(client, auth_headers, program_id, reviewed)
+
+    res = boundary_draft(client, auth_headers, program_id, boundary)
+    assert res.status_code == 200, res.text
+    body = res.json()
+    draft = body["drafts"][0]
+    assert set(ids(draft)) == expected_ids
+    assert draft["spec"]["resource"] == {"owner_identity": "owner", "tenant_id": "tenant-b"}
+    assert {e["decision"] for e in draft["spec"]["expected_access"]} == {"skip"}
+    assert body["boundary_context"]["ready_to_run"] is False
+
+
+@pytest.mark.parametrize("boundary", ["cross_tenant", "same_tenant_peer"])
+@pytest.mark.parametrize("reverse", [False, True])
+def test_boundary_draft_does_not_choose_between_conflicting_resource_tenants(client, auth_headers, program_id, boundary, reverse):
+    capture(client, auth_headers, program_id, "GET", "/orders/7")
+    declarations = [("a", "tenant-a"), ("b", "tenant-b")]
+    for name, tenant in reversed(declarations) if reverse else declarations:
+        reviewed = case(name, "/orders/42")
+        reviewed["resource"]["tenant_id"] = tenant
+        store(client, auth_headers, program_id, reviewed)
+
+    res = boundary_draft(client, auth_headers, program_id, boundary)
+    assert res.status_code == 200, res.text
+    body = res.json()
+    draft = body["drafts"][0]
+    assert ids(draft) == ["owner"]
+    assert draft["spec"]["resource"] == {"owner_identity": "owner"}
+    assert any("resource.tenant_id" in gap and "different tenants" in gap for gap in body["boundary_context"]["missing_context"])
+    assert {e["decision"] for e in draft["spec"]["expected_access"]} == {"skip"}
+    assert body["boundary_context"]["ready_to_run"] is False

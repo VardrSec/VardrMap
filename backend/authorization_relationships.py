@@ -278,13 +278,15 @@ def draft_for_boundary(db: Session, program_id: str, endpoint_id: str, boundary:
     conflicts = [c for c in all_conflicts]
 
     # The owner comes only from reviewed cases for this very operation.
-    owners: dict[str, dict] = {}
+    owners: dict[str, set[str]] = {}
     for entry in (op["cases"] if op else []):
         spec = cases.get(entry["case_id"], {})
         resource = spec.get("resource") if isinstance(spec.get("resource"), dict) else {}
         owner_id = str(resource.get("owner_identity") or "")
         if owner_id:
-            owners[owner_id] = resource
+            tenants = owners.setdefault(owner_id, set())
+            if resource.get("tenant_id"):
+                tenants.add(str(resource["tenant_id"]))
     owner_id = next(iter(owners)) if len(owners) == 1 else None
     if not owners:
         missing.append("resource.owner_identity: no reviewed case for this operation says who owns the object under test.")
@@ -296,6 +298,13 @@ def draft_for_boundary(db: Session, program_id: str, endpoint_id: str, boundary:
     if owner_id and owner is None:
         missing.append(f"The owner {owner_id} has contradictory declarations, so it cannot anchor a draft.")
         owner_id = None
+    resource_tenants = owners.get(owner_id, set())
+    tenant_conflict = len(resource_tenants) > 1
+    object_tenant = None
+    if tenant_conflict:
+        missing.append("resource.tenant_id: reviewed cases for this operation name different tenants (" + ", ".join(sorted(resource_tenants)) + "); choose one.")
+    elif owner_id:
+        object_tenant = next(iter(resource_tenants), owner["tenant_id"] if owner else None)
     chosen: list[dict] = []
     if boundary == "anonymous":
         chosen = [v for v in usable.values() if v["anonymous"]]
@@ -304,21 +313,21 @@ def draft_for_boundary(db: Session, program_id: str, endpoint_id: str, boundary:
     else:
         pool = [v for v in usable.values() if not v["anonymous"] and v["identity_id"] != owner_id]
         if boundary == "cross_tenant":
-            if owner and owner["tenant_id"]:
-                chosen = [v for v in pool if v["tenant_id"] and v["tenant_id"] != owner["tenant_id"]]
-            else:
+            if object_tenant:
+                chosen = [v for v in pool if v["tenant_id"] and v["tenant_id"] != object_tenant]
+            elif not tenant_conflict:
                 chosen = [v for v in pool if v["tenant_id"]]
                 if owner_id:
-                    missing.append(f"The tenant of the owner {owner_id} is not declared.")
+                    missing.append("resource.tenant_id: neither the object's tenant nor its owner's tenant is declared.")
             if not chosen:
                 missing.append("No identity in a different tenant is declared.")
         elif boundary == "same_tenant_peer":
-            if owner and owner["tenant_id"]:
-                chosen = [v for v in pool if v["tenant_id"] == owner["tenant_id"]]
-            else:
+            if object_tenant:
+                chosen = [v for v in pool if v["tenant_id"] == object_tenant]
+            elif not tenant_conflict:
                 chosen = [v for v in pool if v["tenant_id"]]
                 if owner_id:
-                    missing.append(f"The tenant of the owner {owner_id} is not declared.")
+                    missing.append("resource.tenant_id: neither the object's tenant nor its owner's tenant is declared.")
             if not chosen:
                 missing.append("No second identity in the owner's tenant is declared.")
         elif boundary == "higher_privilege":
@@ -353,9 +362,8 @@ def draft_for_boundary(db: Session, program_id: str, endpoint_id: str, boundary:
     resource = None
     if owner_id:
         resource = {"owner_identity": owner_id}
-        tenant = (owners.get(owner_id) or {}).get("tenant_id") or (owner["tenant_id"] if owner else None)
-        if tenant:
-            resource["tenant_id"] = tenant
+        if object_tenant:
+            resource["tenant_id"] = object_tenant
     hierarchy_out = None
     if boundary == "higher_privilege":
         hs = {tuple(h) for h in [[str(r) for r in s.get("role_hierarchy") or []] for s in cases.values()] if h}
