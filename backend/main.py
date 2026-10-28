@@ -18,7 +18,7 @@ from deps import get_current_user, require_full_scope
 from limiter import limiter
 from logging_config import configure_logging
 from routers import api_surface, apikeys, assets, authorizations, clients, engagements, evidence, findings, imports, jobs, manual_tests, members, radar, recon, reports, runner, scan_profiles, scans, scope, services, settings, test_cases
-from routers import case_authoring, deliverables, finding_activity, playbooks, proposals
+from routers import api_coverage, case_authoring, deliverables, finding_activity, playbooks, proposals
 from routers import local_auth
 
 auth_methods()  # Invalid provider configuration must fail closed at startup.
@@ -193,6 +193,7 @@ app.include_router(proposals.router)
 app.include_router(apikeys.router,      dependencies=_full)
 app.include_router(assets.router,       dependencies=_full)
 app.include_router(api_surface.router,  dependencies=_full)
+app.include_router(api_coverage.router, dependencies=_full)
 app.include_router(evidence.router,     dependencies=_full)
 app.include_router(engagements.router,  dependencies=_full)
 app.include_router(members.router,      dependencies=_full)

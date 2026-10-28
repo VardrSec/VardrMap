@@ -1946,6 +1946,35 @@ observation count.
 Return an operation with retained, redacted exchanges. Supports `limit` (default
 50, maximum 200) and `offset`; `exchange_total` reports the unpaginated count.
 
+### `GET /engagements/{program_id}/api/coverage`
+
+Read-only authorization-testing coverage, computed on demand from stored records
+(observed operations, stored cases, Gate jobs and their `assessment`, scan-item
+candidates and evidence). It writes nothing and requires a full-scope credential.
+Supports `state` (one of the states below), `limit` (default 200, maximum 1000) and
+`offset`; `filtered_total` counts the filtered set while `summary` always describes the
+whole engagement.
+
+A stored case covers an operation only when its request matches by method, scheme,
+host, effective port and path shape (identifier-shaped segments are normalised as at
+capture, and a `{placeholder}` template segment matches one concrete segment). A case
+with no `allow`/`deny` expectation reviews nothing and appears in `unmatched_cases`
+(`no_reviewed_expectation`), as does a case whose request matches no observed
+operation (`no_observed_operation`).
+
+Each operation has one `state`: `violation_candidate` (an open or promoted `vardrgate`
+scan item from an executed job), `conclusive` (every matched case executed and every
+latest assessment is conclusive), `partial` (some evaluated results, not conclusive),
+`inconclusive` (executed, nothing evaluated), `reviewed_not_executed` (a reviewed case
+but no job reported an assessment; queued, running and failed jobs do not count) and
+`untested`. `conclusive` repeats the stored assessment and is never a statement that the
+operation is secure. `candidates` reports `open`, `promoted`, `false_positive` and
+`backing_evidence` (reviewed-deny executions observed as allow). `identity_coverage`
+lists every identity declared in any case of the engagement with its best latest state
+for this operation: `evaluated`, `inconclusive`, `missing`, `skipped`, `reviewed_not_run`
+or `not_reviewed` (not in a reviewed case for this operation: a gap in what was
+reviewed, not a claim about what should be allowed).
+
 ### `DELETE /engagements/{program_id}/api/exchanges/{exchange_id}`
 
 Delete one retained exchange and decrement its operation's observation count.
