@@ -4,6 +4,10 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Fix boundary drafts to compare callers with the resource's tenant, matching relationship classification,
+  rather than always using the owner's tenant. Conflicting resource-tenant declarations are reported as
+  missing context and never resolved by case order. Draft decisions remain `skip`; nothing is saved or queued.
+
 - Make boundary questions actionable and fix relationship integrity. A question's **Draft authorization test**
   opens the existing case builder for that operation with the identities, credential references (never values),
   tenant/role and resource owner that are unambiguous in reviewed cases, lists what is still missing, and keeps

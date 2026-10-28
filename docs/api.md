@@ -1620,7 +1620,11 @@ Optional `boundary` (`cross_tenant`, `same_tenant_peer`, `higher_privilege` or `
 boundary question for **exactly one** observed operation (`endpoint_ids` with a single id, no `openapi`, no
 `identity_ids`). Identities, credential references, `role`/`tenant_id` and the `resource` owner come only from
 unambiguous reviewed declarations (the owner only from this operation's own reviewed cases); an identity with
-contradictory declarations is left out. The response adds `boundary_context` with `missing_context` (what the
+contradictory declarations is left out. Tenant-boundary drafts use the resource's declared tenant,
+falling back to its owner's tenant only when no resource tenant is declared. Conflicting resource tenants
+across this operation's cases leave the resource tenant unset and exclude tenant-boundary callers until
+the researcher chooses the intended tenant; the disagreement is listed in `missing_context`.
+The response adds `boundary_context` with `missing_context` (what the
 researcher must still supply, e.g. the resource owner or concrete object), `conflicts` and `ready_to_run`, which is
 always `false`: every expected access stays `skip`, nothing is stored or queued, and saving still goes through
 the reviewed-save checks (including the explicit `mutating` flag for unsafe methods).
