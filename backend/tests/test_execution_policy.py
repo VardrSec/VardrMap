@@ -406,8 +406,9 @@ def test_patch_to_running_is_denied_when_stop_work_is_engaged(
 ):
     """Reported bypass: PATCH /jobs/{id} set status directly.
 
-    A job stopped at /claim could simply be PATCHed to running instead. Both
-    routes into `running` are evaluated, so stop-work holds on either.
+    A job stopped at /claim could simply be PATCHed to running instead. PATCH no
+    longer enters running at all, so /claim, which evaluates policy, is the only
+    route and stop-work holds.
     """
     from datetime import datetime, timezone
 
@@ -415,13 +416,11 @@ def test_patch_to_running_is_denied_when_stop_work_is_engaged(
     _set(engagement, stop_work_at=datetime.now(timezone.utc))
 
     res = client.patch(f"/jobs/{job_id}", json={"status": "running"}, headers=auth_headers)
-    assert res.status_code == 403
-    assert res.json()["detail"]["reason"] == "stop_work_active"
+    assert res.status_code == 409
+    assert client.post(f"/jobs/{job_id}/claim", headers=auth_headers).status_code == 403
 
 
-def test_patch_to_running_warns_outside_the_testing_window(
-    client, auth_headers, engagement
-):
+def test_claim_warns_outside_the_testing_window(client, auth_headers, engagement):
     from datetime import datetime, timedelta, timezone
 
     job_id = _create_job(client, auth_headers, engagement).json()["id"]
@@ -429,7 +428,7 @@ def test_patch_to_running_warns_outside_the_testing_window(
     _add_authorization(
         engagement, status="active", window_end=datetime.now(timezone.utc) - timedelta(minutes=1)
     )
-    res = client.patch(f"/jobs/{job_id}", json={"status": "running"}, headers=auth_headers)
+    res = client.post(f"/jobs/{job_id}/claim", headers=auth_headers)
     assert res.status_code == 200
     assert "outside_testing_window" in _reasons(res)
 
@@ -448,9 +447,9 @@ def test_patch_job_stays_pending_after_a_denied_transition(client, auth_headers,
         db.close()
 
 
-def test_patch_to_running_still_works_when_policy_permits(client, auth_headers, engagement):
+def test_claim_still_works_when_policy_permits(client, auth_headers, engagement):
     job_id = _create_job(client, auth_headers, engagement).json()["id"]
-    res = client.patch(f"/jobs/{job_id}", json={"status": "running"}, headers=auth_headers)
+    res = client.post(f"/jobs/{job_id}/claim", headers=auth_headers)
     assert res.status_code == 200
     assert _warnings(res) == []
 
@@ -461,7 +460,7 @@ def test_patch_to_terminal_states_is_not_policy_gated(client, auth_headers, enga
     from datetime import datetime, timezone
 
     job_id = _create_job(client, auth_headers, engagement).json()["id"]
-    client.patch(f"/jobs/{job_id}", json={"status": "running"}, headers=auth_headers)
+    assert client.post(f"/jobs/{job_id}/claim", headers=auth_headers).status_code == 200
     _set(engagement, stop_work_at=datetime.now(timezone.utc))
 
     res = client.patch(f"/jobs/{job_id}", json={"status": "failed"}, headers=auth_headers)

@@ -266,7 +266,7 @@ Release the emergency brake. **Owner only** — engaging a stop is a safety acti
 
 ### Scope warnings
 
-Job creation, job claim, and the `PATCH /jobs/{id}` transition into `running` all run the policy evaluator (`backend/policy.py`). Findings are **advisory** — staying in scope is the operator's responsibility, so a job outside scope or outside its testing window is still queued and still runs. Each of those three responses carries a `warnings` array:
+Job creation and job claim run the policy evaluator (`backend/policy.py`); claim is the only way a job enters `running`. Findings are **advisory** — staying in scope is the operator's responsibility, so a job outside scope or outside its testing window is still queued and still runs. Both responses carry a `warnings` array (`PATCH /jobs/{id}` returns an empty one):
 
 ```json
 {
@@ -1123,7 +1123,15 @@ Atomically claim a pending job. Sets `status: "running"` and stamps `started_at`
 - `409` — job is not in `pending` state
 
 ### `PATCH /jobs/{job_id}`
-Update a job's status. Used by VardrRunner to complete (`done`/`failed`) jobs after claiming via `POST /jobs/{id}/claim`.
+Release, complete, fail or cancel a job. A job enters `running` only through `POST /jobs/{id}/claim`, and a finished job never reopens: running the work again is a new job, so a recorded outcome and its evidence are not rewritten.
+
+| From | Allowed `status` | Used for |
+|---|---|---|
+| `pending` | `failed`, `done` | failure before claim or operator cancel; nothing to run |
+| `running` | `done`, `failed`, `pending` | the runner's outcome or an operator cancel; release after a stop-work refusal |
+| `done`, `failed` | — | finished |
+
+Repeating a job's current status (other than `running`) is a no-op that returns the job unchanged, so a retried completion is safe.
 
 **Request body**
 ```json
@@ -1132,15 +1140,17 @@ Update a job's status. Used by VardrRunner to complete (`done`/`failed`) jobs af
   "error_message": ""
 }
 ```
-- `status`: `"pending"`, `"running"`, `"done"`, or `"failed"`
+- `status`: `"pending"`, `"done"`, or `"failed"` (see the table above)
 - `error_message` (optional): set when marking `failed`
-- Setting `status: "running"` stamps `started_at`; setting `"done"` or `"failed"` stamps `completed_at`
+- Setting `"done"` or `"failed"` stamps `completed_at`
 
 **Response:** updated job object.
 
 **Errors**
 - `400` — invalid status value
+- `403` — the caller can only view the engagement
 - `404` — job not found or belongs to another user
+- `409` — the transition is not allowed from the job's current status
 
 ---
 
@@ -2133,7 +2143,7 @@ unknown guide ids return 404. Neither endpoint stores progress or queues work.
 `POST /jobs/{id}/claim` freezes a Gate case snapshot and returns its exact spec
 in `config.test_case`. Pending polls still reflect edits before claim. The snapshot
 is separate from stored `config`, which continues to hold only a case UUID.
-Legacy PATCH-to-running also freezes the snapshot. Runner refuses a changed spec
+Claim is the only way into `running`, so every run has this snapshot. Runner refuses a changed spec
 between poll and claim so it cannot execute a target set the operator did not see.
 
 `POST /jobs/{id}/upload` accepts optional `case_hash` (64 lowercase hex chars): SHA-256

@@ -78,14 +78,14 @@ exclusion meant it.
 **Ambiguity warns.** A target that cannot be resolved to a decision is flagged
 rather than passed over silently.
 
-### Three evaluation points
+### Two evaluation points
 
-Policy is evaluated at **job creation**, again at **job claim**, and on the
-`PATCH /jobs/{id}` transition into `running`. All three are required and none is
-redundant — a job queued inside the window may be claimed an hour after it
-closed, and PATCH is an independent route into execution that VardrRunner uses.
+Policy is evaluated at **job creation** and again at **job claim**. Both are
+required — a job queued inside the window may be claimed an hour after it closed.
+`POST /jobs/{id}/claim` is the only route into `running`: `PATCH /jobs/{id}`
+refuses that transition, so there is no second route to evaluate.
 
-Evaluating at all three means the warning reflects the state at the moment work
+Evaluating at claim means the warning reflects the state at the moment work
 actually starts, and it means stop-work engaged after queueing still halts the
 job rather than applying only to future ones.
 
