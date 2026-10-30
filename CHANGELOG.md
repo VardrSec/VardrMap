@@ -4,6 +4,13 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- **Behaviour change:** `PATCH /jobs/{id}` enforces job state transitions. A job enters `running`
+  only through `POST /jobs/{id}/claim`, which evaluates policy and freezes the case snapshot; a
+  `done` or `failed` job never reopens. Allowed: `pending` → `failed`/`done`, `running` →
+  `done`/`failed`/`pending` (stop-work release). Anything else returns `409` and changes
+  nothing; repeating the current status is a no-op. VardrRunner, the job board's cancel and
+  its re-queue already use only these transitions.
+
 - Reconcile setup, architecture and API guides with the existing Compose/local-account
   path, provider-conditional GitHub credentials and shared session authorization.
 
