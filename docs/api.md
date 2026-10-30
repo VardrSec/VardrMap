@@ -2141,7 +2141,7 @@ unknown guide ids return 404. Neither endpoint stores progress or queues work.
 `POST /jobs/{id}/claim` freezes a Gate case snapshot and returns its exact spec
 in `config.test_case`. Pending polls still reflect edits before claim. The snapshot
 is separate from stored `config`, which continues to hold only a case UUID.
-Legacy PATCH-to-running also freezes the snapshot. Runner refuses a changed spec
+Claim is the only way into `running`, so every run has this snapshot. Runner refuses a changed spec
 between poll and claim so it cannot execute a target set the operator did not see.
 
 `POST /jobs/{id}/upload` accepts optional `case_hash` (64 lowercase hex chars): SHA-256
