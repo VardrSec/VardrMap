@@ -219,6 +219,34 @@ def _reject_literal_credentials(spec: dict) -> None:
             )
 
 
+def _reject_environment_references(value: Any, path: str = "spec") -> None:
+    """Refuse `${...}` anywhere in a stored case.
+
+    VardrGate expands `${VAR}` from the environment of the process that runs it,
+    so a stored case carrying one could read any variable on the operator's
+    machine and send it to the case's target. Credentials are referenced with
+    `value_env` / `value_keychain` instead, which the runner resolves under its
+    own rules. Setup captures (`{{name}}`) are not environment references and
+    stay allowed. The offending value is never echoed: it may be a secret.
+    """
+    if isinstance(value, str):
+        if "${" in value:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"{path} must not contain a ${{...}} environment reference; reference "
+                    f"credentials with 'value_env' or 'value_keychain'"
+                ),
+            )
+    elif isinstance(value, dict):
+        for key, item in value.items():
+            _reject_environment_references(str(key), f"{path} key")
+            _reject_environment_references(item, f"{path}.{key}")
+    elif isinstance(value, list):
+        for i, item in enumerate(value):
+            _reject_environment_references(item, f"{path}[{i}]")
+
+
 def _validate_spec(spec: Any) -> dict:
     """Shape checks that mirror VardrGate's own validate(), plus the secret rule."""
     if not isinstance(spec, dict) or not spec:
@@ -317,6 +345,7 @@ def _validate_spec(spec: Any) -> dict:
             raise HTTPException(status_code=400, detail=f"setup[{i}] capture entries require a name and path")
 
     _reject_literal_credentials(spec)
+    _reject_environment_references(spec)
     _validate_preflight(spec)
     return spec
 

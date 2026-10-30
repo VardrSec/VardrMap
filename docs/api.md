@@ -1535,6 +1535,8 @@ A case is stored once and referenced from a job by id, so `ScanJob.config` stays
 
 **A credential carrying a non-empty literal `value` is rejected with `400`.** Each identity must reference its secret with `value_env` (an environment variable read on the runner) or `value_keychain` (an OS keychain account), which VardrRunner resolves on the operator's machine. The secret never reaches VardrMap and is never stored.
 
+**A `${...}` environment reference anywhere in the spec is rejected with `400`.** VardrGate expands `${VAR}` from the environment of the process that runs it, so a stored reference could read any variable on the runner. Credentials use `value_env` or `value_keychain`; setup captures (`{{name}}`) are unaffected. The error names the field, not its value.
+
 An empty `value` is allowed — `{"type": "static_header", "header": "", "value": ""}` is the legitimate anonymous caller in a BOLA case.
 
 `credential.type` is `bearer`, `api_key_header`, or `static_header`. `bearer` and `api_key_header` require exactly one secret reference; `static_header` may have none.
@@ -1572,7 +1574,7 @@ Store a test case.
 **Response:** `201` test case object.
 
 **Errors**
-- `400` — malformed spec, or a credential carrying a literal `value`
+- `400` — malformed spec, a credential carrying a literal `value`, or a `${...}` environment reference
 - `403` — viewer-role member (read-only)
 - `404` — engagement not found or not accessible
 
