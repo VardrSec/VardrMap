@@ -8,8 +8,8 @@ VardrMap is part of the VardrSec product family. Each product is a separate depl
 |---|---|---|
 | VardrMap | Web app — stores programs, scope, findings, reports, recon, scans | Active |
 | VardrRunner | Local CLI runner — runs tools on the user's machine, uploads results | Separate repo: [VardrSec/VardrRunner](https://github.com/VardrSec/VardrRunner) |
-| VardrVault | Secrets management for VardrSec products | Planned |
-| VardrScanner | Purpose-built scanning engine | Planned |
+| VardrSec | Compose installation, lifecycle, updates and recovery | Source-built distribution: [VardrSec/VardrSec](https://github.com/VardrSec/VardrSec) |
+| VardrGate | Specialized authorization-testing engine | Separate repo: [VardrSec/VardrGate](https://github.com/VardrSec/VardrGate) |
 
 VardrRunner is distributed from [PyPI](https://pypi.org/project/vardrrunner/)
 (`pipx install vardrrunner`) and developed in its own repository,
@@ -22,7 +22,17 @@ VardrMap's API); install, CLI, and runner internals are documented in the VardrR
 
 ## VardrMap Overview
 
-VardrMap is a two-service application. The frontend is a Next.js app deployed on Vercel. The backend is a FastAPI app deployed on Railway, backed by a Railway-hosted PostgreSQL database. The browser (running the Vercel-served Next.js app) calls the backend **directly** at `NEXT_PUBLIC_API_URL` over HTTPS, sending the short-lived HS256 JWT — minted by the frontend after GitHub OAuth — in the `Authorization` header. (Routing these calls through a server-side proxy to keep the token out of browser-side JavaScript is a candidate future hardening; today the calls are direct.)
+VardrMap has a Next.js frontend, a FastAPI backend and PostgreSQL. The local
+VardrSec distribution runs them with Compose behind trusted HTTPS and selects
+local-account login. Hosted deployments use Vercel and Railway with GitHub OAuth;
+explicit configuration can enable either login method or both. See
+[local authentication](local-authentication.md) and the distribution
+[installation guide](https://github.com/VardrSec/VardrSec/blob/main/docs/installation.md).
+
+The browser calls `NEXT_PUBLIC_API_URL` directly. GitHub login supplies a
+short-lived backend JWT; local login supplies a secure HTTP-only session cookie.
+Backend CORS must allow the exact frontend origin. Auth.js middleware is not an
+API proxy. The diagram below shows the **hosted GitHub** path:
 
 ```
 Browser (runs the Next.js app served by Vercel)
@@ -50,10 +60,10 @@ three-second connection timeouts and three-second statement timeouts. These are
 per-connection/per-statement budgets, not a whole-request deadline. No migrations
 or data writes occur during a probe. No data-model or migration change is needed.
 
-This begins the agreed responsibility split: VardrSec will manage Compose
+The implemented responsibility split is: VardrSec manages Compose
 install/start/stop/update; Runner diagnoses and executes explicitly; Map owns API
-readiness and displays reported status; Gate assesses authorization. The Compose
-distribution and new status UI are not implemented by this endpoint. See
+readiness and displays timestamped platform/Runner status; Gate assesses
+authorization. Readiness itself performs no lifecycle operations. See
 [readiness API](api.md#get-ready) and [ADR 0003](adr/0003-platform-readiness.md).
 
 Optional local authentication adds `local_credentials` (Argon2id hash and persisted
@@ -65,7 +75,7 @@ The existing organizations and permission predicates apply unchanged. The additi
 is refused. See [ADR 0004](adr/0004-local-authentication.md) and the
 [operator guide](local-authentication.md).
 
-The backend is deployed on Railway. On every deploy, Railway runs `bash start.sh`, which:
+For the hosted Railway deployment, Railway runs `bash start.sh`, which:
 
 1. Runs `python wait_for_db.py` — blocks until Postgres accepts a `SELECT 1`, polling every 2s for up to 120s
 2. Runs `alembic upgrade head` — applies any pending migrations against the production PostgreSQL database
@@ -95,9 +105,13 @@ policy does not reinterpret or rewrite previously stored timestamps.
 
 ## Authentication Flow
 
-There are two accepted token types. Both arrive on the `Authorization: Bearer <token>` header.
+Protected routes accept a browser JWT or personal API key in
+`Authorization: Bearer <token>`, or an enabled local browser session cookie when
+no Authorization header is supplied. An invalid bearer does not fall back to a
+cookie. `VARDRMAP_AUTH_METHODS` selects browser login providers; API keys remain
+independent credentials.
 
-### Browser JWT (normal login)
+### Browser JWT (GitHub login)
 
 1. User clicks "Sign in with GitHub"
 2. Auth.js v5 completes the GitHub OAuth flow and mints a session
@@ -112,7 +126,16 @@ There are two accepted token types. Both arrive on the `Authorization: Bearer <t
 3. `get_current_user` detects the `vmap_` prefix, hashes the token, looks up the hash in `api_keys`, and resolves the user from `github_id`
 4. The token never appears in the database again after generation — only the hash does
 
-Both paths return the same `{"github_id": ..., "username": ..., "email": ...}` dict, so all downstream route handlers are unaware of which auth method was used.
+### Local browser session
+
+1. An operator creates the first account explicitly through the terminal bootstrap; no anonymous registration endpoint exists.
+2. With local login enabled, the backend verifies the Argon2id password over HTTPS and issues a secure HTTP-only `__Host-` cookie. Only a hash of the opaque session token is stored.
+3. The browser includes the cookie on API requests and supplies an allowed Origin plus the session-bound `X-CSRF-Token` on writes. Sessions have absolute/idle expiration and server-side revocation.
+4. Local users retain the existing `users.github_id` identity field with a reserved `local:<uuid>` value. No global or cross-tenant administrator bypass is introduced.
+
+All paths resolve the same user identity and apply the existing ownership,
+organization and role checks. See [local authentication](local-authentication.md)
+for provider configuration, cookie constraints and recovery.
 
 ---
 
@@ -133,7 +156,8 @@ and body again before writing it. Identity labels such as `anonymous`,
 `standard-user`, and `admin` describe a test perspective; they do not store or
 model the corresponding account or credential.
 
-Most primary keys are UUID strings; `User.github_id` is the GitHub identity key.
+Most primary keys are UUID strings; `User.github_id` is the existing identity key
+for GitHub users and reserved `local:<uuid>` local users.
 
 The current ORM inventory below includes implemented tenancy, assets, evidence,
 test cases and deliverables. SQL constraints and column types are defined in

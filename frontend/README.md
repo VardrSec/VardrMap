@@ -1,17 +1,29 @@
 # VardrMap frontend
 
-Next.js 16 App Router and TypeScript frontend, deployed on Vercel.
+Next.js 16 App Router and TypeScript frontend, used in the local Compose
+distribution and hosted on Vercel.
 
 ## Setup
 
 Run `npm install`, copy `.env.example` to `.env.local`, and run `npm run dev`.
-See [development setup](../docs/development.md) for GitHub OAuth, backend configuration and local testing.
-Required variables are `AUTH_SECRET`, `AUTH_GITHUB_ID`, `AUTH_GITHUB_SECRET`,
-`BACKEND_JWT_SECRET`, and `NEXT_PUBLIC_API_URL`. `AUTH_URL` is optional.
+See [development setup](../docs/development.md) for backend configuration and tests.
+Set `VARDRMAP_AUTH_METHODS` consistently on frontend and backend: `github` (default),
+`local`, or `github,local`. `AUTH_SECRET`, `BACKEND_JWT_SECRET` and
+`NEXT_PUBLIC_API_URL` remain required; `AUTH_GITHUB_ID` and `AUTH_GITHUB_SECRET`
+are required only when GitHub is enabled. `AUTH_URL` is optional.
+
+Local-account login requires trusted HTTPS for both UI and API and explicit backend
+allowed origins; `npm run dev` alone does not establish that. Follow the
+[local authentication guide](../docs/local-authentication.md) or the distribution
+[installation guide](https://github.com/VardrSec/VardrSec/blob/main/docs/installation.md).
+Initial account creation and recovery are terminal operations, not public signup.
 
 ## Request and state flow
 
-`auth.ts` configures Auth.js v5 and mints short-lived backend JWTs in its callbacks.
+`auth.ts` configures Auth.js v5 and, when GitHub is enabled, mints short-lived
+backend JWTs in its callbacks. Local login uses the backend session endpoints
+and a secure HTTP-only cookie; cookie-authenticated writes include Origin and
+`X-CSRF-Token`. Both paths retain existing backend authorization checks.
 `app/api/auth/[...nextauth]/route.ts` exposes its handlers. `proxy.ts` applies
 Auth.js middleware; it does not proxy backend API requests.
 `app/context/AppContext.tsx` provides `authFetch`, which sends authenticated
