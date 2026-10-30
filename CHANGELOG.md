@@ -11,6 +11,11 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
   nothing; repeating the current status is a no-op. VardrRunner, the job board's cancel and
   its re-queue already use only these transitions.
 
+- Reject `${...}` environment references anywhere in a stored authorization test case. VardrGate
+  expands them from the environment of the process that runs it, so a stored reference could read
+  any variable on the runner and send it to the case's target. Credentials keep using `value_env` /
+  `value_keychain`; setup captures (`{{name}}`) are unaffected. Existing stored cases are not rewritten.
+
 - Reconcile setup, architecture and API guides with the existing Compose/local-account
   path, provider-conditional GitHub credentials and shared session authorization.
 
