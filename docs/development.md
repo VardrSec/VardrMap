@@ -13,7 +13,7 @@ and no real user credentials; its TLS exception is limited to that test context.
 - Python 3.12+
 - Node.js 20 or 24 (CI tests both; 20 matches the Vercel / `.nvmrc` production runtime)
 - PostgreSQL (or use Railway for a hosted instance)
-- A GitHub OAuth App for local login
+- A GitHub OAuth App only when the `github` login method is enabled
 
 For the isolated three-product API engagement test, see
 [`scripts/integration/README.md`](../scripts/integration/README.md). It uses real
@@ -90,12 +90,15 @@ The app is now at `http://localhost:3000`.
 |---|---|---|
 | `AUTH_URL` | No | Full URL of this Next.js app. Auth.js v5 infers it from the incoming request, and uses `VERCEL_URL` on Vercel, so leave it unset unless you run behind a proxy that rewrites the host. (The v4 name was `NEXTAUTH_URL`; that variable is no longer read.) |
 | `AUTH_SECRET` | Yes | Random secret for Auth.js session encryption. Generate with: `openssl rand -base64 32` |
-| `AUTH_GITHUB_ID` | Yes | GitHub OAuth App client ID |
-| `AUTH_GITHUB_SECRET` | Yes | GitHub OAuth App client secret |
+| `VARDRMAP_AUTH_METHODS` | No | `github` (default), `local`, or `github,local`; set consistently on backend and frontend |
+| `AUTH_GITHUB_ID` | When GitHub enabled | GitHub OAuth App client ID |
+| `AUTH_GITHUB_SECRET` | When GitHub enabled | GitHub OAuth App client secret |
 | `BACKEND_JWT_SECRET` | Yes | Must match `BACKEND_JWT_SECRET` in `backend/.env` exactly |
-| `NEXT_PUBLIC_API_URL` | Yes | Backend base URL. Local: `http://localhost:8000`. Production: your Railway backend URL. |
+| `NEXT_PUBLIC_API_URL` | Yes | Backend base URL. Default GitHub-only development: `http://localhost:8000`. Local-account browsers require trusted HTTPS for both API and UI; see the local-authentication guide. |
 
 ### Setting up a GitHub OAuth App
+
+This section applies only when `github` is enabled in `VARDRMAP_AUTH_METHODS`.
 
 1. Go to GitHub → Settings → Developer settings → OAuth Apps → New OAuth App
 2. Set **Authorization callback URL** to `http://localhost:3000/api/auth/callback/github` (local) or your Vercel URL in production

@@ -4,6 +4,9 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Reconcile setup, architecture and API guides with the existing Compose/local-account
+  path, provider-conditional GitHub credentials and shared session authorization.
+
 - Fix boundary drafts to compare callers with the resource's tenant, matching relationship classification,
   rather than always using the owner's tenant. Conflicting resource-tenant declarations are reported as
   missing context and never resolved by case order. Draft decisions remain `skip`; nothing is saved or queued.

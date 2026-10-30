@@ -1,6 +1,12 @@
 # API Reference
 
-All endpoints require `Authorization: Bearer <token>` unless noted otherwise. The token is either a browser JWT (minted by the frontend after GitHub OAuth) or a personal API key with the `vmap_` prefix. See [architecture.md](architecture.md) for how each token type is resolved.
+Protected endpoints require authentication unless noted otherwise: a browser JWT
+(minted after GitHub OAuth), a personal `vmap_` API key in
+`Authorization: Bearer <token>`, or an enabled local browser session cookie.
+Cookie-authenticated writes also require an allowed Origin and `X-CSRF-Token`.
+API keys remain independent of the configured browser login providers. See
+[architecture.md](architecture.md#authentication-flow) for identity resolution
+and the local-authentication section below for session requirements.
 
 Responses are JSON unless a streaming endpoint is documented otherwise. Timestamps are ISO 8601 UTC strings.
 

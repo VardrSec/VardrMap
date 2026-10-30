@@ -10,10 +10,10 @@ Bug bounty work is one `engagement_type` among four (`bug_bounty`, `pentest`, `r
 
 | Layer | Technology | Hosting |
 |---|---|---|
-| Frontend | Next.js 16 (App Router, TypeScript) | Vercel |
-| Backend | FastAPI (Python 3.12) | Railway |
-| Database | PostgreSQL (psycopg3) | Railway |
-| Auth | GitHub OAuth → Auth.js v5 → backend JWT (HS256) | — |
+| Frontend | Next.js 16 (App Router, TypeScript) | Compose or Vercel |
+| Backend | FastAPI (Python 3.12) | Compose or Railway |
+| Database | PostgreSQL (psycopg3) | Compose or Railway |
+| Auth | Configured local accounts, GitHub OAuth → Auth.js v5 → backend JWT, or both; separate API keys | — |
 | ORM | SQLAlchemy + Alembic | — |
 
 ---
@@ -76,7 +76,9 @@ Rationale in [docs/adr/0001-central-policy-engine.md](docs/adr/0001-central-poli
 
 ## Security Controls
 
-- JWT authentication on all protected routes — HS256; `sub`, `aud`, `iss` and `exp` required, with signature, audience, issuer and expiry validated
+- Protected routes accept configured local browser sessions, browser JWTs or personal API keys through the same ownership and organization checks
+- Browser JWT validation — HS256; `sub`, `aud`, `iss` and `exp` required, with signature, audience, issuer and expiry validated
+- Local sessions — Argon2id passwords, secure HTTP-only cookies, server-side expiration/revocation, and Origin plus CSRF checks on cookie-authenticated writes
 - Personal API key authentication — opaque token, SHA-256 hash stored only
 - BOLA enforcement — database access combines ownership, organization membership and engagement invitations; inaccessible resources return `404`, and viewers cannot write
 - Secret redaction — auth headers, cookies, tokens, and URL credentials stripped from evidence on write
@@ -90,7 +92,21 @@ Rationale in [docs/adr/0001-central-policy-engine.md](docs/adr/0001-central-poli
 
 ## Quick Start
 
-See [docs/development.md](docs/development.md) for full setup including environment variables, migrations, and running tests.
+For a source-built local platform, follow the VardrSec distribution
+[installation guide](https://github.com/VardrSec/VardrSec/blob/main/docs/installation.md).
+It provides Compose lifecycle, trusted local HTTPS, an explicit terminal account
+bootstrap and Runner diagnostics. Starting the platform does not start scans.
+
+Login methods are selected explicitly with `VARDRMAP_AUTH_METHODS=github`, `local`
+or `github,local` on both services. Local accounts use the existing user, ownership
+and organization permissions. Read [local authentication](docs/local-authentication.md)
+for password/session controls, bootstrap and recovery. GitHub OAuth remains available
+for hosted deployments; its credentials are required only when that provider is enabled.
+
+The snippets below are the default **GitHub-only development** setup. Local-account
+browser development requires trusted HTTPS for both UI and API; these HTTP dev
+servers alone do not provide it. See [docs/development.md](docs/development.md) for
+environment variables, migrations and tests.
 
 **Backend (short version):**
 ```bash
@@ -122,7 +138,8 @@ npm run dev
 | [docs/domain-model.md](docs/domain-model.md) | Entity map, what exists today, and how each gap closes |
 | [docs/security-model.md](docs/security-model.md) | Threat model, scope-matching rules, tenant isolation |
 | [docs/api.md](docs/api.md) | Full API endpoint reference |
-| [docs/development.md](docs/development.md) | Local setup, env vars, migrations, tests |
+| [docs/development.md](docs/development.md) | Development setup, env vars, migrations, tests |
+| [docs/local-authentication.md](docs/local-authentication.md) | Configured login methods, HTTPS, terminal account bootstrap and recovery |
 | [docs/api-playbooks.md](docs/api-playbooks.md) | Original versioned API engagement guidance and human review boundaries |
 | [scripts/integration/README.md](scripts/integration/README.md) | Disposable Map → Runner → Gate acceptance and hosted staging boundaries |
 | [docs/implementation-roadmap.md](docs/implementation-roadmap.md) | Historical phased delivery plan; current backlog lives in roadmap.md |
