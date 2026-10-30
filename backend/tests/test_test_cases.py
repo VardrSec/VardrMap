@@ -65,6 +65,49 @@ def test_a_literal_credential_value_is_rejected(client, auth_headers, program_id
     assert "value_env" in res.text
 
 
+def test_an_environment_reference_is_rejected_anywhere_in_the_case(client, auth_headers, program_id):
+    """VardrGate expands ${VAR} from the environment of whoever runs it, so a
+    stored one could read any variable on the runner and send it to the target."""
+    placements = [
+        lambda s: s["request"].update(url="https://api.example.com/x?k=${RUNNER_KEY}"),
+        lambda s: s["request"].update(headers={"X-Probe": "${RUNNER_KEY}"}),
+        lambda s: s["request"].update(body='{"note": "${RUNNER_KEY}"}'),
+        lambda s: s["identities"][2]["credential"].update(header="X-${RUNNER_KEY}"),
+        lambda s: s.update(setup=[{"name": "login", "request": {"method": "GET", "url": "https://api.example.com/${RUNNER_KEY}"}}]),
+    ]
+    for place in placements:
+        spec = _spec()
+        place(spec)
+        res = _create(client, auth_headers, program_id, spec=spec)
+        assert res.status_code == 400, res.text
+        assert "environment reference" in res.text
+        assert "RUNNER_KEY" not in res.text
+
+
+def test_an_environment_reference_is_rejected_on_update(client, auth_headers, program_id):
+    created = _create(client, auth_headers, program_id)
+    assert created.status_code == 201, created.text
+    spec = _spec()
+    spec["request"]["headers"] = {"X-Probe": "${RUNNER_KEY}"}
+    res = client.patch(
+        f"/programs/{program_id}/test-cases/{created.json()['id']}",
+        json={"spec": spec},
+        headers=auth_headers,
+    )
+    assert res.status_code == 400, res.text
+
+
+def test_setup_captures_are_not_environment_references(client, auth_headers, program_id):
+    spec = _spec(setup=[{
+        "name": "create",
+        "request": {"method": "GET", "url": "https://api.example.com/objects"},
+        "capture": {"object_id": "id"},
+    }])
+    spec["request"]["url"] = "https://api.example.com/objects/{{object_id}}"
+    res = _create(client, auth_headers, program_id, spec=spec)
+    assert res.status_code == 201, res.text
+
+
 def test_an_empty_value_is_allowed_for_the_anonymous_identity(client, auth_headers, program_id):
     """`{"type": "static_header", "header": "", "value": ""}` is the legitimate
     anonymous caller in a BOLA case, not a leaked secret."""

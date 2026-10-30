@@ -377,8 +377,24 @@ class PipelineCreate(BaseModel):
 
 
 class JobStatusUpdate(BaseModel):
-    status: str                          # "running" | "done" | "failed"
+    status: str                          # "pending" | "done" | "failed"
     error_message: Optional[str] = None
+
+
+# Status changes PATCH /jobs/{id} may make. Entering `running` is only
+# POST /jobs/{id}/claim, whose conditional UPDATE arbitrates between runners and
+# freezes the Gate case snapshot. A finished job never reopens: running work
+# again is a new job, so a recorded outcome and its evidence are never rewritten.
+#   pending -> failed   failed before claim, or cancelled by the operator
+#   pending -> done     nothing to run (no targets resolved)
+#   running -> pending  released by the runner after a stop-work refusal
+#   running -> done | failed   the runner's outcome, or an operator cancel
+_PATCH_TRANSITIONS: dict[str, frozenset[str]] = {
+    "pending": frozenset({"done", "failed"}),
+    "running": frozenset({"pending", "done", "failed"}),
+    "done": frozenset(),
+    "failed": frozenset(),
+}
 
 
 def serialize_job(j: ScanJob) -> dict:
@@ -459,24 +475,6 @@ def _writable_engagement(job: ScanJob, current_user: dict, db: Session):
     engagement = get_engagement_or_404(job.program_id, current_user, db)
     require_member_write(engagement, current_user, db)
     return engagement
-
-
-def _check_run_transition(job: ScanJob, current_user: dict, db: Session, now) -> list[dict]:
-    """Re-evaluate policy before a job enters `running`; returns any warnings.
-
-    PATCH /jobs/{id} can set status directly — VardrRunner uses it — so this
-    path is evaluated like the others. Scope and window findings are advisory
-    here too; stop-work still refuses, from inside check().
-    """
-    engagement = get_engagement_or_404(job.program_id, current_user, db)
-    decision = enforcement.check(
-        db,
-        engagement,
-        capability=job.tool_type,
-        targets=_resolve_targets(job.program_id, job.target_source, job.config or {}, db),
-        now=now,
-    )
-    return enforcement.as_warnings(decision)
 
 
 def _validate_dependency(parent_id: str, program_id: str, github_id: str, db: Session) -> None:
@@ -765,13 +763,19 @@ def update_job(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Update job status. VardrRunner uses this to claim (running) and complete (done/failed) jobs."""
+    """Release, complete, fail or cancel a job (see _PATCH_TRANSITIONS).
+
+    Claiming is POST /jobs/{id}/claim. Repeating a job's current status is a
+    no-op that returns it unchanged, so a retried completion is safe; any other
+    transition outside the table is a 409 and changes nothing.
+    """
     job = (
         db.query(ScanJob)
         .filter(
             ScanJob.id == job_id,
             ScanJob.program_id.in_(accessible_engagement_ids(current_user["github_id"], db)),
         )
+        .with_for_update()
         .first()
     )
     if not job:
@@ -783,21 +787,16 @@ def update_job(
 
     _writable_engagement(job, current_user, db)
 
-    now = datetime.now(timezone.utc)
-    warnings: list[dict] = []
-    if body.status == "running" and job.status != "running":
-        warnings = _check_run_transition(job, current_user, db, now)
-        if job.tool_type == _VARDRGATE and job.case_snapshot is None:
-            case = db.query(AuthorizationTestCase).filter(
-                AuthorizationTestCase.id == str((job.config or {}).get("test_case_id") or ""),
-                AuthorizationTestCase.program_id == job.program_id,
-            ).first()
-            if case:
-                job.case_snapshot = case.spec
+    if body.status == job.status and body.status != "running":
+        return {**serialize_job(job), "warnings": []}
+    if body.status not in _PATCH_TRANSITIONS[job.status]:
+        hint = "; claim it with POST /jobs/{id}/claim" if body.status == "running" else ""
+        raise HTTPException(
+            status_code=409,
+            detail=f"job is {job.status}; it cannot be set to {body.status}{hint}",
+        )
 
     job.status = body.status
-    if body.status == "running" and not job.started_at:
-        job.started_at = now
     if body.status in ("done", "failed"):
         job.completed_at = datetime.now(timezone.utc)
     if body.error_message is not None:
@@ -819,7 +818,7 @@ def update_job(
             )
             background_tasks.add_task(send_webhook, user.webhook_url, message)
 
-    return {**serialize_job(job), "warnings": warnings}
+    return {**serialize_job(job), "warnings": []}
 
 
 @router.post("/jobs/{job_id}/claim")

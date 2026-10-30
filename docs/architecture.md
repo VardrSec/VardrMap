@@ -460,9 +460,9 @@ testable. Callers pass a `PolicyInput`; it returns a `PolicyDecision` carrying
 `allowed` and a stable `reason` code. `backend/enforcement.py` adapts it to the
 ORM via `check()`, which returns the decision rather than raising.
 
-It is invoked at **three** points — job creation, job claim, and the
-`PATCH /jobs/{id}` transition into `running` — so the result reflects state at
-the moment work starts, not just when it was queued.
+It is invoked at **two** points — job creation and job claim, the only route into
+`running` — so the result reflects state at the moment work starts, not just when
+it was queued.
 
 Findings are **advisory**: they ride back on the response as a `warnings` array
 and the job runs anyway. Only `stop_work_active` raises (`403`). See

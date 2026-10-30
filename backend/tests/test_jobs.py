@@ -181,14 +181,75 @@ class TestPendingJobs:
 # PATCH /jobs/{id}
 # ---------------------------------------------------------------------------
 
+def _claim(client, jid, headers):
+    res = client.post(f"/jobs/{jid}/claim", headers=headers)
+    assert res.status_code == 200, res.text
+    return res.json()
+
+
+def _status(client, program_id, jid, headers):
+    jobs = client.get(f"/programs/{program_id}/jobs", headers=headers).json()["jobs"]
+    return next(j for j in jobs if j["id"] == jid)
+
+
 class TestUpdateJob:
-    def test_mark_running(self, client, program_id, auth_headers):
+    def test_running_is_only_reachable_through_claim(self, client, program_id, auth_headers):
         jid = _create_job(client, program_id, auth_headers).json()["id"]
         res = client.patch(f"/jobs/{jid}", json={"status": "running"}, headers=auth_headers)
-        assert res.status_code == 200
-        data = res.json()
-        assert data["status"] == "running"
-        assert data["started_at"] is not None
+        assert res.status_code == 409
+        assert "claim" in res.json()["detail"]
+        assert _status(client, program_id, jid, auth_headers)["status"] == "pending"
+
+    def test_a_claimed_job_cannot_be_set_running_again(self, client, program_id, auth_headers):
+        jid = _create_job(client, program_id, auth_headers).json()["id"]
+        _claim(client, jid, auth_headers)
+        res = client.patch(f"/jobs/{jid}", json={"status": "running"}, headers=auth_headers)
+        assert res.status_code == 409
+
+    @pytest.mark.parametrize("outcome", ["done", "failed", "pending"])
+    def test_a_claimed_job_can_complete_fail_or_be_released(
+        self, client, program_id, auth_headers, outcome
+    ):
+        jid = _create_job(client, program_id, auth_headers).json()["id"]
+        _claim(client, jid, auth_headers)
+        res = client.patch(f"/jobs/{jid}", json={"status": outcome}, headers=auth_headers)
+        assert res.status_code == 200, res.text
+        assert res.json()["status"] == outcome
+
+    @pytest.mark.parametrize("finished", ["done", "failed"])
+    @pytest.mark.parametrize("target", ["pending", "running", "done", "failed"])
+    def test_a_finished_job_never_reopens(self, client, program_id, auth_headers, finished, target):
+        jid = _create_job(client, program_id, auth_headers).json()["id"]
+        _claim(client, jid, auth_headers)
+        first = client.patch(
+            f"/jobs/{jid}", json={"status": finished, "error_message": "first"}, headers=auth_headers
+        ).json()
+        res = client.patch(
+            f"/jobs/{jid}", json={"status": target, "error_message": "second"}, headers=auth_headers
+        )
+        after = _status(client, program_id, jid, auth_headers)
+        if target == finished:
+            # A retried completion is a no-op, not a rewrite.
+            assert res.status_code == 200
+        else:
+            assert res.status_code == 409
+        assert after["status"] == finished
+        assert after["error_message"] == "first"
+        assert after["completed_at"] == first["completed_at"]
+
+    def test_a_runner_scoped_key_completes_its_claimed_job(self, client, program_id, auth_headers):
+        key = client.post(
+            "/auth/apikeys", json={"label": "runner", "scope": "runner"}, headers=auth_headers
+        ).json()
+        runner = {"Authorization": f"Bearer {key['token']}"}
+        try:
+            jid = _create_job(client, program_id, auth_headers).json()["id"]
+            assert client.patch(f"/jobs/{jid}", json={"status": "running"}, headers=runner).status_code == 409
+            _claim(client, jid, runner)
+            assert client.patch(f"/jobs/{jid}", json={"status": "done"}, headers=runner).status_code == 200
+            assert client.patch(f"/jobs/{jid}", json={"status": "pending"}, headers=runner).status_code == 409
+        finally:
+            client.delete(f"/auth/apikeys/{key['id']}", headers=auth_headers)
 
     def test_mark_done(self, client, program_id, auth_headers):
         jid = _create_job(client, program_id, auth_headers).json()["id"]
@@ -281,7 +342,7 @@ class TestDeleteJob:
 
     def test_delete_stuck_running_job(self, client, program_id, auth_headers):
         jid = _create_job(client, program_id, auth_headers).json()["id"]
-        client.patch(f"/jobs/{jid}", json={"status": "running"}, headers=auth_headers)
+        _claim(client, jid, auth_headers)
         res = client.delete(f"/jobs/{jid}", headers=auth_headers)
         assert res.status_code == 200
 

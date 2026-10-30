@@ -12,6 +12,18 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
   reference test now sees routes registered through included routers too; `GET
   /engagements/{program_id}/scope` is documented and the playbook paths use `{program_id}`.
 
+- **Behaviour change:** `PATCH /jobs/{id}` enforces job state transitions. A job enters `running`
+  only through `POST /jobs/{id}/claim`, which evaluates policy and freezes the case snapshot; a
+  `done` or `failed` job never reopens. Allowed: `pending` → `failed`/`done`, `running` →
+  `done`/`failed`/`pending` (stop-work release). Anything else returns `409` and changes
+  nothing; repeating the current status is a no-op. VardrRunner, the job board's cancel and
+  its re-queue already use only these transitions.
+
+- Reject `${...}` environment references anywhere in a stored authorization test case. VardrGate
+  expands them from the environment of the process that runs it, so a stored reference could read
+  any variable on the runner and send it to the case's target. Credentials keep using `value_env` /
+  `value_keychain`; setup captures (`{{name}}`) are unaffected. Existing stored cases are not rewritten.
+
 - Reconcile setup, architecture and API guides with the existing Compose/local-account
   path, provider-conditional GitHub credentials and shared session authorization.
 
