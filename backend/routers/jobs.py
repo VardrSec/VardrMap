@@ -18,6 +18,7 @@ from deps import (
     get_current_user,
     get_engagement_or_404,
     log_action,
+    require_full_scope,
     require_member_write,
 )
 from limiter import limiter
@@ -969,10 +970,13 @@ def create_job_event(
 @router.delete("/jobs/{job_id}")
 def delete_job(
     job_id: str,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_full_scope),
     db: Session = Depends(get_db),
 ):
-    """Permanently delete a job and its events. Useful for removing stuck jobs."""
+    """Permanently delete a job and its events. Useful for removing stuck jobs.
+
+    Operator-only: a runner-scoped key executes and reports jobs, it never
+    removes their records."""
     job = (
         db.query(ScanJob)
         .filter(

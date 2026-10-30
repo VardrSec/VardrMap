@@ -408,6 +408,11 @@ One asset with its edges and everything joined to it — the query the graph exi
 
 ## Scope
 
+### `GET /engagements/{program_id}/scope`
+Return the engagement's scope as `{"in": [...], "out": [...]}`, each item with `id`, `value`, `kind` and `notes`. Runner-scoped keys may call it; VardrRunner reads targets here.
+
+**Errors** — `404` engagement not accessible.
+
 ### `POST /engagements/{program_id}/scope/in`
 Add an in-scope item.
 
@@ -1480,9 +1485,10 @@ Fetch program listings from platform APIs and upsert into the database. Programs
 ## Scan Jobs (updated)
 
 ### `DELETE /jobs/{job_id}`
-Permanently delete a job and all its events. Intended for removing stuck jobs that a crashed runner left in `running` state. Any job status is accepted.
+Permanently delete a job and all its events. Intended for removing stuck jobs that a crashed runner left in `running` state. Any job status is accepted. Requires a browser session or a full-scope API key; a runner-scoped key executes and reports jobs but cannot remove them.
 
 **Errors**
+- `403` — runner-scoped API key
 - `404` — job not found or belongs to another user
 
 ---
@@ -2132,8 +2138,8 @@ to remove its links while retaining observations. No database migration is neede
 
 ## API playbook guidance and Gate assessments
 
-`GET /engagements/{id}/playbooks` returns `{playbooks, total}` with three summaries
-(`id`, `title`, `version`, `use_when`). `GET /engagements/{id}/playbooks/{playbook_id}`
+`GET /engagements/{program_id}/playbooks` returns `{playbooks, total}` with three summaries
+(`id`, `title`, `version`, `use_when`). `GET /engagements/{program_id}/playbooks/{playbook_id}`
 returns a guide plus `prerequisites`, `expected_artifacts`, `steps`, `common_traps`
 and `manual_remainder`. The original v1.0 catalog is API-01 ownership/tenant
 separation, API-02 privileged functions, API-03 evidence/retest/handoff. Reads need

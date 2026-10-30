@@ -4,6 +4,14 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- **Behaviour change:** `DELETE /jobs/{id}` requires a browser session or a full-scope API key. A
+  runner-scoped key could delete job records; VardrRunner never does, so it now receives `403`.
+  A new route inventory test reads every route from the app and checks that runner keys reach only
+  the listed runner routes, that a user without access gets `404` on engagement and job reads (and
+  no success anywhere on them), and that engagement and job writes apply a write guard. The API
+  reference test now sees routes registered through included routers too; `GET
+  /engagements/{program_id}/scope` is documented and the playbook paths use `{program_id}`.
+
 - **Behaviour change:** `PATCH /jobs/{id}` enforces job state transitions. A job enters `running`
   only through `POST /jobs/{id}/claim`, which evaluates policy and freezes the case snapshot; a
   `done` or `failed` job never reopens. Allowed: `pending` → `failed`/`done`, `running` →
