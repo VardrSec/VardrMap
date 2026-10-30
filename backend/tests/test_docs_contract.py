@@ -68,14 +68,11 @@ def assert_exact_status_values(line: str, literal, label: str) -> None:
 # --------------------------------------------------------------------------- #
 
 def _app_routes() -> list[tuple[str, str]]:
-    """Return (METHOD, /path) for every route registered in the FastAPI app."""
+    """Return (METHOD, /path) for every route the FastAPI app serves, including
+    the routes of included routers."""
     from main import app
-    pairs = []
-    for route in app.routes:
-        if hasattr(route, "methods") and hasattr(route, "path"):
-            for method in route.methods:
-                pairs.append((method.upper(), route.path))
-    return pairs
+    from tests.route_inventory import app_routes
+    return [(method.upper(), route.path) for route in app_routes(app) for method in route.methods]
 
 
 # Routes that are internal plumbing, not public API surface.
