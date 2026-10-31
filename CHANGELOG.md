@@ -6,7 +6,7 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 - Trial a nonce-based **report-only** script CSP for HTML navigation in the
   existing Auth.js proxy. The currently enforced page CSP stays unchanged.
-  HTML becomes dynamic, and nonce-bearing responses are private/no-store.
+  HTML becomes dynamic, and nonce-bearing responses use no-store caching.
   Browser acceptance verifies framework script nonces, fresh nonces across
   requests and the existing sign-in path. Enforcement requires separate review
   of observed Chrome/Firefox violations and performance impact.
