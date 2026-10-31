@@ -29,9 +29,14 @@ async function post(request: APIRequestContext, path: string, headers: Record<st
 
 test("unauthenticated browser presents GitHub login", async ({ page }) => {
   await page.route("**/api/auth/session", route => route.fulfill({ json: {} }));
-  await page.goto("/");
+  const response = await page.goto("/");
   await expect(page.getByRole("button", { name: "Sign in with GitHub" })).toBeVisible();
   await expect(page.getByLabel("Active Engagement")).toHaveCount(0);
+  // The page itself, not only the API, refuses framing and MIME sniffing.
+  const headers = response!.headers();
+  expect(headers["x-frame-options"]).toBe("DENY");
+  expect(headers["x-content-type-options"]).toBe("nosniff");
+  expect(headers["content-security-policy"]).toContain("frame-ancestors 'none'");
 });
 
 test("API playbook, partial assessment and evidence linking use the real backend", async ({ page, request }) => {
