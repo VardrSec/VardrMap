@@ -475,6 +475,7 @@ export default function JobsSection({
             <JobBoard
               jobs={sorted}
               accent={ACCENT}
+              nowMs={statusNow}
               view={prefs.view}
               onViewChange={(v) => pref("view", v)}
               activeId={activeId}

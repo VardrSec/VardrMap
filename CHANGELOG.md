@@ -11,6 +11,12 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
   requests and the existing sign-in path. Enforcement requires separate review
   of observed Chrome/Firefox violations and performance impact.
 
+- Flag running jobs that have exceeded 60 minutes with a **Check Runner** hint in
+  all three Job Board views. This read-only elapsed-time heuristic does not assert
+  the worker has stopped, alter job status, cancel work, or change the API. Missing,
+  invalid and future start timestamps remain unflagged; existing status polling
+  refreshes the indicator.
+
 - Send security headers with every web page and asset, in Compose and on Vercel:
   `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`,
   `Permissions-Policy` and `Content-Security-Policy: frame-ancestors 'none'; base-uri 'self';
