@@ -4,6 +4,13 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Send security headers with every web page and asset, in Compose and on Vercel:
+  `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`,
+  `Permissions-Policy` and `Content-Security-Policy: frame-ancestors 'none'; base-uri 'self';
+  object-src 'none'`. Only API responses carried them before. None of these restrict scripts,
+  styles or connections, so rendering and sign-in redirects are unchanged; a script-source
+  policy is not set yet. The browser acceptance test checks the page headers.
+
 - **Behaviour change:** `DELETE /jobs/{id}` requires a browser session or a full-scope API key. A
   runner-scoped key could delete job records; VardrRunner never does, so it now receives `403`.
   A new route inventory test reads every route from the app and checks that runner keys reach only

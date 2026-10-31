@@ -84,7 +84,7 @@ Rationale in [docs/adr/0001-central-policy-engine.md](docs/adr/0001-central-poli
 - Secret redaction — auth headers, cookies, tokens, and URL credentials stripped from evidence on write
 - Input sanitization — injection detection on identifier fields; `nh3` strip on long-form fields
 - Rate limiting — 200 requests/minute per IP (slowapi)
-- Security headers — CSP, HSTS (production only), X-Frame-Options, Referrer-Policy, Permissions-Policy
+- Security headers — API: CSP, HSTS (production only), X-Frame-Options, Referrer-Policy, Permissions-Policy. Web pages: X-Frame-Options, nosniff, Referrer-Policy, Permissions-Policy and a CSP limited to `frame-ancestors`, `base-uri` and `object-src`; a script-source policy is not yet set
 - File upload validation — extension allowlist (`.json`, `.jsonl`), content-type check, 2 MB limit
 - Webhook SSRF guard — outbound notification URLs require HTTPS; the host is resolved and re-checked at send time and blocked from private/loopback/link-local/metadata addresses (rebinding-resistant), with redirects disabled
 
