@@ -75,7 +75,8 @@ const TOOL_TO_REVIEW_TAB: Record<string, string> = {
   httpx:     "recon",
   nuclei:    "scans",
   dalfox:    "scans",
-  nmap:      "services",
+  naabu:     "services",
+  nmap:      "services", // jobs queued before Nmap left the supported toolkit
 };
 
 export default function Terminal({ job, accent, onClose, onRetry, onCancel, onDelete }: TerminalProps) {

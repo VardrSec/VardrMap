@@ -258,7 +258,7 @@ describe("JobsSection", () => {
       );
       const call = authFetch.mock.calls.find((c: unknown[]) => c[0] === `/engagements/${PROGRAM_ID}/pipelines`);
       const stages = JSON.parse((call![1] as { body: string }).body).stages;
-      expect(stages.map((s: { tool_type: string }) => s.tool_type)).toEqual(["naabu", "nmap", "httpx"]);
+      expect(stages.map((s: { tool_type: string }) => s.tool_type)).toEqual(["naabu", "httpx"]);
     } finally {
       confirmSpy.mockRestore();
     }

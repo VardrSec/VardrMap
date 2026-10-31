@@ -49,7 +49,7 @@ export default function ServicesSection({ engagementId, hideHeader }: { engageme
   return (
     <div className="space-y-7">
       {!hideHeader && (
-        <SectionHeader title="Services" description="Open ports and services discovered by nmap." />
+        <SectionHeader title="Services" description="Open ports discovered by port scans (naabu)." />
       )}
 
       <Panel title={`Services (${services.length})`}>
@@ -60,7 +60,7 @@ export default function ServicesSection({ engagementId, hideHeader }: { engageme
         {!loading && services.length === 0 && (
           <div className="py-10 text-center">
             <p className="text-sm text-muted">No services discovered yet.</p>
-            <p className="mt-1 text-xs text-[#3a3a3a]">Run an nmap job from the Dashboard to populate this list.</p>
+            <p className="mt-1 text-xs text-[#3a3a3a]">Run a naabu job from the Dashboard to populate this list.</p>
           </div>
         )}
 

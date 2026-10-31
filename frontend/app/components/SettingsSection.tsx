@@ -224,7 +224,7 @@ export default function SettingsSection() {
             <CopyLine text={VARDRUNNER_TOOLS_COMMAND} onCopy={copyCmd} />
             <Hint>
               Safe to run any time: installs missing tools, updates old ones, repairs broken ones and skips the ones that are
-              fine. It also tells you if nmap or VardrGate is missing. VardrGate has its own step below.
+              fine. It also tells you if VardrGate is missing. VardrGate has its own step below.
             </Hint>
           </Step>
 
