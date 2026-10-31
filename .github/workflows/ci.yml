@@ -150,6 +150,12 @@ jobs:
       - name: Exercise local authentication over disposable HTTPS
         working-directory: frontend
         run: npm run test:e2e:local
+      - name: Install Firefox for focused CSP compatibility
+        working-directory: frontend
+        run: npx playwright install --with-deps firefox
+      - name: Verify nonce-based report-only CSP in Firefox
+        working-directory: frontend
+        run: npx playwright test --config playwright.csp-firefox.config.ts e2e/engagement.spec.ts --grep "unauthenticated browser presents GitHub login"
       - name: Retain failure traces
         if: failure()
         uses: actions/upload-artifact@v7
