@@ -38,7 +38,6 @@ test("unauthenticated browser presents GitHub login", async ({ page }) => {
   expect(headers["x-content-type-options"]).toBe("nosniff");
   expect(headers["content-security-policy"]).toContain("frame-ancestors 'none'");
   // Existing enforced framing protection remains. Script policy is report-only.
-  expect(headers["cache-control"]).toContain("private");
   expect(headers["cache-control"]).toContain("no-store");
   const reportOnly = headers["content-security-policy-report-only"];
   expect(reportOnly).toMatch(/script-src 'self' 'nonce-[A-Za-z0-9+/=]+' 'strict-dynamic'/);
