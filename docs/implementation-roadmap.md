@@ -173,7 +173,7 @@ window where schema has moved and the old process is still live.
 
 **Reversibility.** Every migration implements `downgrade()`. Destructive
 migrations state the data loss in the docstring and require explicit sign-off
-(`CLAUDE.md` hard rule).
+(`AGENTS.md` rule).
 
 **Single head.** `alembic heads` must return exactly one line. Two branches
 naming the same `down_revision` is a failed deploy, not a merge conflict.
