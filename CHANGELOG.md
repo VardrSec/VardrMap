@@ -4,6 +4,12 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Consolidate agent instructions: `AGENTS.md` is now the single source for Claude
+  Code and Codex (it was duplicated in `CLAUDE.md`) and keeps every security,
+  migration and Runner/Gate contract rule; `CLAUDE.md` and `frontend/CLAUDE.md`
+  import the matching `AGENTS.md`. Frontend typecheck notes moved to
+  `docs/development.md`. Documentation only; no behavior change.
+
 - Trial a nonce-based **report-only** script CSP for HTML navigation in the
   existing Auth.js proxy. The currently enforced page CSP stays unchanged.
   HTML becomes dynamic, and nonce-bearing responses use no-store caching.

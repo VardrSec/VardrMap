@@ -130,6 +130,14 @@ covers the global reducer (`app/context/__tests__/`) and React components
 (`app/components/__tests__/`, rendered with React Testing Library under a jsdom
 environment).
 
+`npm run typecheck` (`tsc --noEmit`) is the only thing that type-checks test files:
+`next build` reaches only what the app graph imports, and ts-jest transpiles without
+checking. CI runs it inside the required **Frontend lint + build** job. The
+`renderWithApp` harness in `frontend/test-utils/` casts through
+`as unknown as AppContextValue`, which defeats excess-property checking, so removing
+something from `AppContext` will not fail typecheck there — grep `frontend/test-utils/`
+by hand.
+
 ### Test coverage areas
 
 | File | What it tests |

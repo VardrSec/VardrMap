@@ -26,7 +26,7 @@ The name and email must match the commit author. Pull requests whose commits are
 
 ## Before you open a PR
 
-See [`CLAUDE.md`](CLAUDE.md) and [`docs/development.md`](docs/development.md) for setup and conventions. In short:
+See [`AGENTS.md`](AGENTS.md) and [`docs/development.md`](docs/development.md) for setup and conventions. In short:
 
 - `main` is protected — branch and open a PR.
 - Backend: `cd backend && .\venv\Scripts\pytest.exe tests -v`
