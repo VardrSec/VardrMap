@@ -1,8 +1,11 @@
 "use client";
 
 import AssessmentBadge from "./AssessmentBadge";
+import { runningJobNeedsReview } from "./jobHealth";
 import type { ScanJobUI } from "../../types";
 import { TOOLS, fmtAgo, fmtDur } from "./mockData";
+
+const RUNNING_REVIEW_HINT = "Running for at least 60 minutes. This is not proof the job stopped; review Runner and job events before intervening.";
 
 const STATUS_META: Record<string, { label: string; color: string }> = {
   pending: { label: "Pending", color: "#94a3b8" },
@@ -19,7 +22,7 @@ function ToolGlyph({ tool, color }: { tool: string; color: string }) {
   );
 }
 
-function StatusChip({ status, accent }: { status: string; accent: string }) {
+function StatusChip({ status, accent, needsReview = false }: { status: string; accent: string; needsReview?: boolean }) {
   const m = STATUS_META[status] ?? STATUS_META.pending;
   const color = status === "running" ? accent : m.color;
   return (
@@ -29,6 +32,7 @@ function StatusChip({ status, accent }: { status: string; accent: string }) {
         <span className="h-1.5 w-1.5 animate-pulse rounded-full" style={{ backgroundColor: color }} />
       )}
       {m.label}
+      {needsReview && <span className="ml-1 font-semibold text-[#f9e2af]" title={RUNNING_REVIEW_HINT}>· Check Runner</span>}
     </span>
   );
 }
@@ -57,10 +61,11 @@ function TrashButton({ onClick }: { onClick: (e: React.MouseEvent) => void }) {
   );
 }
 
-function StreamCard({ job, accent, active, onClick, onDelete }: {
-  job: ScanJobUI; accent: string; active: boolean; onClick: () => void; onDelete: () => void;
+function StreamCard({ job, accent, nowMs, active, onClick, onDelete }: {
+  job: ScanJobUI; accent: string; nowMs: number; active: boolean; onClick: () => void; onDelete: () => void;
 }) {
   const sc = job.status === "running" ? accent : STATUS_META[job.status]?.color ?? "#94a3b8";
+  const needsReview = runningJobNeedsReview(job, nowMs);
   return (
     <div className="group flex w-full items-center gap-3 rounded-xl border px-4 py-3 transition cursor-pointer"
       style={{ borderColor: active ? `${accent}66` : "#2e2e2e", backgroundColor: active ? "#161616" : "#1a1a1a" }}
@@ -76,7 +81,7 @@ function StreamCard({ job, accent, active, onClick, onDelete }: {
           <span className="ml-auto font-mono text-[10px] text-[#3a3a3a]">{fmtAgo(job.queuedAt)}</span>
         </div>
         <div className="mt-1.5 flex items-center gap-2">
-          <StatusChip status={job.status} accent={accent} /><AssessmentBadge job={job} />
+          <StatusChip status={job.status} accent={accent} needsReview={needsReview} /><AssessmentBadge job={job} />
           {job.status === "running" ? (
             <div className="flex flex-1 items-center gap-2">
               <MiniBar progress={job.progress} color={sc} />
@@ -98,11 +103,11 @@ function StreamCard({ job, accent, active, onClick, onDelete }: {
   );
 }
 
-function StreamView({ jobs, accent, activeId, onSelect, onDelete }: ViewProps) {
+function StreamView({ jobs, accent, nowMs, activeId, onSelect, onDelete }: ViewProps) {
   return (
     <div className="space-y-2">
       {jobs.map((j) => (
-        <StreamCard key={j.id} job={j} accent={accent} active={activeId === j.id} onClick={() => onSelect(j.id)} onDelete={() => onDelete(j.id)} />
+        <StreamCard key={j.id} job={j} accent={accent} nowMs={nowMs} active={activeId === j.id} onClick={() => onSelect(j.id)} onDelete={() => onDelete(j.id)} />
       ))}
     </div>
   );
@@ -110,10 +115,11 @@ function StreamView({ jobs, accent, activeId, onSelect, onDelete }: ViewProps) {
 
 // ---- PIPELINE VIEW -------------------------------------------------------
 
-function PipelineCard({ job, accent, active, onClick, onDelete }: {
-  job: ScanJobUI; accent: string; active: boolean; onClick: () => void; onDelete: () => void;
+function PipelineCard({ job, accent, nowMs, active, onClick, onDelete }: {
+  job: ScanJobUI; accent: string; nowMs: number; active: boolean; onClick: () => void; onDelete: () => void;
 }) {
   const sc = job.status === "running" ? accent : STATUS_META[job.status]?.color ?? "#94a3b8";
+  const needsReview = runningJobNeedsReview(job, nowMs);
   return (
     <div onClick={onClick} className="group cursor-pointer rounded-lg border px-2.5 py-2 text-left transition"
       style={{ borderColor: active ? `${accent}66` : "#2e2e2e", backgroundColor: active ? "#161616" : "#1a1a1a" }}>
@@ -125,6 +131,7 @@ function PipelineCard({ job, accent, active, onClick, onDelete }: {
       </div>
       <div className="mt-1 font-mono text-[10px] text-muted">{job.source} · {job.targets} targets</div>
       <AssessmentBadge job={job} />
+      {needsReview && <div className="mt-1 font-mono text-[10px] text-[#f9e2af]" title={RUNNING_REVIEW_HINT}>Check Runner</div>}
       {job.status === "running" && <div className="mt-2"><MiniBar progress={job.progress} color={sc} /></div>}
       {job.status === "done" && (
         <div className="mt-1.5 font-mono text-[10px] text-[#a6e3a1]">+{job.yield} {job.yieldKind}</div>
@@ -136,7 +143,7 @@ function PipelineCard({ job, accent, active, onClick, onDelete }: {
   );
 }
 
-function PipelineView({ jobs, accent, activeId, onSelect, onDelete }: ViewProps) {
+function PipelineView({ jobs, accent, nowMs, activeId, onSelect, onDelete }: ViewProps) {
   const cols: Array<"pending" | "running" | "done" | "failed"> = ["pending", "running", "done", "failed"];
   return (
     <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -158,7 +165,7 @@ function PipelineView({ jobs, accent, activeId, onSelect, onDelete }: ViewProps)
                 </div>
               ) : (
                 items.map((j) => (
-                  <PipelineCard key={j.id} job={j} accent={accent} active={activeId === j.id} onClick={() => onSelect(j.id)} onDelete={() => onDelete(j.id)} />
+                  <PipelineCard key={j.id} job={j} accent={accent} nowMs={nowMs} active={activeId === j.id} onClick={() => onSelect(j.id)} onDelete={() => onDelete(j.id)} />
                 ))
               )}
             </div>
@@ -171,7 +178,7 @@ function PipelineView({ jobs, accent, activeId, onSelect, onDelete }: ViewProps)
 
 // ---- TABLE VIEW -----------------------------------------------------------
 
-function TableView({ jobs, accent, activeId, onSelect, onDelete }: ViewProps) {
+function TableView({ jobs, accent, nowMs, activeId, onSelect, onDelete }: ViewProps) {
   return (
     <div className="overflow-hidden rounded-xl border border-[#2e2e2e]">
       <table className="w-full border-collapse text-left">
@@ -196,7 +203,7 @@ function TableView({ jobs, accent, activeId, onSelect, onDelete }: ViewProps) {
                   </span>
                 </td>
                 <td className="px-3 py-2.5 font-mono text-[11px] text-[#94a3b8]">{j.source}</td>
-                <td className="px-3 py-2.5"><StatusChip status={j.status} accent={accent} /><AssessmentBadge job={j} /></td>
+                <td className="px-3 py-2.5"><StatusChip status={j.status} accent={accent} needsReview={runningJobNeedsReview(j, nowMs)} /><AssessmentBadge job={j} /></td>
                 <td className="px-3 py-2.5">
                   <div className="flex items-center gap-2">
                     <div className="w-16"><MiniBar progress={j.progress} color={sc} /></div>
@@ -229,6 +236,7 @@ function TableView({ jobs, accent, activeId, onSelect, onDelete }: ViewProps) {
 type ViewProps = {
   jobs: ScanJobUI[];
   accent: string;
+  nowMs: number;
   activeId: string | null;
   onSelect: (id: string) => void;
   onDelete: (id: string) => void;
@@ -237,6 +245,7 @@ type ViewProps = {
 type JobBoardProps = {
   jobs: ScanJobUI[];
   accent: string;
+  nowMs: number;
   view: "stream" | "pipeline" | "table";
   onViewChange: (v: "stream" | "pipeline" | "table") => void;
   activeId: string | null;
@@ -247,7 +256,7 @@ type JobBoardProps = {
 };
 
 export default function JobBoard({
-  jobs, accent, view, onViewChange, activeId, onSelect, onDelete, onRunPending, pendingCount,
+  jobs, accent, nowMs, view, onViewChange, activeId, onSelect, onDelete, onRunPending, pendingCount,
 }: JobBoardProps) {
   const views = { stream: StreamView, pipeline: PipelineView, table: TableView };
   const View = views[view] ?? StreamView;
@@ -278,7 +287,7 @@ export default function JobBoard({
           </div>
         </div>
       </div>
-      <View jobs={jobs} accent={accent} activeId={activeId} onSelect={onSelect} onDelete={onDelete} />
+      <View jobs={jobs} accent={accent} nowMs={nowMs} activeId={activeId} onSelect={onSelect} onDelete={onDelete} />
     </div>
   );
 }
