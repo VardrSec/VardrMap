@@ -8,7 +8,7 @@ On HTML navigation, the existing Auth.js `frontend/proxy.ts` adds a
 `Content-Security-Policy-Report-Only` script directive with a fresh 128-bit
 random nonce, and forwards the same policy and `x-nonce` header to Next.js.
 The root layout reads request headers so HTML is dynamically rendered.
-HTML responses are marked private/no-store to prevent nonce reuse.
+HTML responses are non-cacheable (no-store) to prevent nonce reuse.
 
 The new script policy is **report-only**. No scripts are blocked. There is no
 central violation collector or third-party reporting endpoint; browser
