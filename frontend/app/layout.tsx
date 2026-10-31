@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -17,11 +18,13 @@ export const metadata: Metadata = {
   description: "Authorized security testing workspace — engagements, scope, recon, findings, and client reports.",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // A fresh script nonce requires request-specific dynamic HTML rendering.
+  await headers();
   return (
     <html lang="en">
       <body
