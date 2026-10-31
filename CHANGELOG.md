@@ -4,6 +4,13 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Trial a nonce-based **report-only** script CSP for HTML navigation in the
+  existing Auth.js proxy. The currently enforced page CSP stays unchanged.
+  HTML becomes dynamic, and nonce-bearing responses are private/no-store.
+  Browser acceptance verifies framework script nonces, fresh nonces across
+  requests and the existing sign-in path. Enforcement requires separate review
+  of observed Chrome/Firefox violations and performance impact.
+
 - Send security headers with every web page and asset, in Compose and on Vercel:
   `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`,
   `Permissions-Policy` and `Content-Security-Policy: frame-ancestors 'none'; base-uri 'self';
