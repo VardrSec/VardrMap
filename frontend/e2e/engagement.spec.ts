@@ -37,6 +37,15 @@ test("unauthenticated browser presents GitHub login", async ({ page }) => {
   expect(headers["x-frame-options"]).toBe("DENY");
   expect(headers["x-content-type-options"]).toBe("nosniff");
   expect(headers["content-security-policy"]).toContain("frame-ancestors 'none'");
+  // Existing enforced framing protection remains. Script policy is report-only.
+  const reportOnly = headers["content-security-policy-report-only"];
+  expect(reportOnly).toMatch(/script-src 'self' 'nonce-[A-Za-z0-9+/=]+' 'strict-dynamic'/);
+  expect(reportOnly.match(/'nonce-([^']+)'/)?.[1]).toBeTruthy();
+  expect(await page.locator("script[nonce]").count()).toBeGreaterThan(0);
+  const reloaded = await page.reload();
+  expect(reloaded).not.toBeNull();
+  expect(reloaded!.headers()["content-security-policy-report-only"]).not.toBe(reportOnly);
+  await expect(page.getByRole("button", { name: "Sign in with GitHub" })).toBeVisible();
 });
 
 test("API playbook, partial assessment and evidence linking use the real backend", async ({ page, request }) => {
