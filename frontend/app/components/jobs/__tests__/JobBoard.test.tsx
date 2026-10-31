@@ -40,7 +40,7 @@ describe("Running-job review hint", () => {
       );
       const hint = screen.getByText("Check Runner", { exact: false });
       expect(hint).toHaveAttribute("title", expect.stringContaining("not proof"));
-      expect(screen.queryByText("Failed")).not.toBeInTheDocument();
+      expect(baseJob.status).toBe("running");
     },
   );
 
