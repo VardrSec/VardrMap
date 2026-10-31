@@ -233,6 +233,10 @@ alembic current
 The backend suite rebuilds the current ORM schema. The separate PostgreSQL
 migration tests instead create disposable schemas, run Alembic from empty and
 historical baselines, verify retained data, and start the app without `create_all`.
+Each of these tests runs twice: once with the database administrator in
+`TEST_DATABASE_URL`, and once with a temporary login role that has no SUPERUSER, CREATEDB,
+CREATEROLE, REPLICATION or BYPASSRLS and owns only its test schema. The distribution runs
+the API and migrations as such a role, so migrations must not need superuser features.
 
 From `backend/`, with an existing disposable PostgreSQL database:
 
