@@ -4,6 +4,12 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Run the PostgreSQL migration tests twice, as the CI administrator and as a plain login
+  role without SUPERUSER, CREATEDB, CREATEROLE, REPLICATION or BYPASSRLS that only owns its
+  schema, because the VardrSec distribution now runs the API and its startup migrations as
+  such a role (VardrSec #52). A migration that needs superuser, such as `CREATE EXTENSION`,
+  now fails here first. Test-only; no application behavior change.
+
 - Consolidate agent instructions: `AGENTS.md` is now the single source for Claude
   Code and Codex (it was duplicated in `CLAUDE.md`) and keeps every security,
   migration and Runner/Gate contract rule; `CLAUDE.md` and `frontend/CLAUDE.md`

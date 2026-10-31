@@ -1,4 +1,10 @@
-"""Real PostgreSQL checks in disposable schemas of a dedicated test database."""
+"""Real PostgreSQL checks in disposable schemas of a dedicated test database.
+
+Every test runs twice: as the CI administrator and as a plain login role with no
+SUPERUSER, CREATEDB, CREATEROLE, REPLICATION or BYPASSRLS that only owns its schema.
+The VardrSec distribution runs the API and these migrations as such a role, so a
+migration that needs superuser (for example CREATE EXTENSION) fails here first.
+"""
 
 import os
 from pathlib import Path
@@ -16,8 +22,12 @@ from database_options import connection_args, normalize_url
 BACKEND = Path(__file__).resolve().parents[1]
 
 
-@pytest.fixture
-def database():
+ROLE_ATTRIBUTES = "NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS"
+ROLE_FLAGS = ("rolsuper", "rolcreatedb", "rolcreaterole", "rolreplication", "rolbypassrls")
+
+
+@pytest.fixture(params=["administrator", "application_role"])
+def database(request):
     raw = os.getenv("TEST_DATABASE_URL")
     if not raw:
         pytest.skip("Set TEST_DATABASE_URL to a disposable PostgreSQL database")
@@ -26,8 +36,23 @@ def database():
     assert (url.database or "").startswith("vardrmap_test")
     admin = create_engine(url, connect_args=connection_args(str_url(url)))
     schema = "migration_" + uuid.uuid4().hex
+    role = None
     with admin.begin() as conn:
         conn.execute(text(f'CREATE SCHEMA "{schema}"'))
+        if request.param == "application_role":
+            role = "vardrmap_ci_" + uuid.uuid4().hex[:12]
+            password = "fixture-" + uuid.uuid4().hex
+            conn.execute(
+                text(f"CREATE ROLE \"{role}\" LOGIN {ROLE_ATTRIBUTES} PASSWORD '{password}'")
+            )
+            conn.execute(text(f'GRANT CONNECT ON DATABASE "{url.database}" TO "{role}"'))
+            conn.execute(text(f'GRANT USAGE, CREATE ON SCHEMA "{schema}" TO "{role}"'))
+            flags = conn.execute(
+                text(f"SELECT {', '.join(ROLE_FLAGS)} FROM pg_roles WHERE rolname = :r"),
+                {"r": role},
+            ).one()
+            assert not any(flags), "The restricted fixture role is not restricted"
+            url = url.set(username=role, password=password)
     isolated = str_url(url.update_query_dict({"options": f"-c search_path={schema}"}))
     engine = create_engine(isolated, connect_args=connection_args(isolated))
     try:
@@ -36,6 +61,9 @@ def database():
         engine.dispose()
         with admin.begin() as conn:
             conn.execute(text(f'DROP SCHEMA "{schema}" CASCADE'))
+            if role:
+                conn.execute(text(f'DROP OWNED BY "{role}"'))
+                conn.execute(text(f'DROP ROLE "{role}"'))
         admin.dispose()
 
 
@@ -64,6 +92,14 @@ def test_empty_database_migrates_and_app_starts(database):
     migrate(url, "upgrade", "head")
     migrate(url, "upgrade", "head")  # repeat startup is safe
     assert "evidence" in inspect(engine).get_table_names()
+    with engine.connect() as conn:
+        # Every object migrations created belongs to the connecting login, whichever it is.
+        assert conn.scalar(
+            text(
+                "SELECT count(*) FROM pg_tables WHERE schemaname = current_schema() "
+                "AND tableowner <> current_user"
+            )
+        ) == 0
     # Read every ORM-mapped column against the migrated schema. Unlike create_all
     # fixtures, this catches columns missing from migration history.
     code = """
