@@ -209,7 +209,7 @@ test cases and deliverables. SQL constraints and column types are defined in
 - **Viewer enforcement:** every program-scoped write endpoint (create/update/delete of findings, reports, manual tests, scans, scan profiles, services, scope, imports, jobs, pipelines) calls `require_member_write` after `get_engagement_or_404`, which raises `403` for a viewer-role member. The guard fires before any resource lookup, so a viewer gets `403` even for a non-existent target id. Owners always pass; runner-scoped API keys resolve to the owner and therefore also pass (so uploads/heartbeats are unaffected). AI actions (`findings/{id}/suggest`, `scans/triage`) are gated too, since they incur cost. Read (`GET`) endpoints remain open to viewers.
 - `scan_jobs.config` is a JSON column with optional tool options. VardrRunner reads this dict when executing the job. Unknown config keys are rejected at creation time.
 - `scan_jobs` are scoped through engagement access, including organization membership and invitations; viewers cannot mutate jobs. Claiming a job uses `POST /jobs/{id}/claim` which atomically sets `status = "running"` only if currently `"pending"`, returning 409 otherwise.
-- `services` rows are bulk-upserted on `(host, port, protocol)` — repeated nmap scans update metadata rather than creating duplicates. `last_scanned_at` is stamped on both insert and update so freshness is always visible.
+- `services` rows are bulk-upserted on `(host, port, protocol)` — repeated port scans update metadata rather than creating duplicates. `last_scanned_at` is stamped on both insert and update so freshness is always visible.
 - `radar_programs` are upserted per user on `(owner_github_id, platform, platform_id)`. New programs land with `is_new = "1"` so the Overview Radar widget can badge them; `GET /radar` marks all returned rows as seen.
 - Deleting a `scan_job` (via `DELETE /jobs/{id}`) also deletes all its `job_events` via CASCADE.
 - `runner_heartbeats` is upserted per `(owner_github_id, hostname)` so multiple machines (laptop + VPS) report independently. VardrRunner calls `POST /runner/heartbeat` at the start of `jobs run` and via `vardrrunner heartbeat`; it runs only when invoked, so a runner nobody has run in 5 minutes shows offline, as does one in a `jobs run` that has lasted longer than that. The frontend polls `GET /runner/status` which returns all runners and derives per-runner `online: true` if `last_seen` is within 5 minutes. Rate-limited to 60/min.
@@ -288,14 +288,14 @@ The sidebar exposes **7 top-level sections** mapped to the engagement workflow:
 
 1. **Bridge** (`jobs/Bridge.tsx`) — animated link visualization showing VardrMap ↔ VardrRunner connection; runner node shows real hostname, OS, version, and per-tool availability chips from the latest heartbeat; collapses to a slim strip. Collapse state persists to `localStorage`.
 2. **Telemetry** (`jobs/Telemetry.tsx`) — four stat tiles: running, completed, results yielded, avg runtime.
-3. **Composer** (`jobs/Composer.tsx`) — a single selection across the named pipelines and the eleven tools (subfinder/httpx/nuclei/nmap/dnsx/naabu/katana/gau/ffuf/dalfox/vardrgate_api_test). Picking a pipeline clears the tool highlight and vice versa, so only one thing is ever chosen; the tool's config is preserved across the toggle. The tool list is collapsible (`toolsOpen`, remembered in the Jobs prefs, collapsed by default): collapsed, it shows only the chosen tool so its settings and Request Controls sit right under the pipelines, and picking a tool from the open list closes it again. Pipelines always stay visible. Nothing is queued until **Queue**, and a pipeline confirms first since it queues several jobs at once.
+3. **Composer** (`jobs/Composer.tsx`) — a single selection across the named pipelines and the ten supported tools (subfinder/httpx/nuclei/dnsx/naabu/katana/gau/ffuf/dalfox/vardrgate_api_test; nmap is no longer offered). Picking a pipeline clears the tool highlight and vice versa, so only one thing is ever chosen; the tool's config is preserved across the toggle. The tool list is collapsible (`toolsOpen`, remembered in the Jobs prefs, collapsed by default): collapsed, it shows only the chosen tool so its settings and Request Controls sit right under the pipelines, and picking a tool from the open list closes it again. Pipelines always stay visible. Nothing is queued until **Queue**, and a pipeline confirms first since it queues several jobs at once.
 
    Four pipelines ship in `PIPELINES` (`jobs/mockData.tsx`):
 
    | Pipeline | Chain | For |
    |---|---|---|
    | **Attack Surface** | subfinder → dnsx → httpx → nuclei | An external surface you have to discover. Each stage feeds the next through the recon store. |
-   | **Host Enumeration** | naabu → nmap → httpx | A scope you were given; each stage uses scope. |
+   | **Host Enumeration** | naabu → httpx | A scope you were given; each stage uses scope. |
    | **Content Discovery** | subfinder → httpx → ffuf → katana → gau | Find live hosts, fuzz their site roots for unlinked paths, crawl them (including what ffuf found) and import archived URLs. ffuf is active; the runner caps it at 100 site roots and 50 req/s unless Request Controls lower it. |
    | **API Assessment** | httpx → vardrgate_api_test | Confirm reachability, then execute a selected stored authorization test case. |
 
@@ -362,8 +362,8 @@ VardrMap frontend (Vercel)
 
 **Key design constraints** (enforced in the VardrRunner repo):
 - Scan traffic always originates from the user's machine — tools never run on Railway.
-- Tool execution uses an allowlist and safe profiles only (e.g. nmap never uses `-A`, `-O`, `-p-`, `--script`, or `-T5`); subprocesses are always invoked with an argument list, never `shell=True`.
-- Recon targets are normalized to host form before nmap; the `vmap_` API key is stored locally (`~/.vardrmap/config.json`, restricted permissions on Unix).
+- Tool execution uses an allowlist and safe profiles only (e.g. an opted-in nmap never uses `-A`, `-O`, `-p-`, `--script`, or `-T5`); subprocesses are always invoked with an argument list, never `shell=True`.
+- Recon targets are normalized to host form before port scans; the `vmap_` API key is stored locally (`~/.vardrmap/config.json`, restricted permissions on Unix).
 - Raw tool output is saved locally before upload, so a failed upload never loses data.
 
 For the full tool allowlist, target-resolution flags, and CLI reference, see the

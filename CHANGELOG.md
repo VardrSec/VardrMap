@@ -4,6 +4,13 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Stop offering Nmap in the Jobs Composer and drop it from the Host Enumeration chain, which
+  is now `naabu → httpx` (VardrSec Community Alpha ships without Nmap; naabu is the port-discovery
+  tool). The Services page and Settings text no longer name nmap, and finished naabu jobs open
+  the Services review tab. The API is unchanged: `nmap` jobs and `source: "nmap"` rows are still
+  accepted, and a Runner whose operator did not opt in fails such a job as unsupported. No
+  migration, endpoint, scope, authorization or ownership change.
+
 - Run the PostgreSQL migration tests twice, as the CI administrator and as a plain login
   role without SUPERUSER, CREATEDB, CREATEROLE, REPLICATION or BYPASSRLS that only owns its
   schema, because the VardrSec distribution now runs the API and its startup migrations as

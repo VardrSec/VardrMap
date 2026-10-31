@@ -37,19 +37,6 @@ export const TOOLS: Record<string, ToolDef> = {
       { key: "templates", label: "Templates", type: "text", placeholder: "cves,exposures" },
     ],
   },
-  nmap: {
-    id: "nmap",
-    label: "nmap",
-    glyph: "◎",
-    blurb: "Service & port discovery",
-    yields: "services",
-    yieldsTo: "services",
-    sources: ["scope", "recon"],
-    config: [
-      { key: "top_ports", label: "Top ports", type: "number", placeholder: "100" },
-      { key: "timing", label: "Timing (0-4)", type: "number", placeholder: "3" },
-    ],
-  },
   dnsx: {
     id: "dnsx",
     label: "dnsx",
@@ -188,10 +175,9 @@ export const PIPELINES: PipelineDef[] = [
     // For a scope you were given rather than one you discovered. These read the
     // same scope rather than feeding each other; chaining them keeps a pentest
     // from putting three tools on the client's hosts at once.
-    blurb: "Sweep ports, identify services, probe what serves HTTP",
+    blurb: "Sweep ports, probe what serves HTTP",
     stages: [
       { tool_type: "naabu", target_source: "scope", config: { top_ports: "100" } },
-      { tool_type: "nmap", target_source: "scope", config: { top_ports: "100", timing: "3" } },
       { tool_type: "httpx", target_source: "scope", config: {} },
     ],
   },
