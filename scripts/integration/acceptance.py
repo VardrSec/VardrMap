@@ -872,6 +872,10 @@ try:
               and all(e["job_id"] == job and e["case_id"] == stored for e in evidence)
               and "do-not-retain-session-value" not in json.dumps(evidence)
               and "do-not-retain-session-value" not in json.dumps(result))
+    from naabu import run_naabu
+
+    run_naabu(check=check, req=req, base=base, run_worker=run_worker, job_row=job_row,
+              root=root, target=target, backend_port=port, results=results)
     if SEMANTIC_EVIDENCE:
         from semantic import run_semantic
         run_semantic(check=check, req=req, base=base, queue=queue,

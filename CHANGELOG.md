@@ -4,6 +4,17 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Add focused Naabu-to-Map verification. The integration acceptance runs a real Runner worker
+  against the scope and a real Map backend with a stand-in `naabu` process and checks that every
+  service the job reports is stored with `source: "naabu"`, linked to the job and never labelled
+  `nmap`, that a legacy `nmap` row it re-observes is relabelled without duplicating, and that Runner
+  builds the command with no Nmap hook; backend tests pin the same attribution at the API. Audit
+  result: Runner always sends `source: "naabu"`, so Naabu results do not inherit the legacy label
+  (only a payload that omits `source` receives `nmap`, which is kept for existing clients), and no
+  application behavior changes. Re-observing a port overwrites its earlier service name, product
+  and version with the new scan's (empty for naabu); that is existing upsert behavior and is
+  recorded for the owner, not changed here.
+
 - Fix the Map + Runner + Gate integration acceptance for Runner 0.54 and later (#140). The harness
   now approves its disposable credential references (names only) as the operator, and CI checks out
   the Runner and Gate commits that the VardrSec distribution pins (`668dc56`, `7f82e49`) instead of

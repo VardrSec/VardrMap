@@ -89,6 +89,40 @@ class TestListServices:
 # POST /programs/{id}/services
 # ---------------------------------------------------------------------------
 
+class TestPortDiscoveryAttribution:
+    """Runner sends source="naabu" for naabu results; only a missing source gets the legacy
+    "nmap" label (kept so existing clients and rows do not change)."""
+
+    NAABU = {
+        "host": "10.0.0.1", "port": 8080, "protocol": "tcp", "service_name": "",
+        "product": "", "version": "", "state": "open", "source": "naabu",
+    }
+
+    def _list(self, client, program_id, headers):
+        return client.get(f"/programs/{program_id}/services", headers=headers).json()["services"]
+
+    def test_a_naabu_payload_is_stored_as_naabu(self, client, program_id, auth_headers):
+        assert _bulk_create(client, program_id, auth_headers, [self.NAABU]).status_code == 201
+        assert [s["source"] for s in self._list(client, program_id, auth_headers)] == ["naabu"]
+
+    def test_naabu_seeing_a_legacy_nmap_row_relabels_it_without_duplicating(
+        self, client, program_id, auth_headers
+    ):
+        _bulk_create(client, program_id, auth_headers, [{**_SVC, "port": 8080}])
+        assert self._list(client, program_id, auth_headers)[0]["source"] == "nmap"
+        res = _bulk_create(client, program_id, auth_headers, [self.NAABU])
+        assert (res.json()["created"], res.json()["updated"]) == (0, 1)
+        rows = self._list(client, program_id, auth_headers)
+        assert [(s["port"], s["source"]) for s in rows] == [(8080, "naabu")]
+
+    def test_only_a_missing_source_receives_the_legacy_nmap_label(
+        self, client, program_id, auth_headers
+    ):
+        payload = {k: v for k, v in self.NAABU.items() if k != "source"}
+        _bulk_create(client, program_id, auth_headers, [payload])
+        assert self._list(client, program_id, auth_headers)[0]["source"] == "nmap"
+
+
 class TestBulkCreateServices:
     def test_create_success(self, client, program_id, auth_headers):
         res = _bulk_create(client, program_id, auth_headers)
