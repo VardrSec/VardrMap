@@ -1,4 +1,4 @@
-import os, sys
+import json, os, sys
 from pathlib import Path
 from rich.console import Console
 
@@ -17,6 +17,16 @@ config.TOOLS_DIR = state / "tools"
 config.DATA_DIR = state / "data"
 config.JOURNAL_FILE = state / "journal.sqlite3"
 os.environ.pop("VARDRRUNNER_DENY_TARGETS", None)
+# Operator step for Runner >= 0.54, which runs a VardrGate case only after its credential
+# references are approved for the engagement and each origin it contacts. Older Runners have
+# no approvals and ignore this. Approvals hold names, never values.
+if os.environ.get("LAB_APPROVE_ENGAGEMENT") and hasattr(config, "approve_credential"):
+    for origin in json.loads(os.environ.get("LAB_APPROVE_ORIGINS", "[]")):
+        for name in sorted(os.environ):
+            if name.startswith("LAB_") and name.endswith("_TOKEN"):
+                config.approve_credential(
+                    os.environ["LAB_APPROVE_ENGAGEMENT"], origin, "env", name
+                )
 client = api.VardrMapClient(
     os.environ["LAB_BACKEND"], os.environ["LAB_RUNNER_KEY"], retries=0
 )

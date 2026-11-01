@@ -224,12 +224,20 @@ def job_row(jid):
         }
 
 
+# Origins the fixture cases contact. Runner 0.54 refuses a credential reference the operator
+# has not approved for the engagement and every origin; the harness acts as the operator and
+# passes these to worker.py, which approves the fixture's disposable LAB_*_TOKEN references.
+approved_origins = [target]
+
+
 def run_worker(label, allow=False):
     env = os.environ.copy()
     env.update(
         {
             "LAB_BACKEND": backend,
             "LAB_RUNNER_KEY": runner_key,
+            "LAB_APPROVE_ENGAGEMENT": pid,
+            "LAB_APPROVE_ORIGINS": json.dumps(approved_origins),
             "VARDRRUNNER_ALLOW_PRIVATE_TARGETS": "1" if allow else "0",
             "PYTHONIOENCODING": "utf-8",
             "PATH": str(root) + os.pathsep + env["PATH"],
@@ -696,6 +704,7 @@ try:
     unavailable = copy.deepcopy(spec)
     unavailable["id"] = "lab-unreachable"
     unavailable["request"]["url"] = f"http://127.0.0.1:{dead_port}/users/42/profile"
+    approved_origins.append(f"http://127.0.0.1:{dead_port}")
     stored = req(
         "POST",
         base + "/test-cases",
