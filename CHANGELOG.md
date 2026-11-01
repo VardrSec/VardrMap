@@ -4,6 +4,12 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Fix the Map + Runner + Gate integration acceptance for Runner 0.54 and later (#140). The harness
+  now approves its disposable credential references (names only) as the operator, and CI checks out
+  the Runner and Gate commits that the VardrSec distribution pins (`668dc56`, `7f82e49`) instead of
+  the older ones that had hidden the gap. Verified on native Windows against those pins: 104 checks,
+  0 failed. Test tooling only; no application, API or migration change.
+
 - Stop offering Nmap in the Jobs Composer and drop it from the Host Enumeration chain, which
   is now `naabu → httpx` (VardrSec Community Alpha ships without Nmap; naabu is the port-discovery
   tool). The Services page and Settings text no longer name nmap, and finished naabu jobs open

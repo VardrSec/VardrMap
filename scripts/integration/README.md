@@ -16,6 +16,9 @@ database, and exercises the real Runner worker against a loopback API fixture.
 It requires no production credentials and stops its HTTP servers on completion.
 Go may download dependencies during the build. Artifacts are retained for review.
 
+As the operator, the harness also approves the fixture's three disposable `LAB_*_TOKEN`
+credential references for the engagement and each fixture origin, which Runner 0.54 and
+later require before running a VardrGate case; older Runners have no approvals and ignore it.
 The worker redirects only local configuration/run/journal paths to scratch. It
 does not translate job IDs, normalize result payloads or copy evidence. Private
 target access is enabled through the documented operator environment setting;

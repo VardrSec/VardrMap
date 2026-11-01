@@ -69,16 +69,17 @@ jobs:
       INTEGRATION_DATABASE_URL: postgresql://postgres:ci-fixture-password@127.0.0.1:5432/vardrmap_test_integration?sslmode=disable
     steps:
       - uses: actions/checkout@v7
-      # Pin companion revisions so a PR is tested against a reproducible stack.
+      # Pin companion revisions so a PR is tested against a reproducible stack: the Runner
+      # and Gate commits the VardrSec distribution pins (versions.json), not older ones.
       - uses: actions/checkout@v7
         with:
           repository: VardrSec/VardrRunner
-          ref: e8bc3064ac39cac32b0736980a1f34f2c8d6df3f
+          ref: 668dc56f8685dc6a6225438ad443e26901828069
           path: .integration/runner
       - uses: actions/checkout@v7
         with:
           repository: VardrSec/VardrGate
-          ref: af29a93140b54cf5b684a06f552a05cd92f6dee6
+          ref: 7f82e499ec407eba072e129e3f3b94f1a4eabe94
           path: .integration/gate
       - uses: actions/setup-python@v7
         with:
