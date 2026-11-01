@@ -100,7 +100,7 @@ def main() -> int:
     ]:
         manifest[name] = snapshot(source.resolve(), root / name, ref)
     (root / "sources.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
-    for name in ("acceptance.py", "worker.py", "semantic.py", "diagnostic_cli.py", "platform_checks.py"):
+    for name in ("acceptance.py", "worker.py", "semantic.py", "naabu.py", "diagnostic_cli.py", "platform_checks.py"):
         shutil.copy2(scripts / name, root / name)
     binary = root / ("vardrgate.exe" if os.name == "nt" else "vardrgate")
     subprocess.run(

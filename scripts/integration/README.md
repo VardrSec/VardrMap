@@ -45,6 +45,13 @@ companion repository commits pinned in `.github/workflows/ci.yml`. Update those
 pins deliberately when validating a newer combined stack. Local runs continue
 to snapshot the supplied checkouts, including uncommitted changes.
 
+A Naabu case runs a real Runner worker against the scope and a real Map backend with a
+deterministic stand-in for the `naabu` process (it writes naabu's `-json` lines; the real
+binary is exercised by the VardrSec tool/network acceptance). It checks that every service
+the job reports is attributed to `naabu`, linked to the job and never labelled `nmap`, that
+re-seeing a row posted without a source relabels it without duplicating, and that Runner builds
+the command without any Nmap hook.
+
 Additional controlled cases cover HTTP 200 body denials, declared hidden-object
 404 denials, fixed privileged functions, expired target credentials, two reviewed
 collection pages, literal parameter transport, 429/503 responses and redirects.

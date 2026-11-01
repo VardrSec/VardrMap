@@ -27,6 +27,13 @@ if os.environ.get("LAB_APPROVE_ENGAGEMENT") and hasattr(config, "approve_credent
                 config.approve_credential(
                     os.environ["LAB_APPROVE_ENGAGEMENT"], origin, "env", name
                 )
+shim = os.environ.get("LAB_NAABU_SHIM")
+if shim and os.name == "nt":
+    # Windows cannot start a .cmd launcher by bare name; point Runner at it directly.
+    from vardrrunner import runner
+
+    _program = runner.program
+    runner.program = lambda name: shim if name == "naabu" else _program(name)
 client = api.VardrMapClient(
     os.environ["LAB_BACKEND"], os.environ["LAB_RUNNER_KEY"], retries=0
 )
