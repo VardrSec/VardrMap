@@ -1,5 +1,14 @@
 # Development
 
+`backend/tests/test_managed_wire.py` verifies public synthetic v1 wire vectors,
+purpose/key separation, owner provenance, expiry and bounded parsing. Run tests
+with an explicit child-process environment allowlist, synthetic authentication,
+disposable `vardrmap_test*` database and `PYTHON_DOTENV_DISABLED=1`. Installed
+python-dotenv 1.2.4 supports this before file discovery; never read retained `.env`
+or install into retained test environments. Raw failure output stays private;
+review evidence uses explicitly labeled sanitized derivatives. The adapter is
+unregistered and does not import Runner code. See [wire boundary](adr/0006-managed-contract-wire.md).
+
 NM-2 cancellation uses disposable fixtures in `backend/tests/test_execution_control.py`.
 Run `backend/postgres_tests/test_execution_control.py` against a dedicated
 `vardrmap_test*` PostgreSQL database to verify real cancellation/finalization lock

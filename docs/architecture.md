@@ -1,5 +1,12 @@
 # Architecture
 
+`backend/managed_wire.py` is an opt-in unregistered crypto wire primitive. It
+verifies enrolled operator public-key approval receipts and constructs exact v1
+contract envelopes with a distinct contract signing key. It owns no scope/plan
+validator, approval-signing route or key enrollment/discovery mechanism. Runner
+remains the full policy validator/execution engine over HTTP. Transactional
+issuance and authenticated managed runtime integration remain separate increments.
+
 Cumulative duration allocation uses nullable `programs.duration_limit`, durable
 `duration_allocated` and owned-attempt `duration_seconds` (`0035durationbudget`).
 The engagement lock serializes finite allocation with claim and policy mutation;

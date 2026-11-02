@@ -4,6 +4,11 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Add an unregistered Authorization Contract v1 wire adapter for separately
+  operator-signed approval verification and contract-only signing. Distinct keys
+  and synthetic cross-repository vectors preserve the Runner validation boundary.
+  This primitive alone does not enable managed queue execution or enrollment.
+
 - Add explicit cumulative duration allocations for owned attempts, bound finite
   receipts and nonrefundable accounting (`0035durationbudget`). Matching opt-in
   Runner enforces monotonic permission; allocations are not measured consumption
