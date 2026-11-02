@@ -139,7 +139,28 @@ not production deployment, persistent trust/enrollment, fresh-host/public/VPN
 compatibility, Docker networking, Gate dispatch or distributed exactly-once
 execution. All later activation and support gates remain open.
 
-### Legacy behavior and retained state
+### Explicit native Gate fixture
+
+`tests/test_managed_native.py` additionally requires `NM2_NATIVE_GATE=1` and a
+verified existing development Gate binary/receipt and guarded fixture source. The
+isolated launcher pins those bytes before any tool contact. Native policy uses real
+UTC and monotonic time and fresh synthetic signatures; deterministic ASGI clocks
+and the synthetic tool fingerprint are not used as native execution evidence.
+Only the disposable child enables private loopback access. Existing installations,
+trust stores, release pins, production routes and retained data are unchanged.
+
+The fixture invokes Runner's actual handler/control/WindowsJob against an owned
+loopback resource. It checks healthy renewal past ten seconds, preparation denials,
+auxiliary requests, private-file cleanup, real cancellation/stop/grant and control
+faults. Active cases verify the intervention and expected stop cause, last verified
+lease and existing cleanup bound, excluding eventual unrelated tool timeout as a
+false positive. Truncated post-commit renewal is labeled lost response; a separate
+owned TLS-server shutdown proves actual connectivity loss. Success artifacts remain
+local and case-bound. All cases retain Map ownership/counts; no legacy completion,
+upload or false failed outcome is used to make the test pass. Distributed consume,
+ACK, recovery, managed evidence/completion and production activation remain open.
+
+### Preserved compatibility
 
 `authorization_contract_required=true` is explicit on single fixed Gate job
 creation; omission preserves the existing JSON/behavior. It can represent missing

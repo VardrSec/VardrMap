@@ -4,6 +4,10 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Add an explicit real-clock Windows/Gate fixture using existing synthetic TLS
+  authorization and Runner native execution. Local success and confirmed stops
+  retain managed reservations; no runtime API, evidence or completion is enabled.
+
 - Add explicit disposable loopback HTTPS tests using Runner's existing HTTP
   client, verified named certificates and per-fixture no-redirect/no-retry policy.
   This enables no runtime endpoint, trust enrollment or deployment support.
