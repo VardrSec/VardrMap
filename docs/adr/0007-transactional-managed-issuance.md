@@ -114,7 +114,32 @@ ledger reserves permission. Distributed consumption/acknowledgement/recovery and
 exactly-once execution remain unresolved. No real trust, enrollment, production
 route, queue/worker activation, Gate execution or support expansion follows.
 
-### Retained compatibility guards
+### Disposable loopback HTTPS evidence
+
+The separately opted-in `tests/test_managed_tls.py` sets `NM2_TLS_LOOPBACK=1`
+alongside `NM2_RUNNER_SOURCE`. It reuses the same test-only app and probe over
+real loopback TLS sockets. Its temporary CA, named server certificate, private
+key, profile and database are disposable; no machine trust or installed settings
+are changed. Named-chain verification remains enabled, including strict X.509
+checks. Certificate negatives assert the actual trust/hostname/expiry failure;
+connection refusal asserts the real underlying refused-connect classification
+using a fixture-owned bound non-listening port and a valid CA path.
+
+Runner's test transport uses `api.py`'s existing `VardrMapClient` and session.
+Only those fixture instances disable retries/redirects, select the explicit CA
+file and bound timeouts. Existing manual clients retain their defaults. API-key
+and local-cookie redirects must not reach either a same-origin HTTPS sink or a
+plain HTTP sink. Wire truncation/read timeout after a real claim or renewal
+preserves uncertain ownership and cannot extend the client's last known lease.
+Cached replies retain their original server expiry through clock rollback.
+
+The server binds only loopback and is stopped and joined by the fixture. The
+final callback is still inert. This proves this host's synthetic TLS transport,
+not production deployment, persistent trust/enrollment, fresh-host/public/VPN
+compatibility, Docker networking, Gate dispatch or distributed exactly-once
+execution. All later activation and support gates remain open.
+
+### Legacy behavior and retained state
 
 `authorization_contract_required=true` is explicit on single fixed Gate job
 creation; omission preserves the existing JSON/behavior. It can represent missing

@@ -51,7 +51,12 @@ PASSWORD = "public synthetic operator password 123!"
 
 
 @pytest.fixture
-def harness(specimen, tmp_path, monkeypatch):
+def map_origin():
+    return ORIGIN
+
+
+@pytest.fixture
+def harness(specimen, tmp_path, monkeypatch, map_origin):
     s = specimen
     source = Path(os.environ["NM2_RUNNER_SOURCE"]).resolve()
     assert (source / "tests" / "managed_http_probe.py").is_file()
@@ -78,9 +83,9 @@ def harness(specimen, tmp_path, monkeypatch):
         SimpleNamespace(monotonic=lambda: ticks[0], time=lambda: client_wall[0].timestamp()),
     )
     monkeypatch.setenv("VARDRMAP_AUTH_METHODS", "github,local")
-    monkeypatch.setenv("ALLOWED_ORIGINS", ORIGIN)
-    service = Issuer(ORIGIN, s["wire"], clock=server_clock, monotonic=lambda: ticks[0])
-    s["db"].get(ManagedEnrollment, "enrollment-1").origin = ORIGIN
+    monkeypatch.setenv("ALLOWED_ORIGINS", map_origin)
+    service = Issuer(map_origin, s["wire"], clock=server_clock, monotonic=lambda: ticks[0])
+    s["db"].get(ManagedEnrollment, "enrollment-1").origin = map_origin
     s["db"].add(
         LocalCredential(
             user_id="owner-1",
@@ -140,7 +145,7 @@ def harness(specimen, tmp_path, monkeypatch):
     owner_headers = {"Authorization": "Bearer " + mint_token("owner-1")}
     runner_headers = {"Authorization": "Bearer " + KEY}
     body = s["body"].model_dump(mode="json")
-    body["origin"] = ORIGIN
+    body["origin"] = map_origin
     review_body = dict(
         job_id="job-1",
         enrollment_id="enrollment-1",
@@ -154,7 +159,7 @@ def harness(specimen, tmp_path, monkeypatch):
     )
     vector = json.loads((Path(__file__).parent / "fixtures" / "managed-wire-v1.json").read_text())
 
-    with TestClient(app, base_url=ORIGIN) as client:
+    with TestClient(app, base_url=map_origin) as client:
 
         def issue(headers=None):
             headers = owner_headers if headers is None else headers
@@ -189,7 +194,7 @@ def harness(specimen, tmp_path, monkeypatch):
                 transport or Transport(),
                 anchors,
                 ledger,
-                origin=ORIGIN,
+                origin=map_origin,
                 runner_id=RUNNER,
                 job_id="job-1",
                 engagement_id="eng-1",
@@ -206,13 +211,13 @@ def harness(specimen, tmp_path, monkeypatch):
                 client.post(
                     "/auth/local/login",
                     json={"username": "operator", "password": PASSWORD},
-                    headers={"Origin": ORIGIN},
+                    headers={"Origin": map_origin},
                 ).status_code
                 == 200
             )
             result = client.get("/auth/local/session")
             assert result.status_code == 200
-            return {"Origin": ORIGIN, "X-CSRF-Token": result.json()["csrfToken"]}
+            return {"Origin": map_origin, "X-CSRF-Token": result.json()["csrfToken"]}
 
         yield SimpleNamespace(
             s=s,
@@ -230,6 +235,7 @@ def harness(specimen, tmp_path, monkeypatch):
             transport=Transport,
             error=AuthorizationError,
             service=service,
+            origin=map_origin,
         )
 
 

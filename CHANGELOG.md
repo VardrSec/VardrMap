@@ -4,6 +4,10 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Add explicit disposable loopback HTTPS tests using Runner's existing HTTP
+  client, verified named certificates and per-fixture no-redirect/no-retry policy.
+  This enables no runtime endpoint, trust enrollment or deployment support.
+
 - Add an unregistered managed refresh primitive that validates current authority
   and renews its bounded lease atomically. A synthetic HTTP/shared-Runner-validator
   harness ends at an inert launch sentinel; no managed execution route is enabled.

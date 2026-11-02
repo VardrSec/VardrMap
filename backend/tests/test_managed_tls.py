@@ -1,0 +1,506 @@
+"""Explicit loopback TLS fixture; no installed service, Gate or target dispatch."""
+
+import asyncio
+import copy
+import importlib.util
+import os
+import socket
+import ssl
+import threading
+import time
+from contextlib import contextmanager
+from datetime import datetime, timedelta, timezone
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+import uvicorn
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
+from models import Engagement, JobExecution, ManagedApproval, ManagedContract
+from sqlalchemy.orm import Session
+from tests.test_managed_http import PASSWORD
+from tests.test_managed_http import harness as harness
+from tests.test_managed_issuance import KEY, NOW, signed
+from tests.test_managed_issuance import specimen as specimen
+
+pytestmark = pytest.mark.skipif(
+    os.environ.get("NM2_TLS_LOOPBACK") != "1" or not os.environ.get("NM2_RUNNER_SOURCE"),
+    reason="explicit isolated two-repository loopback TLS fixture only",
+)
+
+
+@pytest.fixture
+def tls_socket():
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.bind(("127.0.0.1", 0))
+    sock.listen(16)
+    yield sock
+    sock.close()
+
+
+@pytest.fixture
+def map_origin(tls_socket):
+    return f"https://localhost:{tls_socket.getsockname()[1]}"
+
+
+def certificates(directory, kind="valid"):
+    """Real short-lived named leaf under a disposable CA; never machine trust."""
+    instant = datetime.now(timezone.utc)
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "NM2 disposable CA")])
+    ca = (
+        x509.CertificateBuilder()
+        .subject_name(name)
+        .issuer_name(name)
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(instant - timedelta(days=2))
+        .not_valid_after(instant + timedelta(days=1))
+        .add_extension(x509.BasicConstraints(ca=True, path_length=0), critical=True)
+        .add_extension(x509.SubjectKeyIdentifier.from_public_key(key.public_key()), critical=False)
+        .add_extension(
+            x509.AuthorityKeyIdentifier.from_issuer_public_key(key.public_key()), critical=False
+        )
+        .add_extension(
+            x509.KeyUsage(
+                digital_signature=True,
+                content_commitment=False,
+                key_encipherment=False,
+                data_encipherment=False,
+                key_agreement=False,
+                key_cert_sign=True,
+                crl_sign=True,
+                encipher_only=None,
+                decipher_only=None,
+            ),
+            critical=True,
+        )
+        .sign(key, hashes.SHA256())
+    )
+    leaf_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    host = "wrong.synthetic.test" if kind == "wrong_name" else "localhost"
+    leaf = (
+        x509.CertificateBuilder()
+        .subject_name(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, host)]))
+        .issuer_name(name)
+        .public_key(leaf_key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(instant - timedelta(days=1))
+        .not_valid_after(
+            instant - timedelta(hours=1) if kind == "expired" else instant + timedelta(minutes=30)
+        )
+        .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)
+        .add_extension(
+            x509.SubjectKeyIdentifier.from_public_key(leaf_key.public_key()), critical=False
+        )
+        .add_extension(
+            x509.AuthorityKeyIdentifier.from_issuer_public_key(key.public_key()), critical=False
+        )
+        .add_extension(
+            x509.KeyUsage(
+                digital_signature=True,
+                content_commitment=False,
+                key_encipherment=True,
+                data_encipherment=False,
+                key_agreement=False,
+                key_cert_sign=False,
+                crl_sign=False,
+                encipher_only=None,
+                decipher_only=None,
+            ),
+            critical=True,
+        )
+        .add_extension(x509.SubjectAlternativeName([x509.DNSName(host)]), critical=False)
+        .add_extension(x509.ExtendedKeyUsage([ExtendedKeyUsageOID.SERVER_AUTH]), critical=False)
+        .sign(key, hashes.SHA256())
+    )
+    directory.mkdir()
+    ca_path, cert_path, key_path = (
+        directory / name for name in ("ca.pem", "server.pem", "server-key.pem")
+    )
+    ca_path.write_bytes(ca.public_bytes(serialization.Encoding.PEM))
+    cert_path.write_bytes(leaf.public_bytes(serialization.Encoding.PEM))
+    key_path.write_bytes(
+        leaf_key.private_bytes(
+            serialization.Encoding.PEM,
+            serialization.PrivateFormat.TraditionalOpenSSL,
+            serialization.NoEncryption(),
+        )
+    )
+    return ca_path, cert_path, key_path
+
+
+class WireFaults:
+    """Wire-only faults around actual auth/issuance/control; no policy overrides."""
+
+    def __init__(self, app):
+        self.app, self.mode, self.location = app, "normal", ""
+        self.seen, self.forwarded = {}, {}
+        self.cached = []
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+        path = scope["path"]
+        self.seen[path] = self.seen.get(path, 0) + 1
+        if path in {
+            "/fixture/claim",
+            "/fixture/current",
+            "/fixture/review",
+        } and self.mode.startswith("redirect"):
+            await send(
+                {
+                    "type": "http.response.start",
+                    "status": int(self.mode.split("_")[1]),
+                    "headers": [(b"location", self.location.encode()), (b"content-length", b"2")],
+                }
+            )
+            return await send({"type": "http.response.body", "body": b"{}"})
+        if self.mode == "status500" and path == "/fixture/claim":
+            await send(
+                {
+                    "type": "http.response.start",
+                    "status": 500,
+                    "headers": [(b"content-length", b"2")],
+                }
+            )
+            return await send({"type": "http.response.body", "body": b"{}"})
+        if self.mode == "replay_current" and path == "/fixture/current":
+            for message in self.cached:
+                await send(copy.deepcopy(message))
+            return
+        self.forwarded[path] = self.forwarded.get(path, 0) + 1
+
+        async def outgoing(message):
+            if self.mode == "capture_current" and path == "/fixture/current":
+                self.cached.append(copy.deepcopy(message))
+            if (
+                self.mode == "slow_current"
+                and path == "/fixture/current"
+                and message["type"] == "http.response.start"
+            ):
+                await asyncio.sleep(0.5)  # Real network read timeout after actual DB commit.
+            if (
+                self.mode == "drop_" + path.rsplit("/", 1)[-1]
+                and message["type"] == "http.response.start"
+            ):
+                message = copy.deepcopy(message)
+                message["headers"] = [
+                    (k, str(int(v) + 17).encode() if k == b"content-length" else v)
+                    for k, v in message["headers"]
+                ]
+                # The intentionally truncated response closes the real TLS socket.
+            await send(message)
+
+        await self.app(scope, receive, outgoing)
+
+
+@pytest.fixture
+def tls_harness(harness, tls_socket, tmp_path):
+    h = harness
+    source = Path(os.environ["NM2_RUNNER_SOURCE"])
+    spec = importlib.util.spec_from_file_location(
+        "nm2_tls_transport", source / "tests" / "managed_tls_transport.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    ca, cert, key = certificates(tmp_path / "tls")
+    wire = WireFaults(h.app)
+    clients = []
+
+    @contextmanager
+    def serve(sock=tls_socket, cert_file=cert, key_file=key):
+        server = uvicorn.Server(
+            uvicorn.Config(
+                wire,
+                log_config=None,
+                access_log=False,
+                log_level="critical",
+                lifespan="off",
+                ssl_certfile=str(cert_file),
+                ssl_keyfile=str(key_file),
+                timeout_keep_alive=1,
+                timeout_graceful_shutdown=1,
+            )
+        )
+        thread = threading.Thread(target=server.run, kwargs={"sockets": [sock]}, daemon=True)
+        thread.start()
+        deadline = time.monotonic() + 5
+        while not server.started and thread.is_alive() and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert server.started and thread.is_alive(), "disposable TLS server did not start"
+        try:
+            yield server
+        finally:
+            for client in clients:
+                client.close()
+            server.should_exit = True
+            thread.join(5)
+            assert not thread.is_alive(), "disposable TLS server did not stop"
+
+    def transport(token=KEY, ca_file=ca, origin=h.origin):
+        value = module.FixtureTransport(origin, token, ca_file)
+        clients.append(value)
+        return value
+
+    def issue(auth="jwt"):
+        if auth == "local":
+            operator = transport(token="")
+            operator.client.session.headers["Origin"] = h.origin
+            operator.client.post(
+                "/auth/local/login", json={"username": "operator", "password": PASSWORD}
+            )
+            session = operator.client.get("/auth/local/session")
+            operator.client.session.headers["X-CSRF-Token"] = session["csrfToken"]
+        else:
+            operator = transport(token=h.owner["Authorization"].split(" ", 1)[1])
+        reviewed = operator.client.post("/fixture/review", json=h.review)
+        receipt = signed(reviewed["context"])
+        operator.client.post(
+            "/fixture/register",
+            json={
+                **{k: h.review[k] for k in ("job_id", "enrollment_id", "authorization_id", "plan")},
+                "approval": receipt,
+            },
+        )
+        return operator
+
+    try:
+        yield SimpleNamespace(
+            h=h, ca=ca, cert=cert, key=key, wire=wire, serve=serve, transport=transport, issue=issue
+        )
+    finally:
+        for client in clients:
+            client.close()
+
+
+@pytest.mark.parametrize("auth", ["jwt", "local"])
+def test_verified_https_auth_to_inert_launch(tls_harness, auth):
+    t, launched = tls_harness, []
+    with t.serve():
+        t.issue(auth)
+        transport = t.transport()
+        assert transport.client.session.verify == str(t.ca)
+        assert transport.client.session.max_redirects == 0
+        assert transport.client.session.get_adapter(t.h.origin).max_retries.total == 0
+        p = t.h.probe(transport)
+        p.claim(t.h.body)
+        p.reserve()
+        p.launch(lambda: launched.append(True))
+    assert launched == [True]
+    assert t.wire.forwarded["/fixture/claim"] == 1
+    with Session(t.h.s["engine"]) as db:
+        assert db.query(ManagedApproval).one().issued == 1
+        assert db.query(ManagedContract).one().consumed is False
+
+
+def exception_chain(error):
+    pending, found, seen = [error], [], set()
+    while pending:
+        value = pending.pop()
+        if not isinstance(value, BaseException) or id(value) in seen:
+            continue
+        seen.add(id(value))
+        found.append(value)
+        pending.extend(
+            [value.__cause__, value.__context__, getattr(value, "reason", None), *value.args]
+        )
+    return found
+
+
+@pytest.mark.parametrize("kind", ["untrusted", "wrong_name", "expired"])
+def test_certificate_failures_precede_authenticated_http(tls_harness, tmp_path, kind):
+    from requests.exceptions import SSLError
+
+    t = tls_harness
+    if kind == "untrusted":
+        ca, _, _ = certificates(tmp_path / "unrelated-ca")
+        server = t.serve()
+    else:
+        ca, cert, key = certificates(tmp_path / "bad-cert", kind)
+        server = t.serve(cert_file=cert, key_file=key)
+    with server, pytest.raises(SSLError) as denied:
+        t.transport(ca_file=ca).client.post("/fixture/claim", json=t.h.body)
+    codes = {
+        error.verify_code
+        for error in exception_chain(denied.value)
+        if isinstance(error, ssl.SSLCertVerificationError)
+    }
+    assert codes & {"untrusted": {20, 21}, "wrong_name": {62}, "expired": {10}}[kind]
+    assert t.wire.seen == {}
+    assert t.h.s["db"].query(ManagedContract).count() == 0
+
+
+@pytest.fixture
+def http_sink():
+    class Sink(BaseHTTPRequestHandler):
+        def do_POST(self):
+            self.server.contacts += 1
+            self.server.credential_seen |= bool(
+                self.headers.get("Authorization") or self.headers.get("Cookie")
+            )
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b"{}")
+
+        do_GET = do_POST
+
+        def log_message(self, *args):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Sink)
+    server.contacts, server.credential_seen = 0, False
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield server
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(3)
+        assert not thread.is_alive()
+
+
+@pytest.mark.parametrize("code", [301, 302, 303, 307, 308])
+@pytest.mark.parametrize("destination", ["http", "same_https"])
+@pytest.mark.parametrize("credential", ["api_key", "cookie"])
+def test_redirects_are_refused_before_credential_forwarding(
+    tls_harness, http_sink, code, destination, credential
+):
+    from requests.exceptions import TooManyRedirects
+
+    t = tls_harness
+    with t.serve():
+        operator = t.issue("local" if credential == "cookie" else "jwt")
+        t.wire.mode = f"redirect_{code}"
+        t.wire.location = (
+            f"http://127.0.0.1:{http_sink.server_port}/sink"
+            if destination == "http"
+            else t.h.origin + "/fixture/sink"
+        )
+        client = operator if credential == "cookie" else t.transport()
+        path = "/fixture/review" if credential == "cookie" else "/fixture/claim"
+        body = t.h.review if credential == "cookie" else t.h.body
+        before = t.wire.seen.get(path, 0)
+        with pytest.raises(TooManyRedirects):
+            client.client.post(path, json=body)
+        assert t.wire.seen[path] == before + 1
+        assert "/fixture/sink" not in t.wire.seen
+    assert http_sink.contacts == 0 and not http_sink.credential_seen
+    assert t.h.s["db"].query(ManagedContract).count() == 0
+
+
+@pytest.mark.parametrize("kind", ["status500", "drop_claim"])
+def test_nonidempotent_claim_is_not_retried(tls_harness, kind):
+    t = tls_harness
+    with t.serve():
+        t.issue()
+        t.wire.mode = kind
+        transport = t.transport()
+        p = t.h.probe(transport)
+        with pytest.raises(t.h.error, match="synthetic_transport_failed"):
+            p.claim(t.h.body)
+        with pytest.raises(t.h.error, match="single_claim_only"):
+            p.claim(t.h.body)
+        assert t.wire.seen["/fixture/claim"] == 1
+        assert transport.failure_kind == (
+            "HTTPError" if kind == "status500" else "ChunkedEncodingError"
+        )
+    with Session(t.h.s["engine"]) as db:
+        assert db.query(ManagedContract).count() == (1 if kind == "drop_claim" else 0)
+        if kind == "drop_claim":
+            assert db.get(JobExecution, "job-1").capacity_reserved
+            assert db.get(Engagement, "eng-1").duration_allocated == 30
+
+
+@pytest.mark.parametrize("kind", ["drop_current", "slow_current"])
+def test_ambiguous_control_cannot_extend_local_permission(tls_harness, kind):
+    t = tls_harness
+    with t.serve():
+        t.issue()
+        transport = t.transport()
+        p = t.h.probe(transport)
+        p.claim(t.h.body)
+        p.reserve()
+        t.h.ticks[0] = 2
+        t.wire.mode = kind
+        transport.timeout = (1, 0.1)
+        with pytest.raises(t.h.error, match="synthetic_transport_failed"):
+            p.launch(lambda: pytest.fail("inert sentinel reached after ambiguous HTTPS control"))
+        assert t.wire.seen["/fixture/current"] == 2
+        assert transport.failure_kind == (
+            "ReadTimeout" if kind == "slow_current" else "ChunkedEncodingError"
+        )
+        assert p.lease_end == 10
+    with Session(t.h.s["engine"]) as db:
+        assert db.get(JobExecution, "job-1").expires_at == (NOW + timedelta(seconds=12)).replace(
+            tzinfo=None
+        )
+        assert db.get(JobExecution, "job-1").capacity_reserved
+
+
+@pytest.mark.parametrize("rollback", [False, True])
+def test_cached_https_reply_keeps_actual_fixed_expiry(tls_harness, rollback):
+    t = tls_harness
+    with t.serve():
+        t.issue()
+        t.wire.mode = "capture_current"
+        p = t.h.probe(t.transport())
+        p.claim(t.h.body)
+        p.reserve()
+        t.wire.mode = "replay_current"
+        t.h.ticks[0] = 8
+        if rollback:
+            t.h.wall[0] = NOW - timedelta(hours=1)
+        p.revalidate()
+        assert p.lease_end == 10
+        t.h.ticks[0] = 11
+        with pytest.raises(t.h.error, match="permission_expired"):
+            p.launch(lambda: pytest.fail("TLS replay revived server-expired permission"))
+        assert t.wire.forwarded["/fixture/current"] == 1
+
+
+def test_connection_refusal_prevents_claim_without_fallback(harness, tmp_path):
+    from requests.exceptions import ConnectionError, SSLError
+
+    source = Path(os.environ["NM2_RUNNER_SOURCE"])
+    spec = importlib.util.spec_from_file_location(
+        "nm2_refused_transport", source / "tests" / "managed_tls_transport.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    ca, _, _ = certificates(tmp_path / "refused-ca")
+    failures = []
+
+    class Observed(module.FixtureTransport):
+        def post(self, path, *, json):
+            try:
+                return super().post(path, json=json)
+            except ConnectionError as error:
+                failures.append(error)
+                raise
+
+    # Retain exclusive ownership without listening, so no other process can
+    # take the port and turn refusal into a different server's response.
+    with socket.socket() as sock:
+        if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        sock.bind(("127.0.0.1", 0))
+        transport = Observed(
+            f"https://localhost:{sock.getsockname()[1]}", KEY, ca, timeout=(3, 0.2)
+        )
+        try:
+            p = harness.probe(transport)
+            with pytest.raises(harness.error, match="synthetic_transport_failed"):
+                p.claim(harness.body)
+            assert len(failures) == 1 and not isinstance(failures[0], SSLError)
+            assert any(
+                isinstance(error, ConnectionRefusedError) for error in exception_chain(failures[0])
+            ), [type(error).__name__ for error in exception_chain(failures[0])]
+            assert harness.s["db"].query(ManagedContract).count() == 0
+        finally:
+            transport.close()
