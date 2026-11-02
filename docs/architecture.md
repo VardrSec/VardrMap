@@ -1,5 +1,11 @@
 # Architecture
 
+Cumulative duration allocation uses nullable `programs.duration_limit`, durable
+`duration_allocated` and owned-attempt `duration_seconds` (`0035durationbudget`).
+The engagement lock serializes finite allocation with claim and policy mutation;
+no finalization or deletion refunds it. Runner enforces a monotonic permission
+window independently of accounting. See [the exact scope](nm2-duration-budget.md).
+
 The opt-in cumulative target slice adds nullable `programs.target_limit`, durable
 `targets_spent` and owned-attempt charge/binding metadata (`0034targetbudget`).
 Spend increments only with a successful claim under the existing engagement lock

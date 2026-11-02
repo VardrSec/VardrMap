@@ -69,6 +69,7 @@ class ClaimControl(BaseModel):
     origin: str = Field(max_length=500)
     concurrency_budget: bool = Field(default=False, strict=True)
     target_binding: TargetBinding | None = None
+    duration_seconds: int | None = Field(default=None, strict=True, ge=1, le=86400)
 
     @field_validator("origin")
     @classmethod
@@ -106,7 +107,7 @@ def principal(request: Request):
     return hashlib.sha256(authorization.encode()).hexdigest()
 
 
-def issue(db: Session, job_id: str, user: dict, request: Request, body: ClaimControl, target_receipt=None):
+def issue(db: Session, job_id: str, user: dict, request: Request, body: ClaimControl, target_receipt=None, duration_receipt=None):
     token = secrets.token_urlsafe(32)
     row = JobExecution(
         job_id=job_id,
@@ -120,11 +121,13 @@ def issue(db: Session, job_id: str, user: dict, request: Request, body: ClaimCon
         capacity_reserved=body.concurrency_budget,
         target_charge=target_receipt["charged"] if target_receipt else 0,
         target_binding=target_receipt["binding"] if target_receipt else None,
+        duration_seconds=duration_receipt["allocated_seconds"] if duration_receipt else 0,
     )
     db.add(row)
     return {**binding(row), "token": token, "lease_seconds": LEASE_SECONDS,
             **({"capacity_reserved": True} if body.concurrency_budget else {}),
-            **({"target_budget": target_receipt} if target_receipt else {})}
+            **({"target_budget": target_receipt} if target_receipt else {}),
+            **({"duration_budget": duration_receipt} if duration_receipt else {})}
 
 
 def binding(row):

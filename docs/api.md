@@ -1,5 +1,12 @@
 # API Reference
 
+Local duration-budget builds add owner/full-scope
+`PUT /engagements/{program_id}/duration-policy` with required `limit_seconds`.
+Owned claims supply `duration_seconds` (1–86400); receipts return `duration_budget`
+with allocated seconds, cumulative allocated total and ceiling. These are
+nonrefundable allocations, not measured consumption. See
+[the enforcement scope and cleanup overshoot](nm2-duration-budget.md).
+
 Local target-ceiling builds add owner/full-scope
 `PUT /engagements/{program_id}/target-policy` with required `limit` (1–1000000 or
 explicit null before any spend, while idle). Owned fixed Gate claims supply

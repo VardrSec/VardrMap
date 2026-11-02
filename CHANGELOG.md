@@ -4,6 +4,11 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Add explicit cumulative duration allocations for owned attempts, bound finite
+  receipts and nonrefundable accounting (`0035durationbudget`). Matching opt-in
+  Runner enforces monotonic permission; allocations are not measured consumption
+  or a hard total-job bound. No default migration, worker or phase closure.
+
 - Add explicit cumulative engagement target ceilings for bound fixed Gate owned
   attempts, charging all represented contact origins without refunds. Requires
   `0034targetbudget` and matching opt-in Runner. No default migration, worker,

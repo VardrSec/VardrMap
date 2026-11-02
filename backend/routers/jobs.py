@@ -13,6 +13,7 @@ import enforcement
 import execution_control as control
 import concurrency_budget
 import target_budget
+import duration_budget
 import redaction
 import sse as _sse
 from db import get_db
@@ -911,8 +912,9 @@ def claim_job(
     )
     execution = None
     target_receipt = target_budget.charge(engagement, pending, snapshot, body) if claimed else None
+    duration_receipt = duration_budget.allocate(engagement, body) if claimed else None
     if claimed and body is not None:
-        execution = control.issue(db, job_id, current_user, request, body, target_receipt)
+        execution = control.issue(db, job_id, current_user, request, body, target_receipt, duration_receipt)
         control.no_store(response)
     db.commit()
 

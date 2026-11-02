@@ -201,6 +201,8 @@ class Engagement(Base):
     concurrency_limit = Column(Integer, nullable=True)
     target_limit = Column(Integer, nullable=True)
     targets_spent = Column(Integer, nullable=False, default=0)
+    duration_limit = Column(Integer, nullable=True)
+    duration_allocated = Column(Integer, nullable=False, default=0)
 
     id = Column(String, primary_key=True, default=new_uuid)
     owner_github_id = Column(String, ForeignKey("users.github_id"), nullable=False, index=True)
@@ -587,6 +589,7 @@ class JobExecution(Base):
     capacity_reserved = Column(Boolean, nullable=False, default=False)
     target_charge = Column(Integer, nullable=False, default=0)
     target_binding = Column(JSON, nullable=True)
+    duration_seconds = Column(Integer, nullable=False, default=0)
 
 
 class JobResultReceipt(Base):
