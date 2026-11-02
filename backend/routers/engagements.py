@@ -323,7 +323,7 @@ def engage_stop_work(
     """
     engagement = get_engagement_or_404(program_id, current_user, db)
     require_member_write(engagement, current_user, db)
-    engagement = db.query(Engagement).filter_by(id=program_id).with_for_update().populate_existing().one()
+    engagement = managed_authority.lock(db, engagement)
 
     if engagement.stop_work_at is None:
         engagement.managed_authority_revision += 1

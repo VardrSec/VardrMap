@@ -17,7 +17,15 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from db import Base
 from fastapi import HTTPException
 from managed_issuance import Issuer
-from managed_wire import ContractWire, OperatorAnchor, WireRefused, b64, canonical, message, stamp
+from managed_wire import (
+    ContractWire,
+    OperatorAnchor,
+    WireRefused,
+    b64,
+    canonical,
+    message,
+    stamp,
+)
 from models import (
     ApiKey,
     Authorization,
@@ -33,7 +41,7 @@ from models import (
     User,
 )
 from nm1_authorization import IssuanceRefused
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 from starlette.requests import Request
@@ -363,7 +371,14 @@ def test_api_credentials_cannot_register_even_valid_human_receipt(specimen, scop
 
 @pytest.mark.parametrize(
     "field",
-    ["job_id", "engagement_id", "runner_id", "authority_sha256", "plan_sha256", "max_executions"],
+    [
+        "job_id",
+        "engagement_id",
+        "runner_id",
+        "authority_sha256",
+        "plan_sha256",
+        "max_executions",
+    ],
 )
 def test_signed_changed_context_cannot_register(specimen, field):
     s = specimen
@@ -480,7 +495,10 @@ def test_real_mutation_paths_change_and_revert_cannot_revive_approval(specimen, 
         from schemas import ScopeItemCreate
 
         result = add_out_scope_item(
-            "eng-1", ScopeItemCreate(value="https://api.example.test", kind="url"), user, s["db"]
+            "eng-1",
+            ScopeItemCreate(value="https://api.example.test", kind="url"),
+            user,
+            s["db"],
         )
         delete_scope_item("eng-1", "out", result["id"], user, s["db"])
     assert s["db"].get(Engagement, "eng-1").managed_authority_revision == 2
@@ -501,13 +519,23 @@ def test_missing_approval_and_legacy_claims_fail_closed(specimen):
     for body in (None, s["body"]):
         with pytest.raises(HTTPException) as denied:
             claim_job(
-                "job-1", s["runner"], body, {"github_id": "owner-1", "scope": "runner"}, s["db"]
+                "job-1",
+                s["runner"],
+                body,
+                {"github_id": "owner-1", "scope": "runner"},
+                s["db"],
             )
         assert denied.value.status_code == 409
         unchanged(s)
     register(s)
     with pytest.raises(HTTPException) as denied:
-        claim_job("job-1", s["runner"], None, {"github_id": "owner-1", "scope": "runner"}, s["db"])
+        claim_job(
+            "job-1",
+            s["runner"],
+            None,
+            {"github_id": "owner-1", "scope": "runner"},
+            s["db"],
+        )
     assert denied.value.status_code == 409
     unchanged(s)
 
@@ -545,7 +573,9 @@ def test_pipeline_cannot_silently_drop_contract_requirement(specimen, at_stage):
     body = PipelineCreate(
         stages=[
             PipelineStage(
-                tool_type="httpx", target_source="scope", authorization_contract_required=at_stage
+                tool_type="httpx",
+                target_source="scope",
+                authorization_contract_required=at_stage,
             )
         ],
         authorization_contract_required=not at_stage,
@@ -574,7 +604,9 @@ def test_cross_engagement_operator_has_no_approval_access(specimen):
     unchanged(s)
 
 
-def test_current_contract_binding_observes_revision_and_legacy_control_stays_disabled(specimen):
+def test_current_contract_binding_observes_revision_and_legacy_control_stays_disabled(
+    specimen,
+):
     s = specimen
     register(s)
     issued = claim(s)
@@ -583,7 +615,11 @@ def test_current_contract_binding_observes_revision_and_legacy_control_stays_dis
         runner_id=RUNNER, origin=ORIGIN, token=issued["execution_control"]["token"]
     )
     args = dict(
-        job_id="job-1", body=body, contract_id=row.id, attempt_id=row.attempt_id, fence=row.fence
+        job_id="job-1",
+        body=body,
+        contract_id=row.id,
+        attempt_id=row.attempt_id,
+        fence=row.fence,
     )
     current = s["service"].current(s["db"], s["runner"], **args)
     assert current["authority_sha256"] == s["review"]["context"]["authority_sha256"]
@@ -610,7 +646,11 @@ def test_current_contract_binding_observes_revision_and_legacy_control_stays_dis
     from schemas import AuthorizationUpdate
 
     update_authorization(
-        "eng-1", "auth-1", AuthorizationUpdate(status="revoked"), {**user, "scope": "full"}, s["db"]
+        "eng-1",
+        "auth-1",
+        AuthorizationUpdate(status="revoked"),
+        {**user, "scope": "full"},
+        s["db"],
     )
     with pytest.raises(WireRefused, match="authority_revision_changed"):
         s["service"].current(s["db"], s["runner"], **args)
@@ -673,7 +713,9 @@ def sqlite_writer_held(engine):
             probe.rollback()
 
 
-def test_sqlite_authority_commit_after_projection_cannot_issue_stale_permission(specimen):
+def test_sqlite_authority_commit_after_projection_cannot_issue_stale_permission(
+    specimen,
+):
     s = specimen
     register(s)
     projected, release = threading.Event(), threading.Event()
@@ -702,7 +744,10 @@ def test_sqlite_authority_commit_after_projection_cannot_issue_stale_permission(
                 db,
             )
 
-    with patch.object(s["service"], "_claim_permission", held), ThreadPoolExecutor(2) as pool:
+    with (
+        patch.object(s["service"], "_claim_permission", held),
+        ThreadPoolExecutor(2) as pool,
+    ):
         issued = pool.submit(issue)
         assert projected.wait(5)
         writer_held = sqlite_writer_held(s["engine"])
@@ -725,6 +770,15 @@ def test_sqlite_authority_commit_after_projection_cannot_issue_stale_permission(
 
 @pytest.mark.parametrize("limiting", ["target", "duration"])
 def test_sqlite_distinct_jobs_do_not_overspend_cached_target_or_duration(specimen, limiting):
+    _distinct_jobs_budget_case(specimen, limiting, "managed")
+
+
+@pytest.mark.parametrize("limiting", ["target", "duration"])
+def test_sqlite_mixed_legacy_and_managed_claims_share_writer_boundary(specimen, limiting):
+    _distinct_jobs_budget_case(specimen, limiting, "legacy")
+
+
+def _distinct_jobs_budget_case(specimen, limiting, other):
     s = specimen
     db = s["db"]
     eng = db.get(Engagement, "eng-1")
@@ -739,11 +793,13 @@ def test_sqlite_distinct_jobs_do_not_overspend_cached_target_or_duration(specime
             target_source="scope",
             config={"test_case_id": "case-1"},
             status="pending",
-            authorization_contract_required=True,
+            authorization_contract_required=other == "managed",
         )
     )
     db.commit()
     for job in ("job-1", "job-2"):
+        if other == "legacy" and job == "job-2":
+            continue
         review = s["service"].review(
             db,
             s["owner"],
@@ -769,6 +825,19 @@ def test_sqlite_distinct_jobs_do_not_overspend_cached_target_or_duration(specime
     first, second, release = threading.Event(), threading.Event(), threading.Event()
     original = s["service"]._claim_permission
     retained_engagements = []
+    legacy_attempted = threading.Event()
+    legacy_thread = []
+
+    def sql_attempt(conn, cursor, statement, parameters, context, executemany):
+        if (
+            legacy_thread
+            and threading.get_ident() == legacy_thread[0]
+            and (
+                statement.upper().startswith("BEGIN IMMEDIATE")
+                or statement.upper().startswith("UPDATE SCAN_JOBS")
+            )
+        ):
+            legacy_attempted.set()
 
     def held(db, req, job, *args, **kwargs):
         # Retain a strong per-session identity across the writer wait; otherwise
@@ -785,27 +854,50 @@ def test_sqlite_distinct_jobs_do_not_overspend_cached_target_or_duration(specime
     def issue(job):
         with Session(s["engine"]) as session:
             try:
-                s["service"].claim(session, s["runner"], job_id=job, body=s["body"])
+                if other == "legacy" and job == "job-2":
+                    from routers.jobs import claim_job
+
+                    legacy_thread.append(threading.get_ident())
+                    claim_job(
+                        job,
+                        s["runner"],
+                        s["body"],
+                        {"github_id": "owner-1", "scope": "runner"},
+                        session,
+                    )
+                else:
+                    s["service"].claim(session, s["runner"], job_id=job, body=s["body"])
                 return True
             except (WireRefused, HTTPException):
                 return False
 
-    with patch.object(s["service"], "_claim_permission", held), ThreadPoolExecutor(2) as pool:
-        a = pool.submit(issue, "job-1")
-        assert first.wait(5)
-        writer_held = sqlite_writer_held(s["engine"])
-        b = pool.submit(issue, "job-2")
-        if not writer_held:
-            assert second.wait(5), "unserialized second reader never reached authority projection"
-            b.result(10)
-        release.set()
-        assert sum([a.result(10), b.result(10)]) == 1
+    event.listen(s["engine"], "before_cursor_execute", sql_attempt)
+    try:
+        with (
+            patch.object(s["service"], "_claim_permission", held),
+            ThreadPoolExecutor(2) as pool,
+        ):
+            a = pool.submit(issue, "job-1")
+            assert first.wait(5)
+            writer_held = sqlite_writer_held(s["engine"])
+            b = pool.submit(issue, "job-2")
+            if other == "legacy":
+                assert legacy_attempted.wait(5)
+            elif not writer_held:
+                assert second.wait(5), (
+                    "unserialized second reader never reached authority projection"
+                )
+                b.result(10)
+            release.set()
+            assert sum([a.result(10), b.result(10)]) == 1
+    finally:
+        event.remove(s["engine"], "before_cursor_execute", sql_attempt)
     db.expire_all()
     assert db.query(ManagedContract).count() == db.query(JobExecution).count() == 1
     assert sum(row.issued for row in db.query(ManagedApproval)) == 1
     assert db.get(Engagement, "eng-1").targets_spent == 1
     assert db.get(Engagement, "eng-1").duration_allocated == 30
-    assert len(retained_engagements) == 2
+    assert len(retained_engagements) == (1 if other == "legacy" else 2)
 
 
 def test_concurrent_scope_writes_never_lose_authority_revision(specimen):
@@ -850,7 +942,9 @@ def test_concurrent_scope_writes_never_lose_authority_revision(specimen):
     assert s["db"].get(Engagement, "eng-1").managed_authority_revision == 2
 
 
-def test_legacy_claim_cas_rejects_new_requirement_even_with_stale_job_identity(specimen):
+def test_legacy_claim_cas_rejects_new_requirement_even_with_stale_job_identity(
+    specimen,
+):
     s = specimen
     from routers.jobs import claim_job
 
@@ -922,7 +1016,10 @@ def test_unknown_flushed_sqlite_transaction_is_refused_without_data_loss(specime
 
     db = s["db"]
     pending = ScopeItem(
-        program_id="eng-1", value="https://uncommitted.example.test", kind="url", scope_type="out"
+        program_id="eng-1",
+        value="https://uncommitted.example.test",
+        kind="url",
+        scope_type="out",
     )
     db.add(pending)
     db.flush()
@@ -930,7 +1027,8 @@ def test_unknown_flushed_sqlite_transaction_is_refused_without_data_loss(specime
     transaction = db.get_transaction()
     assert not db.new and not db.dirty and not db.deleted
     with pytest.raises(
-        RuntimeError, match="unowned_sqlite_transaction|clean_sqlite_issuer_session_required"
+        RuntimeError,
+        match="unowned_sqlite_transaction|clean_sqlite_issuer_session_required",
     ):
         managed_authority.begin_write(db) if boundary == "helper" else register(s)
     assert db.get_transaction() is transaction and transaction.is_active
@@ -940,3 +1038,178 @@ def test_unknown_flushed_sqlite_transaction_is_refused_without_data_loss(specime
     db.commit()  # Caller chooses disposition; boundary did not commit/discard it.
     with Session(s["engine"]) as observer:
         assert observer.get(ScopeItem, ident) is not None
+
+
+@pytest.mark.parametrize("first", ["claim", "delete"])
+def test_sqlite_reservation_delete_and_managed_claim_linearize(specimen, first):
+    s = specimen
+    register(s)
+    from routers import jobs as router
+
+    held, release, attempted = threading.Event(), threading.Event(), threading.Event()
+    second_thread = []
+    original_permission, original_log = (
+        s["service"]._claim_permission,
+        router.log_action,
+    )
+
+    def hold_permission(*a, **kw):
+        result = original_permission(*a, **kw)
+        if first == "claim":
+            held.set()
+            assert release.wait(10)
+        return result
+
+    def hold_delete(*a, **kw):
+        if first == "delete" and len(a) > 2 and a[2] == "delete":
+            held.set()
+            assert release.wait(10)
+        return original_log(*a, **kw)
+
+    def sql_attempt(conn, cursor, statement, parameters, context, executemany):
+        if (
+            second_thread
+            and threading.get_ident() == second_thread[0]
+            and (
+                statement.upper().startswith("BEGIN IMMEDIATE")
+                or statement.upper().startswith("DELETE FROM SCAN_JOBS")
+            )
+        ):
+            attempted.set()
+
+    def execute(action, second=False):
+        if second:
+            second_thread.append(threading.get_ident())
+        with Session(s["engine"]) as db:
+            try:
+                if action == "claim":
+                    claim(s, db=db)
+                else:
+                    router.delete_job("job-1", {"github_id": "owner-1", "scope": "full"}, db)
+                return 200
+            except HTTPException as exc:
+                return exc.status_code
+
+    event.listen(s["engine"], "before_cursor_execute", sql_attempt)
+    try:
+        with (
+            patch.object(s["service"], "_claim_permission", hold_permission),
+            patch.object(router, "log_action", hold_delete),
+            ThreadPoolExecutor(2) as pool,
+        ):
+            a = pool.submit(execute, first)
+            assert held.wait(5) and sqlite_writer_held(s["engine"])
+            b = pool.submit(execute, "delete" if first == "claim" else "claim", True)
+            assert attempted.wait(5) and not b.done()
+            release.set()
+            results = [a.result(10), b.result(10)]
+    finally:
+        event.remove(s["engine"], "before_cursor_execute", sql_attempt)
+    s["db"].expire_all()
+    if first == "claim":
+        assert results == [200, 409]
+        assert s["db"].get(ScanJob, "job-1") is not None
+        assert s["db"].get(JobExecution, "job-1").capacity_reserved
+        assert s["db"].query(ManagedContract).count() == 1
+        assert s["db"].get(Engagement, "eng-1").duration_allocated == 30
+    else:
+        assert results == [200, 404]
+        assert s["db"].get(ScanJob, "job-1") is None
+        assert s["db"].query(ManagedContract).count() == s["db"].query(JobExecution).count() == 0
+        assert s["db"].query(ManagedApproval).one().issued == 0
+        assert s["db"].get(Engagement, "eng-1").duration_allocated == 0
+
+
+def test_sqlite_stop_refreshes_revision_after_other_authority_write(specimen):
+    s = specimen
+    from routers import engagements as router
+    from routers.authorizations import update_authorization
+    from schemas import AuthorizationUpdate
+
+    cached, release, attempted = threading.Event(), threading.Event(), threading.Event()
+    stop_thread, change_thread = [], []
+
+    def revision_write(target, value, oldvalue, initiator):
+        if threading.get_ident() in stop_thread and value == 1:
+            cached.set()
+            assert release.wait(10)
+
+    def sql_attempt(conn, cursor, statement, parameters, context, executemany):
+        if threading.get_ident() in change_thread and statement == "BEGIN IMMEDIATE":
+            attempted.set()
+
+    user = {"github_id": "owner-1", "scope": "full"}
+
+    def stop():
+        stop_thread.append(threading.get_ident())
+        with Session(s["engine"]) as db:
+            return router.engage_stop_work(
+                "eng-1", router.StopWorkRequest(reason="synthetic"), user, db
+            )
+
+    def change():
+        change_thread.append(threading.get_ident())
+        with Session(s["engine"]) as db:
+            update_authorization(
+                "eng-1",
+                "auth-1",
+                AuthorizationUpdate(permits="changed synthetic assertion"),
+                user,
+                db,
+            )
+
+    event.listen(Engagement.managed_authority_revision, "set", revision_write)
+    event.listen(s["engine"], "before_cursor_execute", sql_attempt)
+    try:
+        with ThreadPoolExecutor(2) as pool:
+            stopped = pool.submit(stop)
+            assert cached.wait(5)
+            held = sqlite_writer_held(s["engine"])
+            changed = pool.submit(change)
+            assert attempted.wait(5)
+            if not held:
+                changed.result(10)
+            release.set()
+            stopped.result(10)
+            changed.result(10)
+    finally:
+        release.set()
+        event.remove(Engagement.managed_authority_revision, "set", revision_write)
+        event.remove(s["engine"], "before_cursor_execute", sql_attempt)
+    s["db"].expire_all()
+    assert s["db"].get(Engagement, "eng-1").managed_authority_revision == 2
+    assert s["db"].get(Engagement, "eng-1").stop_work_at is not None
+
+
+def test_owned_execution_refresh_cannot_hide_job_cancellation(specimen):
+    s = specimen
+    register(s)
+    issued = claim(s)
+    s["db"].expire_on_commit = False
+    cached = s["db"].get(JobExecution, "job-1")
+    row = s["db"].query(ManagedContract).one()
+    from fastapi import BackgroundTasks
+    from routers.jobs import JobStatusUpdate, update_job
+
+    with Session(s["engine"]) as other:
+        update_job(
+            "job-1",
+            JobStatusUpdate(status="failed"),
+            BackgroundTasks(),
+            {"github_id": "owner-1", "scope": "full"},
+            other,
+        )
+    assert cached.state == "active"
+    body = control.ControlRequest(
+        runner_id=RUNNER, origin=ORIGIN, token=issued["execution_control"]["token"]
+    )
+    with pytest.raises(WireRefused, match="live_control_expired_or_stopped"):
+        s["service"].current(
+            s["db"],
+            s["runner"],
+            job_id="job-1",
+            body=body,
+            contract_id=row.id,
+            attempt_id=row.attempt_id,
+            fence=row.fence,
+        )

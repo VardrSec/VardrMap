@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 import assessments
 import enforcement
 import execution_control as control
+import managed_authority
 import concurrency_budget
 import target_budget
 import duration_budget
@@ -863,6 +864,7 @@ def claim_job(
     not application-level read-then-write, enforces it. The affected row count
     tells us whether this caller made the transition.
     """
+    managed_authority.begin_write(db)
     now = datetime.now(timezone.utc)
 
     # Re-evaluate before handing work to a runner. A job queued while the testing

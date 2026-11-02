@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy.orm import Session
 
 from models import Engagement, JobExecution, ScanJob
+import managed_authority
 from deps import accessible_engagement_ids
 
 
@@ -22,6 +23,7 @@ def lock_job(db: Session, job_id: str, user: dict):
     The parent lookup acquires no lock; the engagement FK cannot change through
     a job update. Authorization still runs in the caller before any mutation.
     """
+    managed_authority.begin_write(db)
     parent = (
         db.query(ScanJob.program_id)
         .filter(
@@ -136,7 +138,7 @@ def binding(row):
 
 def owned(db: Session, job_id: str, user: dict, request: Request, body: ControlRequest):
     lock_job(db, job_id, user)
-    row = db.query(JobExecution).filter_by(job_id=job_id).with_for_update().first()
+    row = db.query(JobExecution).filter_by(job_id=job_id).with_for_update().populate_existing().first()
     if (
         not row
         or row.owner != user["github_id"]

@@ -4,6 +4,10 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Serialize SQLite legacy and managed claims, reservation deletion and stop-work
+  revisions through one writer boundary; refresh owned cancellation state before
+  accepting current permission. Managed execution remains disabled.
+
 - Add retained local managed approval/issuance state (`0036managedauth`), atomic
   owned claim/ordinal/budget spending, current authority/principal binding and
   monotonic clock/revision checks. Explicit contract-required Gate jobs remain

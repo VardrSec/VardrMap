@@ -50,6 +50,9 @@ Initial trusted time is observed in a short independent clock transaction.
 SQLite then obtains an immediate writer boundary after authentication helper
 commits and before authoritative reads; mutation paths obtain the same boundary
 before refreshing their engagement. FOR UPDATE is not treated as a SQLite lock.
+Legacy claims, owned execution mutations and reservation deletion share this
+writer boundary; stop-work refreshes its revision inside it. Owned control also
+refreshes cached execution state before deciding whether permission remains live.
 Distinct jobs cannot spend cached target/duration counters, and concurrent scope
 writes cannot lose revisions. SQLite issuer calls require a clean session. An
 unknown active native transaction is refused without committing or discarding
