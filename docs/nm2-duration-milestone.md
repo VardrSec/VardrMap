@@ -17,14 +17,14 @@ never refund it. Defaults and independent target/concurrency/grant controls rema
 
 | Check | Observed result |
 |---|---|
-| Full native Runner | 1,946 passed, 10 skipped; 95.81% coverage. Required lint/format including container, mypy and medium/high Bandit passed. |
+| Full native Runner | Final corrected source: 1,952 passed, 10 skipped; 95.81% coverage. Earlier candidate: 1,946 passed, 10 skipped. Required lint/format including container, mypy and medium/high Bandit passed. |
 | Full PostgreSQL backend | 1,289 passed, one skipped; four existing dependency deprecation warnings. |
 | PostgreSQL budget/migration set | 20 passed, 10 unrelated deselected. Includes new head/startup/downgrade refusal and preserved earlier budget behavior. |
 | Duration races per database role | 20 competing allocations, 20 actual separate-engagement claims, duplicate claims/finishes, persisted unknown/terminal/deletion accounting, 10 enable-versus-legacy and 10 disable-versus-bound races. Administrator and restricted application roles passed. |
 | Real four-control Gate path | Map HTTP → native Runner → guarded Gate with target, concurrency, duration and expiring grants: 14 requests over five phases, preserved case hash, allocated 5 seconds, zero additional traffic from duration exhaustion. Target ceiling was 2; second target charge rolled back to 1 when duration refused. |
 | Real owner crash | Claimed Runner owner exited 7 with an active native parent/child tree. Both stopped; both partial files remained. Map retained 5 allocated seconds, uncertainty and no termination acknowledgement; a reloaded journal deferred recovery. No scanner/external target. |
 
-The successful four-control fixture's full first execution took 0.528 seconds,
+The final successful four-control fixture's full first execution took 0.555 seconds,
 including transport/finalization; this is an observed fixture duration, not measured
 budget consumption or a promised total-job bound. The real crash fixture measured
 0.943 seconds from owner process start until verified tree exit, also not a usage
@@ -38,13 +38,13 @@ existing default shutdown policy. Rounded observations, in seconds:
 
 | Case | Claim/preparation | Process runtime to stop request | Cleanup to verified stop | Request start to verified stop |
 |---|---:|---:|---:|---:|
-| Cooperative budget expiry | 0.008 | 1.006 | 0.051 | 1.065 |
-| Refusing tree, forced cleanup | 0.006 | 1.008 | 2.071 | 3.085 |
-| Earlier per-job timeout | 0.006 | 1.008 | 0.051 | 1.065 |
-| Earlier signed deadline | 0.006 | 1.009 | 0.051 | 1.065 |
+| Cooperative budget expiry | 0.007 | 1.005 | 0.051 | 1.063 |
+| Refusing tree, forced cleanup | 0.007 | 1.005 | 2.066 | 3.077 |
+| Earlier per-job timeout | 0.006 | 1.006 | 0.051 | 1.062 |
+| Earlier signed deadline | 0.006 | 1.006 | 0.051 | 1.063 |
 
 Both native processes stopped and partial evidence remained in each case.
-Separate preparation/permit/grant-lock delays measured 1.153/1.151/1.299 seconds
+Separate preparation/permit/grant-lock delays measured 1.152/1.152/1.300 seconds
 against a one-second allocation and produced zero process creation. Tests also
 cover receipt mismatch, invalid quantities, late claim responses, clock changes
 and nested deadlines without renewal. Measurements assume responsive OS/storage;
@@ -57,8 +57,17 @@ they do not establish universal timing bounds.
 - Independent source review found explicit duration could be dropped by library
   entry calls without control. Both execution entries now refuse before network/
   process activity; six regressions cover both entries and invalid requests.
+- Final inspection found reusing a claim facade could reassign its timing anchor.
+  Claims are now atomically single-use, even after unknown responses. Monitor entry
+  requires a valid receipt and is also reserved atomically before construction;
+  failed setup cannot reopen it. Deterministic competing-entry and retry tests
+  verify one RPC/monitor and no renewed window.
+- One added monitor test initially omitted the spec'd mock client's base URL
+  (81 passed, one fixture failure). Corrected the mock; final affected set passed
+  84 tests. No product control or test threshold was relaxed.
 - Initial affected Runner set passed 230 tests; corrected-entry/native set passed
-  183; final full suite includes all corrections. Initial PostgreSQL duration role
+  183; final owned-entry set passed 84, and final full suite includes all corrections.
+  Initial PostgreSQL duration role
   cases and affected backend set passed 2 and 41 tests before final expansion.
   No final runtime, backend or migration failures remain.
 

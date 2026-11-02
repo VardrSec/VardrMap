@@ -34,7 +34,10 @@ The receipt is not signed v1 authorization or human execution approval.
 Runner captures `time.monotonic()` immediately before its claim HTTP call. Claim
 latency and all subsequent preparation consume the window. Preclaim review,
 target resolution and local setup are outside it. A late response or renewal does
-not restart the clock. The immutable monotonic deadline composes by minimum with
+not restart the clock. Each owned-claim facade is single-use, including unknown
+responses, so duplicate calls cannot renew the anchor. Monitor entry is also
+atomically single-use, including failed setup. The immutable monotonic deadline
+composes by minimum with
 existing local per-tool timeouts and signed authorization deadlines. Existing
 grant checks remain independently necessary.
 
