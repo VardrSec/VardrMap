@@ -1,5 +1,12 @@
 # API Reference
 
+Local target-ceiling builds add owner/full-scope
+`PUT /engagements/{program_id}/target-policy` with required `limit` (1–1000000 or
+explicit null before any spend, while idle). Owned fixed Gate claims supply
+`target_binding` with profile, case SHA-256 and canonical origins. Receipts return
+`target_budget` with binding/charged/spent/limit. Spend is cumulative and never
+refunded. See [scope, exclusions and persistence](nm2-target-budget.md).
+
 Local NM-2 builds add owner/full-scope `PUT /engagements/{program_id}/concurrency-policy`
 with required `limit` (1–1000, or explicit null while idle). Enabled engagements
 require owned claims with `concurrency_budget:true`; receipts confirm

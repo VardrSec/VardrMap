@@ -56,11 +56,19 @@ def now():
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
+class TargetBinding(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    profile: Literal["gate-fixed-http/1"]
+    case_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    origins: list[str] = Field(min_length=1, max_length=100)
+
+
 class ClaimControl(BaseModel):
     model_config = ConfigDict(extra="forbid")
     runner_id: UUID
     origin: str = Field(max_length=500)
     concurrency_budget: bool = Field(default=False, strict=True)
+    target_binding: TargetBinding | None = None
 
     @field_validator("origin")
     @classmethod
@@ -98,7 +106,7 @@ def principal(request: Request):
     return hashlib.sha256(authorization.encode()).hexdigest()
 
 
-def issue(db: Session, job_id: str, user: dict, request: Request, body: ClaimControl):
+def issue(db: Session, job_id: str, user: dict, request: Request, body: ClaimControl, target_receipt=None):
     token = secrets.token_urlsafe(32)
     row = JobExecution(
         job_id=job_id,
@@ -110,10 +118,13 @@ def issue(db: Session, job_id: str, user: dict, request: Request, body: ClaimCon
         expires_at=now() + timedelta(seconds=LEASE_SECONDS),
         state="active",
         capacity_reserved=body.concurrency_budget,
+        target_charge=target_receipt["charged"] if target_receipt else 0,
+        target_binding=target_receipt["binding"] if target_receipt else None,
     )
     db.add(row)
     return {**binding(row), "token": token, "lease_seconds": LEASE_SECONDS,
-            **({"capacity_reserved": True} if body.concurrency_budget else {})}
+            **({"capacity_reserved": True} if body.concurrency_budget else {}),
+            **({"target_budget": target_receipt} if target_receipt else {})}
 
 
 def binding(row):

@@ -4,6 +4,11 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Add explicit cumulative engagement target ceilings for bound fixed Gate owned
+  attempts, charging all represented contact origins without refunds. Requires
+  `0034targetbudget` and matching opt-in Runner. No default migration, worker,
+  duration budget or universal network/RPS claim is added.
+
 - Add owner/full-scope engagement concurrency policy and atomic owned claim
   reservations, retaining capacity on uncertainty and protecting deletion.
   Requires `0033concurrencybudget` and matching opt-in Runner. Existing engagements

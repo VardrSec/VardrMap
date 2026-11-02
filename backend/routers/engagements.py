@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 import concurrency_budget
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import func
@@ -25,6 +25,28 @@ from security import strip_html
 from serializers import serialize_engagement, serialize_engagements
 
 router = APIRouter()
+
+
+class TargetPolicy(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    limit: int | None = Field(strict=True, ge=1, le=1000000)
+
+
+@router.put("/engagements/{program_id}/target-policy")
+def configure_targets(program_id: str, body: TargetPolicy,
+                      current_user: dict = Depends(require_full_scope), db: Session = Depends(get_db)):
+    engagement = get_engagement_or_404(program_id, current_user, db)
+    require_full_scope(current_user)
+    require_engagement_owner(engagement, current_user)
+    engagement = db.query(Engagement).filter_by(id=program_id).with_for_update().populate_existing().one()
+    concurrency_budget.require_idle(db, program_id)
+    spent = engagement.targets_spent
+    if (body.limit is None and spent) or (body.limit is not None and body.limit < spent):
+        raise HTTPException(409, "spent target allowance cannot be reset or disabled")
+    engagement.target_limit = body.limit
+    log_action(db, current_user["github_id"], "target_config", "engagement", program_id, program_id)
+    db.commit()
+    return {"limit": body.limit, "spent": spent, "unit": "represented_origin_attempts/1"}
 
 
 class ConcurrencyPolicy(BaseModel):
@@ -228,6 +250,8 @@ def delete_engagement(
     engagement = db.query(Engagement).filter_by(id=program_id).with_for_update().populate_existing().one()
     if engagement.concurrency_limit is not None or concurrency_budget.reserved(db, program_id):
         concurrency_budget.require_idle(db, program_id)
+    if engagement.targets_spent:
+        raise HTTPException(409, "spent target accounting cannot be deleted")
     log_action(db, current_user["github_id"], "delete", "engagement", program_id)
     db.delete(engagement)
     db.commit()

@@ -199,6 +199,8 @@ class Engagement(Base):
     __tablename__ = "programs"
 
     concurrency_limit = Column(Integer, nullable=True)
+    target_limit = Column(Integer, nullable=True)
+    targets_spent = Column(Integer, nullable=False, default=0)
 
     id = Column(String, primary_key=True, default=new_uuid)
     owner_github_id = Column(String, ForeignKey("users.github_id"), nullable=False, index=True)
@@ -583,6 +585,8 @@ class JobExecution(Base):
     expires_at = Column(DateTime, nullable=False)
     state = Column(String(30), nullable=False)
     capacity_reserved = Column(Boolean, nullable=False, default=False)
+    target_charge = Column(Integer, nullable=False, default=0)
+    target_binding = Column(JSON, nullable=True)
 
 
 class JobResultReceipt(Base):

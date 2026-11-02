@@ -1,5 +1,11 @@
 # Architecture
 
+The opt-in cumulative target slice adds nullable `programs.target_limit`, durable
+`targets_spent` and owned-attempt charge/binding metadata (`0034targetbudget`).
+Spend increments only with a successful claim under the existing engagement lock
+and is never released. It counts conservative represented-origin attempts for
+guarded fixed Gate cases. See [the bounded design](nm2-target-budget.md).
+
 Opt-in engagement capacity uses nullable `programs.concurrency_limit` and durable
 `job_executions.capacity_reserved` (`0033concurrencybudget`). The engagement lock
 serializes reservation, policy mutation and deletion. Only owned confirmed terminal
