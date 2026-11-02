@@ -1,5 +1,11 @@
 # API Reference
 
+Local NM-2 builds add owner/full-scope `PUT /engagements/{program_id}/concurrency-policy`
+with required `limit` (1–1000, or explicit null while idle). Enabled engagements
+require owned claims with `concurrency_budget:true`; receipts confirm
+`capacity_reserved:true`. Exhausted capacity/unsafe reconfiguration/deletion return
+409. See [the scope and protocol](nm2-concurrency-budget.md).
+
 NM-2 local source builds add explicit owned execution control (not execution
 approval or a worker):
 

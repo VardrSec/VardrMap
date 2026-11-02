@@ -60,6 +60,7 @@ class ClaimControl(BaseModel):
     model_config = ConfigDict(extra="forbid")
     runner_id: UUID
     origin: str = Field(max_length=500)
+    concurrency_budget: bool = Field(default=False, strict=True)
 
     @field_validator("origin")
     @classmethod
@@ -108,9 +109,11 @@ def issue(db: Session, job_id: str, user: dict, request: Request, body: ClaimCon
         token_hash=hashlib.sha256(token.encode()).hexdigest(),
         expires_at=now() + timedelta(seconds=LEASE_SECONDS),
         state="active",
+        capacity_reserved=body.concurrency_budget,
     )
     db.add(row)
-    return {**binding(row), "token": token, "lease_seconds": LEASE_SECONDS}
+    return {**binding(row), "token": token, "lease_seconds": LEASE_SECONDS,
+            **({"capacity_reserved": True} if body.concurrency_budget else {})}
 
 
 def binding(row):

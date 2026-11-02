@@ -198,6 +198,8 @@ class Client(Base):
 class Engagement(Base):
     __tablename__ = "programs"
 
+    concurrency_limit = Column(Integer, nullable=True)
+
     id = Column(String, primary_key=True, default=new_uuid)
     owner_github_id = Column(String, ForeignKey("users.github_id"), nullable=False, index=True)
     name = Column(String(120), nullable=False)
@@ -580,6 +582,7 @@ class JobExecution(Base):
     token_hash = Column(String(64), nullable=False)
     expires_at = Column(DateTime, nullable=False)
     state = Column(String(30), nullable=False)
+    capacity_reserved = Column(Boolean, nullable=False, default=False)
 
 
 class JobResultReceipt(Base):

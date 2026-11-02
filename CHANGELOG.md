@@ -4,6 +4,11 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Add owner/full-scope engagement concurrency policy and atomic owned claim
+  reservations, retaining capacity on uncertainty and protecting deletion.
+  Requires `0033concurrencybudget` and matching opt-in Runner. Existing engagements
+  stay unconfigured; no worker or target/duration budget is enabled.
+
 - Add explicitly opted-in manual job execution ownership, ten-second control
   leases and sticky stop-work/cancellation requests, with authenticated owner
   acknowledgement and conservative uncertainty. Additive migration

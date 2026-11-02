@@ -1,5 +1,11 @@
 # Architecture
 
+Opt-in engagement capacity uses nullable `programs.concurrency_limit` and durable
+`job_executions.capacity_reserved` (`0033concurrencybudget`). The engagement lock
+serializes reservation, policy mutation and deletion. Only owned confirmed terminal
+outcomes release capacity; uncertainty holds it. Map coordinates and Runner
+executes. See [the bounded design](nm2-concurrency-budget.md).
+
 NM-2 adds opt-in owned manual execution control, described in
 [ADR 0006](adr/0006-owned-execution-control.md). An additive `job_executions` table
 holds per-attempt ownership, hashed control capability, lease and cancellation

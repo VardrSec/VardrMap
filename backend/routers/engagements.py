@@ -1,7 +1,8 @@
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel, Field, field_validator
+import concurrency_budget
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 
@@ -14,6 +15,7 @@ from deps import (
     parse_iso_datetime,
     personal_org,
     require_engagement_owner,
+    require_full_scope,
     require_member_write,
     resolve_owned_client_id,
 )
@@ -23,6 +25,26 @@ from security import strip_html
 from serializers import serialize_engagement, serialize_engagements
 
 router = APIRouter()
+
+
+class ConcurrencyPolicy(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    limit: int | None = Field(strict=True, ge=1, le=1000)
+
+
+@router.put("/engagements/{program_id}/concurrency-policy")
+def configure_concurrency(program_id: str, body: ConcurrencyPolicy,
+                          current_user: dict = Depends(require_full_scope),
+                          db: Session = Depends(get_db)):
+    engagement = get_engagement_or_404(program_id, current_user, db)
+    require_full_scope(current_user)
+    require_engagement_owner(engagement, current_user)
+    engagement = db.query(Engagement).filter_by(id=program_id).with_for_update().populate_existing().one()
+    concurrency_budget.require_idle(db, program_id)
+    engagement.concurrency_limit = body.limit
+    log_action(db, current_user["github_id"], "budget_config", "engagement", program_id, program_id)
+    db.commit()
+    return {"limit": body.limit, "reserved": 0, "scope": "budgeted_owned_attempts"}
 
 
 @router.post("/auth/sync")
@@ -203,6 +225,9 @@ def delete_engagement(
 ):
     engagement = get_engagement_or_404(program_id, current_user, db)
     require_engagement_owner(engagement, current_user)
+    engagement = db.query(Engagement).filter_by(id=program_id).with_for_update().populate_existing().one()
+    if engagement.concurrency_limit is not None or concurrency_budget.reserved(db, program_id):
+        concurrency_budget.require_idle(db, program_id)
     log_action(db, current_user["github_id"], "delete", "engagement", program_id)
     db.delete(engagement)
     db.commit()

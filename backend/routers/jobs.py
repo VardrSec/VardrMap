@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 import assessments
 import enforcement
 import execution_control as control
+import concurrency_budget
 import redaction
 import sse as _sse
 from db import get_db
@@ -871,6 +872,7 @@ def claim_job(
         _writable_engagement(pending, current_user, db)
     if pending is not None and pending.status == "pending":
         engagement = db.query(Engagement).filter_by(id=pending.program_id).with_for_update().populate_existing().one()
+        concurrency_budget.before_claim(db, engagement, body)
         warnings = enforcement.as_warnings(
             enforcement.check(
                 db,
@@ -995,6 +997,7 @@ def finish_execution(job_id: str, body: control.FinishControl, request: Request,
         raise HTTPException(409, "stop or expired lease prevents successful completion")
     execution.state = body.outcome
     if body.outcome != "uncertain":
+        execution.capacity_reserved = False
         job.status = "done" if body.outcome == "completed" else "failed"
         job.completed_at = datetime.now(timezone.utc)
         job.error_message = "" if body.outcome == "completed" else body.outcome
@@ -1068,6 +1071,10 @@ def delete_job(
     )
     if not job:
         raise HTTPException(status_code=404)
+    job = control.lock_job(db, job_id, current_user)
+    reservation = db.query(JobExecution).filter_by(job_id=job_id, capacity_reserved=True).first()
+    if reservation is not None:
+        raise HTTPException(409, "unresolved execution capacity cannot be deleted")
     _writable_engagement(job, current_user, db)
     log_action(db, current_user["github_id"], "delete", "scan_job", job_id, job.program_id)
     db.delete(job)
