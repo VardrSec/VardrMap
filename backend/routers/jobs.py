@@ -366,12 +366,14 @@ class JobCreate(BaseModel):
     target_source: str          # "scope" or "recon"
     config: Optional[dict] = None
     depends_on: Optional[str] = None  # scan_job id this job waits on before running
+    authorization_contract_required: bool = Field(default=False, strict=True)
 
 
 class PipelineStage(BaseModel):
     tool_type: str
     target_source: str
     config: Optional[dict] = None
+    authorization_contract_required: bool = Field(default=False, strict=True)
 
 
 class PipelineCreate(BaseModel):
@@ -379,6 +381,7 @@ class PipelineCreate(BaseModel):
     # The UI's named chains (Attack Surface, Host Enumeration) are just stage lists;
     # any ordered subset is valid, since depends_on is linked over what arrives.
     stages: list[PipelineStage] = Field(min_length=1, max_length=8)
+    authorization_contract_required: bool = Field(default=False, strict=True)
 
 
 class JobStatusUpdate(BaseModel):
@@ -409,6 +412,7 @@ def serialize_job(j: ScanJob) -> dict:
         "tool_type": j.tool_type,
         "target_source": j.target_source,
         "config": j.config or {},
+        **({"authorization_contract_required": True} if j.authorization_contract_required or j.managed_approval_id else {}),
         "status": j.status,
         "assessment": j.assessment,
         "depends_on": j.depends_on,
@@ -430,6 +434,8 @@ def create_job(
     require_member_write(engagement, current_user, db)
     if body.tool_type not in _VALID_TOOLS:
         raise HTTPException(status_code=400, detail=f"tool_type must be one of {sorted(_VALID_TOOLS)}")
+    if body.authorization_contract_required and body.tool_type != _VARDRGATE:
+        raise HTTPException(400, "authorization contract profile supports fixed Gate jobs only")
     if body.target_source not in _VALID_SOURCES:
         raise HTTPException(status_code=400, detail="target_source must be scope or recon")
     config = dict(body.config or {})
@@ -459,6 +465,7 @@ def create_job(
         target_source=body.target_source,
         config=config,
         depends_on=body.depends_on,
+        authorization_contract_required=body.authorization_contract_required,
     )
     db.add(job)
     db.flush()  # assigns job.id without committing
@@ -515,6 +522,8 @@ def create_pipeline(
     engagement = get_engagement_or_404(program_id, current_user, db)
     require_member_write(engagement, current_user, db)
     stage_configs: list[dict] = []
+    if body.authorization_contract_required or any(stage.authorization_contract_required for stage in body.stages):
+        raise HTTPException(400, "contract-required pipelines are unsupported")
     for i, stage in enumerate(body.stages):
         if stage.tool_type not in _VALID_TOOLS:
             raise HTTPException(status_code=400, detail=f"stage {i}: tool_type must be one of {sorted(_VALID_TOOLS)}")
@@ -872,6 +881,8 @@ def claim_job(
     )
     if pending is not None:
         _writable_engagement(pending, current_user, db)
+        if pending.authorization_contract_required or pending.managed_approval_id:
+            raise HTTPException(409, "managed authorization required; legacy claim refused")
     if pending is not None and pending.status == "pending":
         engagement = db.query(Engagement).filter_by(id=pending.program_id).with_for_update().populate_existing().one()
         concurrency_budget.before_claim(db, engagement, body)
@@ -903,6 +914,8 @@ def claim_job(
             ScanJob.id == job_id,
             ScanJob.program_id.in_(accessible_engagement_ids(current_user["github_id"], db)),
             ScanJob.status == "pending",
+            ScanJob.authorization_contract_required.is_(False),
+            ScanJob.managed_approval_id.is_(None),
             ~ScanJob.program_id.in_(db.query(Engagement.id).filter(Engagement.stop_work_at.is_not(None))),
         )
         .update(
@@ -972,6 +985,8 @@ def refresh_execution(job_id: str, body: control.ControlRequest, request: Reques
     execution = control.owned(db, job_id, current_user, request, body)
     job = db.query(ScanJob).filter_by(id=job_id).one()
     _writable_engagement(job, current_user, db)
+    if job.authorization_contract_required or job.managed_approval_id:
+        raise HTTPException(409, "managed live control unsupported by legacy adapter")
     if job.engagement.stop_work_at is not None and execution.state == "active":
         execution.state = "cancel_requested"
     if execution.expires_at <= control.now() and execution.state == "active":
@@ -990,6 +1005,8 @@ def finish_execution(job_id: str, body: control.FinishControl, request: Request,
     execution = control.owned(db, job_id, current_user, request, body)
     job = db.query(ScanJob).filter_by(id=job_id).one()
     _writable_engagement(job, current_user, db)
+    if (job.authorization_contract_required or job.managed_approval_id) and body.outcome == "completed":
+        raise HTTPException(409, "managed completion unsupported by legacy adapter")
     if execution.state in {"completed", "failed", "cancelled"}:
         if execution.state != body.outcome:
             raise HTTPException(409, "execution already finalized")
@@ -1208,6 +1225,8 @@ def upload_job_result(
         raise HTTPException(status_code=404)
     _writable_engagement(job, current_user, db)
 
+    if job.authorization_contract_required or job.managed_approval_id:
+        raise HTTPException(409, "managed result adapter required")
     if job.tool_type != _VARDRGATE:
         raise HTTPException(
             status_code=400,

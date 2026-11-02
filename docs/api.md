@@ -1,5 +1,14 @@
 # API Reference
 
+Local managed-issuance builds (`0036managedauth`) accept the optional strict
+boolean `authorization_contract_required` on single fixed Gate job creation.
+It defaults to false and is returned only when true. A required job is inert
+without approval and refuses the legacy claim, live-control, upload and successful
+finish paths. Contract-required pipeline requests are unsupported (400); they
+cannot silently become ordinary jobs. No HTTP approve, signing, enrollment or
+managed execution route is registered by this prototype. Existing omitted calls
+remain unchanged. See [ADR 0007](adr/0007-transactional-managed-issuance.md).
+
 Local duration-budget builds add owner/full-scope
 `PUT /engagements/{program_id}/duration-policy` with required `limit_seconds`.
 Owned claims supply `duration_seconds` (1–86400); receipts return `duration_budget`

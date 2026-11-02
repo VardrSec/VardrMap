@@ -4,6 +4,12 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Add retained local managed approval/issuance state (`0036managedauth`), atomic
+  owned claim/ordinal/budget spending, current authority/principal binding and
+  monotonic clock/revision checks. Explicit contract-required Gate jobs remain
+  inert through legacy claim/control/result adapters; managed execution is not
+  enabled. Ordinary omitted behavior and advisory policy stay unchanged.
+
 - Add an unregistered Authorization Contract v1 wire adapter for separately
   operator-signed approval verification and contract-only signing. Distinct keys
   and synthetic cross-repository vectors preserve the Runner validation boundary.

@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 import concurrency_budget
+import managed_authority
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
@@ -38,11 +39,13 @@ def configure_duration(program_id: str, body: DurationPolicy,
     engagement = get_engagement_or_404(program_id, current_user, db)
     require_full_scope(current_user)
     require_engagement_owner(engagement, current_user)
-    engagement = db.query(Engagement).filter_by(id=program_id).with_for_update().populate_existing().one()
+    engagement = managed_authority.lock(db, engagement)
     concurrency_budget.require_idle(db, program_id)
     allocated = engagement.duration_allocated
     if (body.limit_seconds is None and allocated) or (body.limit_seconds is not None and body.limit_seconds < allocated):
         raise HTTPException(409, "allocated duration cannot be reset or disabled")
+    if engagement.duration_limit != body.limit_seconds:
+        engagement.managed_authority_revision += 1
     engagement.duration_limit = body.limit_seconds
     log_action(db, current_user["github_id"], "duration_config", "engagement", program_id, program_id)
     db.commit()
@@ -61,11 +64,13 @@ def configure_targets(program_id: str, body: TargetPolicy,
     engagement = get_engagement_or_404(program_id, current_user, db)
     require_full_scope(current_user)
     require_engagement_owner(engagement, current_user)
-    engagement = db.query(Engagement).filter_by(id=program_id).with_for_update().populate_existing().one()
+    engagement = managed_authority.lock(db, engagement)
     concurrency_budget.require_idle(db, program_id)
     spent = engagement.targets_spent
     if (body.limit is None and spent) or (body.limit is not None and body.limit < spent):
         raise HTTPException(409, "spent target allowance cannot be reset or disabled")
+    if engagement.target_limit != body.limit:
+        engagement.managed_authority_revision += 1
     engagement.target_limit = body.limit
     log_action(db, current_user["github_id"], "target_config", "engagement", program_id, program_id)
     db.commit()
@@ -84,8 +89,10 @@ def configure_concurrency(program_id: str, body: ConcurrencyPolicy,
     engagement = get_engagement_or_404(program_id, current_user, db)
     require_full_scope(current_user)
     require_engagement_owner(engagement, current_user)
-    engagement = db.query(Engagement).filter_by(id=program_id).with_for_update().populate_existing().one()
+    engagement = managed_authority.lock(db, engagement)
     concurrency_budget.require_idle(db, program_id)
+    if engagement.concurrency_limit != body.limit:
+        engagement.managed_authority_revision += 1
     engagement.concurrency_limit = body.limit
     log_action(db, current_user["github_id"], "budget_config", "engagement", program_id, program_id)
     db.commit()
@@ -215,6 +222,10 @@ def update_engagement(
 ):
     engagement = get_engagement_or_404(program_id, current_user, db)
     require_engagement_owner(engagement, current_user)
+    from managed_authority import lock
+
+    engagement = lock(db, engagement)
+    changed = False
     for key, value in payload.model_dump(exclude_unset=True).items():
         # Dates arrive as strings and client_id must be proven owned; the rest
         # of the fields are plain values and pass through as before.
@@ -222,7 +233,11 @@ def update_engagement(
             value = parse_iso_datetime(value, key)
         elif key == "client_id":
             value = resolve_owned_client_id(value, current_user, db)
+        if key in {"engagement_type", "engagement_status", "starts_at", "ends_at", "max_request_rate"} and getattr(engagement, key) != value:
+            changed = True
         setattr(engagement, key, value)
+    if changed:
+        engagement.managed_authority_revision += 1
     log_action(db, current_user["github_id"], "update", "engagement", program_id, program_id)
     db.commit()
     db.refresh(engagement)
@@ -270,7 +285,7 @@ def delete_engagement(
 ):
     engagement = get_engagement_or_404(program_id, current_user, db)
     require_engagement_owner(engagement, current_user)
-    engagement = db.query(Engagement).filter_by(id=program_id).with_for_update().populate_existing().one()
+    engagement = managed_authority.lock(db, engagement)
     if engagement.concurrency_limit is not None or concurrency_budget.reserved(db, program_id):
         concurrency_budget.require_idle(db, program_id)
     if engagement.targets_spent:
@@ -311,6 +326,7 @@ def engage_stop_work(
     engagement = db.query(Engagement).filter_by(id=program_id).with_for_update().populate_existing().one()
 
     if engagement.stop_work_at is None:
+        engagement.managed_authority_revision += 1
         engagement.stop_work_at = datetime.now(timezone.utc)
     engagement.stop_work_reason = body.reason
     db.query(JobExecution).filter(
@@ -334,6 +350,11 @@ def release_stop_work(
     to take; lifting one is an authorization decision."""
     engagement = get_engagement_or_404(program_id, current_user, db)
     require_engagement_owner(engagement, current_user)
+    from managed_authority import lock
+
+    engagement = lock(db, engagement)
+    if engagement.stop_work_at is not None:
+        engagement.managed_authority_revision += 1
 
     engagement.stop_work_at = None
     engagement.stop_work_reason = ""

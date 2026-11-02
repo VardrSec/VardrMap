@@ -1,5 +1,15 @@
 # Development
 
+Managed issuance checks use `tests/test_managed_issuance.py` and
+`postgres_tests/test_managed_issuance.py`. Keep synthetic association/key records,
+independent signing purposes, real administrator/restricted-role lock races,
+denied-clock interleavings, post-lock expiry and stale ORM identities in coverage.
+Inspect exact rollback of all fees, ownership, ordinals and case snapshots. The
+PostgreSQL fixture must use a disposable `vardrmap_test*` database; local native
+validation uses verify-full TLS/SCRAM with its own temporary CA. Never disable TLS
+or use host firewall/service changes for these tests. Raw failures stay private;
+review metadata is explicitly sanitized. No actual tool is invoked in this slice.
+
 `backend/tests/test_managed_wire.py` verifies public synthetic v1 wire vectors,
 purpose/key separation, owner provenance, expiry and bounded parsing. Run tests
 with an explicit child-process environment allowlist, synthetic authentication,

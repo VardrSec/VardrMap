@@ -22,6 +22,7 @@ from deps import (
     require_member_write,
 )
 from models import Authorization
+import managed_authority
 from schemas import AuthorizationCreate, AuthorizationUpdate
 from serializers import serialize_authorization
 
@@ -67,6 +68,7 @@ def create_authorization(
     require_member_write(engagement, current_user, db)
 
     dates = {f: parse_iso_datetime(getattr(payload, f), f) for f in _DATE_FIELDS}
+    engagement = managed_authority.advance(db, engagement)
 
     auth = Authorization(
         program_id=program_id,
@@ -96,16 +98,22 @@ def update_authorization(
 ):
     engagement = get_engagement_or_404(program_id, current_user, db)
     require_member_write(engagement, current_user, db)
+    engagement = managed_authority.lock(db, engagement)
     auth = _get_authorization_or_404(program_id, authorization_id, db)
 
+    changed = False
     for field, value in payload.model_dump(exclude_unset=True).items():
         if field in _DATE_FIELDS:
             # None is valid here — it clears the window bound or the authorized_at timestamp.
-            setattr(auth, field, parse_iso_datetime(value, field))
+            value = parse_iso_datetime(value, field)
         elif value is None:
             continue
-        else:
-            setattr(auth, field, value)
+        if field != "notes" and getattr(auth, field) != value:
+            changed = True
+        setattr(auth, field, value)
+
+    if changed:
+        engagement.managed_authority_revision += 1
 
     log_action(db, current_user["github_id"], "update", "authorization", auth.id, program_id)
     db.commit()

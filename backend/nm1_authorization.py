@@ -46,7 +46,18 @@ def _digest(value):
     ).hexdigest()
 
 
-def prepare_approval_request(
+def prepare_approval_request(db: Session, **arguments) -> dict:
+    """Owner-session review wrapper; ordinary API credentials cannot approve."""
+    actor = arguments.get("actor", {})
+    _require(
+        actor.get("auth_method") in {"local_session", "github_session"}
+        and actor.get("scope") == "full",
+        "operator_session_required",
+    )
+    return project_current_authority(db, **arguments)
+
+
+def project_current_authority(
     db: Session,
     *,
     job_id: str,
@@ -61,21 +72,17 @@ def prepare_approval_request(
     max_artifact_bytes: int,
     credential_grants: list[dict],
     now: datetime,
+    job_statuses: tuple[str, ...] = ("pending",),
 ) -> dict:
-    """Project real stored facts for explicit owner review without mutating them.
+    """Unsigned fact projection, also reused to recheck an existing signed approval.
 
-    Authentication provenance must come from a trusted operator-session adapter,
-    never a request body. The existing API does not expose this prototype.
+    This function grants no human provenance. Review callers must first use the
+    owner-session wrapper; runtime callers verify their stored operator receipt.
     """
-    _require(
-        actor.get("auth_method") in {"local_session", "github_session"}
-        and actor.get("scope") == "full",
-        "operator_session_required",
-    )
     job = db.query(ScanJob).filter(ScanJob.id == job_id).first()
     _require(
         job is not None
-        and job.status == "pending"
+        and job.status in job_statuses
         and job.tool_type == "vardrgate_api_test",
         "pending_gate_job_required",
     )
@@ -91,6 +98,7 @@ def prepare_approval_request(
             Authorization.id == authorization_id,
             Authorization.program_id == engagement.id,
         )
+        .populate_existing()
         .first()
     )
     _require(
@@ -104,6 +112,7 @@ def prepare_approval_request(
             == str((job.config or {}).get("test_case_id") or ""),
             AuthorizationTestCase.program_id == engagement.id,
         )
+        .populate_existing()
         .first()
     )
     _require(
@@ -128,6 +137,7 @@ def prepare_approval_request(
         db.query(ScopeItem)
         .filter(ScopeItem.program_id == engagement.id)
         .order_by(ScopeItem.id)
+        .populate_existing()
         .all()
     )
     rules = tuple(

@@ -142,6 +142,9 @@ def _proposal_or_404(program_id: str, proposal_id: str, current_user: dict, db: 
 
 def _apply(engagement, proposal: AgentProposal, db: Session) -> str:
     """Apply an approved proposal; return the id of any row it created, or "" for a rate change."""
+    from managed_authority import advance
+
+    engagement = advance(db, engagement)
     kind, payload = proposal.kind, proposal.payload or {}
     if kind in ("scope_in", "scope_out"):
         item = ScopeItem(
@@ -187,6 +190,10 @@ def approve_proposal(
     operator action an agent must not be able to take."""
     engagement, proposal = _proposal_or_404(program_id, proposal_id, current_user, db)
     require_member_write(engagement, current_user, db)
+    from managed_authority import lock
+
+    engagement = lock(db, engagement)
+    db.refresh(proposal)
     if proposal.status != "pending":
         raise HTTPException(status_code=409, detail=f"proposal is already {proposal.status}")
 

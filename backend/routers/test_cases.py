@@ -442,11 +442,16 @@ def update_test_case(
 ):
     engagement = get_engagement_or_404(program_id, current_user, db)
     require_member_write(engagement, current_user, db)
+    from managed_authority import lock
+
+    engagement = lock(db, engagement)
     row = _get_or_404(program_id, test_case_id, db)
 
     fields = body.model_dump(exclude_unset=True)
     if fields.get("spec") is not None:
         spec = _validate_spec(fields["spec"])
+        if row.spec != spec:
+            engagement.managed_authority_revision += 1
         row.spec = spec
         row.test_case_id = str(spec.get("id") or "")[:200]
     if fields.get("name") is not None:
@@ -470,6 +475,9 @@ def delete_test_case(
 ):
     engagement = get_engagement_or_404(program_id, current_user, db)
     require_member_write(engagement, current_user, db)
+    from managed_authority import advance
+
+    engagement = advance(db, engagement)
     row = _get_or_404(program_id, test_case_id, db)
     log_action(db, current_user["github_id"], "delete", "test_case", test_case_id, program_id)
     db.delete(row)

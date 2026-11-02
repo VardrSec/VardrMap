@@ -1,5 +1,14 @@
 # Architecture
 
+The unregistered `managed_issuance.Issuer` composes existing owned execution and
+budget accounting with separately verified operator receipts. Approval, contract,
+association and clock records are retained by `0036managedauth`. Authority/scope
+mutations share the engagement lock and advance an internal monotonic revision;
+change/revert cannot revive old signed context. An explicit per-job requirement
+blocks legacy execution even before approval exists. No default engagement mode,
+worker, real enrollment or managed execution route is added. See
+[ADR 0007](adr/0007-transactional-managed-issuance.md) for transaction boundaries.
+
 `backend/managed_wire.py` is an opt-in unregistered crypto wire primitive. It
 verifies enrolled operator public-key approval receipts and constructs exact v1
 contract envelopes with a distinct contract signing key. It owns no scope/plan
