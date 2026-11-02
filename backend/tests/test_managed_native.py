@@ -233,7 +233,7 @@ def native(tls_harness, tmp_path, monkeypatch):
 
     monkeypatch.setattr(runner, "_write_private_job", private_job)
 
-    def issue():
+    def authorize():
         operator = t.transport(token=h.owner["Authorization"].split(" ", 1)[1])
         review = operator.client.post("/fixture/review", json=h.review)
         payload = {
@@ -264,6 +264,10 @@ def native(tls_harness, tmp_path, monkeypatch):
             },
         )
         transport = t.transport()
+        return operator, transport, approval
+
+    def issue():
+        operator, transport, approval = authorize()
         entered = time.monotonic()
         claim = transport.client.post("/fixture/claim", json=h.body)
         contract = verify(claim["managed_authorization"]["contract"], anchors, "contract")
@@ -302,6 +306,9 @@ def native(tls_harness, tmp_path, monkeypatch):
         yield SimpleNamespace(
             t=t,
             issue=issue,
+            authorize=authorize,
+            anchors=anchors,
+            attempts=attempts,
             seen=seen,
             started=started,
             release=release,

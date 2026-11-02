@@ -160,6 +160,23 @@ local and case-bound. All cases retain Map ownership/counts; no legacy completio
 upload or false failed outcome is used to make the test pass. Distributed consume,
 ACK, recovery, managed evidence/completion and production activation remain open.
 
+### Explicit pre-claim entry fixture
+
+`tests/test_managed_entry.py` additionally requires `NM2_PRECLAIM_ENTRY=1` and all
+native/TLS fixture prerequisites. It calls Runner's unregistered ManagedEntry
+before the claim, through the same verified `api.py` transport. A test-only claim
+adapter adds the actual frozen `config.test_case`; the entry refuses its absence
+or mutation. No production route, response schema or Map migration changes.
+
+Four real Windows/Gate cases exercise local artifact creation, a lost committed
+claim reply, a local binding write failure and a journal stop request. They assert
+durable local fencing, no second claim after restart, no legacy recovery transport,
+private-file cleanup and retained server capacity/counts/target/duration allocation.
+No local success, stop or uncertainty acknowledges consumption or completes Map
+work. Managed evidence, completion, release and distributed ACK remain separate.
+The native fixture's authorization setup is factored for reuse; its existing
+post-claim cases retain their behavior. Linux controlled execution stays unsupported.
+
 ### Preserved compatibility
 
 `authorization_contract_required=true` is explicit on single fixed Gate job

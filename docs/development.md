@@ -478,6 +478,14 @@ the loopback three-repository harness exercises actual Gate execution.
 
 ## Container development
 
+The explicit `backend/tests/test_managed_entry.py` fixture additionally requires
+`NM2_PRECLAIM_ENTRY=1` and the existing native/TLS opt-ins. It exercises Runner's
+unregistered one-shot entry using a test-only claim adapter that includes the
+actual frozen case snapshot. It verifies local evidence retention, ambiguous
+claim/binding holds and local stop without uploads, completion or release.
+See [ADR 0007](adr/0007-transactional-managed-issuance.md). Use only disposable
+profiles/databases, synthetic trust and owned loopback resources.
+
 See [container setup](containers.md) for build contexts, non-root runtime, build-time API URL and proxy trust. These images retain the existing hosted authentication configuration.
 
 Settings includes [platform/Runner observations](platform-status.md) without new

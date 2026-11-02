@@ -4,6 +4,10 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Add four explicit real Windows/TLS pre-claim entry tests for Runner's durable
+  handoff and recovery fence: local artifact, lost claim reply, binding failure
+  and local stop. No production route, schema or managed finalization changes.
+
 - Add an explicit real-clock Windows/Gate fixture using existing synthetic TLS
   authorization and Runner native execution. Local success and confirmed stops
   retain managed reservations; no runtime API, evidence or completion is enabled.
