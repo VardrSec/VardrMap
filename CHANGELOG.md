@@ -4,6 +4,10 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Add an unregistered managed refresh primitive that validates current authority
+  and renews its bounded lease atomically. A synthetic HTTP/shared-Runner-validator
+  harness ends at an inert launch sentinel; no managed execution route is enabled.
+
 - Serialize SQLite legacy and managed claims, reservation deletion and stop-work
   revisions through one writer boundary; refresh owned cancellation state before
   accepting current permission. Managed execution remains disabled.

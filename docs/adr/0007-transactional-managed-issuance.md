@@ -82,6 +82,40 @@ Runner online-control integration or proof of revocation stop latency.
 
 ## Compatibility, unsupported paths and rollback
 
+### Synthetic HTTP integration boundary
+
+The unregistered `Issuer.refresh` reuses `current` validation and the owned
+capability checks in one transaction. It renews only an already live attempt;
+the ten-second ceiling is also capped by the signed approval/window/grant
+expiries and original job start plus allocated/approved duration. A denial,
+including permission elapsed during flush, rolls back the renewal. `current`
+remains a non-renewing check. Neither method is registered in the production API.
+The refresh reply includes the actual stored UTC `lease_expires_at`. The test
+probe caps each renewal by that fixed expiry through its trusted UTC/monotonic
+anchor as well as the request-start lease bound. Replaying old JSON cannot move
+permission beyond the last actual server renewal, including client wall rollback.
+This bounded lease does not promise instantaneous revocation between observations.
+
+`tests/test_managed_http.py` opts in with `NM2_RUNNER_SOURCE` pointing to the
+matching isolated Runner checkout. It loads only Runner's test probe and exercises
+real JWT/local-session/CSRF authentication and JSON transport through a test-only
+ASGI app. The only dependency override supplies a disposable database; policy,
+signatures, compiler, validator, ledger and final launch guards are real components.
+The probe ends at an inert callback, not a process or HTTP target dispatch.
+ASGI HTTPS is an emulated request scheme, not TLS deployment evidence. The tool
+digest and signing seeds are synthetic; they prove binding, not binary provenance.
+
+Run this opt-in suite only in an isolated child with an OS environment allowlist,
+dotenv disabled, disposable profile/database and public fixture keys. Ordinary
+backend tests skip the cross-repository harness when the explicit source is absent.
+This test bridge does not add a runtime code dependency between applications.
+Map's retained `consumed=False` remains unchanged even when the disposable Runner
+ledger reserves permission. Distributed consumption/acknowledgement/recovery and
+exactly-once execution remain unresolved. No real trust, enrollment, production
+route, queue/worker activation, Gate execution or support expansion follows.
+
+### Retained compatibility guards
+
 `authorization_contract_required=true` is explicit on single fixed Gate job
 creation; omission preserves the existing JSON/behavior. It can represent missing
 approval from the start. Legacy claim/control/upload/completed-finalization

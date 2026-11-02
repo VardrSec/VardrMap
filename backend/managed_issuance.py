@@ -375,6 +375,34 @@ class Issuer:
         A future control adapter must use this result before returning continue.
         Legacy control is deliberately unsupported for marked jobs meanwhile.
         """
+        return self._current(
+            db,
+            request,
+            job_id=job_id,
+            body=body,
+            contract_id=contract_id,
+            attempt_id=attempt_id,
+            fence=fence,
+            renew=False,
+        )
+
+    def refresh(self, db, request, *, job_id, body, contract_id, attempt_id, fence):
+        """Unregistered adapter: validate authority and renew one bounded lease.
+
+        This is not wired to production HTTP, Runner or queued execution.
+        """
+        return self._current(
+            db,
+            request,
+            job_id=job_id,
+            body=body,
+            contract_id=contract_id,
+            attempt_id=attempt_id,
+            fence=fence,
+            renew=True,
+        )
+
+    def _current(self, db, request, *, job_id, body, contract_id, attempt_id, fence, renew):
         with self.operation(db) as now:
             user = get_current_user(
                 request, authorization=request.headers.get("authorization"), db=db
@@ -404,14 +432,53 @@ class Issuer:
                 "live_control_expired_or_stopped",
             )
             self.wire.approval(approval.envelope, result["context"], approval.owner, now())
-            db.commit()
-            return {
+            response = {
                 "contract_id": contract.id,
                 "attempt_id": contract.attempt_id,
                 "fence": contract.fence,
                 "authority_revision": approval.revision,
                 "authority_sha256": result["context"]["authority_sha256"],
             }
+            if renew:
+                instant = max(now().replace(tzinfo=None), control.now())
+                permission = result["context"]
+                require(
+                    job.started_at is not None and execution.duration_seconds > 0,
+                    "finite_allocation_required",
+                )
+                ceilings = [
+                    timestamp(permission[name]).replace(tzinfo=None)
+                    for name in ("expires_at", "testing_end")
+                ]
+                ceilings += [
+                    timestamp(grant["expires_at"]).replace(tzinfo=None)
+                    for grant in permission["credential_grants"]
+                ]
+                ceilings.append(
+                    job.started_at
+                    + timedelta(
+                        seconds=min(execution.duration_seconds, permission["max_duration_seconds"])
+                    )
+                )
+                lease = min(control.LEASE_SECONDS, int((min(ceilings) - instant).total_seconds()))
+                require(
+                    lease > 0 and execution.expires_at > instant, "live_control_expired_or_stopped"
+                )
+                execution.expires_at = instant + timedelta(seconds=lease)
+                db.flush()
+                self._locked_time(db, now)
+                require(
+                    execution.expires_at > max(now().replace(tzinfo=None), control.now()),
+                    "live_control_expired_or_stopped",
+                )
+                response.update(
+                    control.binding(execution),
+                    action="continue",
+                    lease_seconds=lease,
+                    lease_expires_at=stamp(execution.expires_at.replace(tzinfo=timezone.utc)),
+                )
+            db.commit()
+            return response
 
     def _budgets(self, body, approval):
         require(

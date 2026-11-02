@@ -58,6 +58,44 @@ try:
     assert result.returncode == 0, result.stdout + result.stderr
 
 
+def test_managed_refresh_renews_and_denial_rolls_back(database, tmp_path):
+    _, url = database
+    migrate(url, "upgrade", "head")
+    fixture_process(
+        url,
+        tmp_path,
+        r"""
+from unittest.mock import patch
+from datetime import timedelta
+with patch.object(fixture.control, 'now', lambda: s['wall'][0].replace(tzinfo=None)):
+    fixture.register(s)
+    claimed = fixture.claim(s)
+    contract = s['db'].query(ManagedContract).one()
+    body = fixture.control.ControlRequest(runner_id=fixture.RUNNER, origin=fixture.ORIGIN,
+                                          token=claimed['execution_control']['token'])
+    args = dict(job_id='job-1', body=body, contract_id=contract.id,
+                attempt_id=contract.attempt_id, fence=contract.fence)
+    s['wall'][0] += timedelta(seconds=9)
+    refreshed = s['service'].refresh(s['db'], s['runner'], **args)
+    assert refreshed['action']=='continue' and refreshed['lease_seconds']==10
+    assert refreshed['lease_expires_at']=='2026-11-02T18:00:19Z'
+    with Session(engine) as db:
+        assert db.get(JobExecution,'job-1').expires_at == (fixture.NOW+timedelta(seconds=19)).replace(tzinfo=None)
+        db.get(Engagement,'eng-1').managed_authority_revision += 1
+        db.commit()
+    s['wall'][0] += timedelta(seconds=1)
+    try:
+        s['service'].refresh(s['db'], s['runner'], **args)
+        raise AssertionError('stale authority renewed')
+    except WireRefused:
+        pass
+    with Session(engine) as db:
+        assert db.get(JobExecution,'job-1').expires_at == (fixture.NOW+timedelta(seconds=19)).replace(tzinfo=None)
+        assert db.get(Engagement,'eng-1').duration_allocated == 30
+""",
+    )
+
+
 def test_managed_concurrent_claim_and_atomic_migration(database, tmp_path):
     _, url = database
     migrate(url, "upgrade", "head")
