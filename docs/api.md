@@ -1,5 +1,9 @@
 # API Reference
 
+The NM-1 issuance adapter is an unregistered read-only prototype, not an API
+endpoint. It cannot approve/claim/execute jobs; see
+[ADR 0005](adr/0005-nm1-contract-issuance.md).
+
 Protected endpoints require authentication unless noted otherwise: a browser JWT
 (minted after GitHub OAuth), a personal `vmap_` API key in
 `Authorization: Bearer <token>`, or an enabled local browser session cookie.

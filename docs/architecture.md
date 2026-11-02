@@ -1,5 +1,9 @@
 # Architecture
 
+NM-1 adds an opt-in, unregistered authorization issuance projection; see
+[ADR 0005](adr/0005-nm1-contract-issuance.md). It changes no installed job or
+engagement behavior and does not enable a worker.
+
 ## Product Family
 
 VardrMap is part of the VardrSec product family. Each product is a separate deployable unit that integrates with the others via the VardrMap API and `vmap_` API keys.

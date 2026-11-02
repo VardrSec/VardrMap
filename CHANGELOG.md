@@ -4,6 +4,10 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Add an unregistered read-only NM-1 issuance adapter for owner-reviewed, bounded
+  reusable execution approvals. It snapshots explicit authorization/scope and binds
+  the unresolved Gate case; no routes, migrations, legacy policy or jobs change.
+
 - Add focused Naabu-to-Map verification. The integration acceptance runs a real Runner worker
   against the scope and a real Map backend with a stand-in `naabu` process and checks that every
   service the job reports is stored with `source: "naabu"`, linked to the job and never labelled
