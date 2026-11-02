@@ -48,6 +48,29 @@ const NEW_JOB = {
 };
 
 describe("JobsSection", () => {
+  it.each([
+    ["running", "cancel_requested", "Cancellation requested; waiting for Runner confirmation."],
+    ["failed", undefined, "Job cancelled."],
+  ])("reports cancellation accurately for a %s response", async (status, execution_state, message) => {
+    localStorage.setItem("vardrmap:jobs:prefs", JSON.stringify({ view: "table" }));
+    const running = { ...NEW_JOB, status: "running", started_at: new Date().toISOString() };
+    renderWithApp(<JobsSection engagementId={PROGRAM_ID} />, {
+      routes: {
+        ...BASE_ROUTES,
+        [`GET /engagements/${PROGRAM_ID}/jobs`]: { body: { jobs: [running] } },
+        "PATCH /jobs/job-1": { body: { ...running, status, execution_state } },
+      },
+    });
+    await userEvent.click(await screen.findByRole("row", { name: /nuclei/i }));
+    await userEvent.click(await screen.findByRole("button", { name: "cancel" }));
+    expect(await screen.findByText(message!)).toBeInTheDocument();
+    if (status === "running") {
+      expect(screen.queryByText("Job cancelled.")).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "cancel" })).toBeInTheDocument();
+    }
+    localStorage.removeItem("vardrmap:jobs:prefs");
+  });
+
   it("clears previous Runner contact when a later poll fails", async () => {
     jest.useFakeTimers();
     const checked = new Date().toISOString();

@@ -1,5 +1,11 @@
 # Architecture
 
+NM-2 adds opt-in owned manual execution control, described in
+[ADR 0006](adr/0006-owned-execution-control.md). An additive `job_executions` table
+holds per-attempt ownership, hashed control capability, lease and cancellation
+state. It preserves legacy jobs, engagement policy, case hashes and evidence.
+No execution worker or managed authorization approval route is enabled.
+
 NM-1 adds an opt-in, unregistered authorization issuance projection; see
 [ADR 0005](adr/0005-nm1-contract-issuance.md). It changes no installed job or
 engagement behavior and does not enable a worker.

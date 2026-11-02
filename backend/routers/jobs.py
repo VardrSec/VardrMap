@@ -4,12 +4,13 @@ import re
 from datetime import datetime, timezone
 from typing import Any, Literal, Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 import assessments
 import enforcement
+import execution_control as control
 import redaction
 import sse as _sse
 from db import get_db
@@ -27,6 +28,7 @@ from models import (
     Engagement,
     Evidence,
     JobEvent,
+    JobExecution,
     JobResultReceipt,
     ReconItem,
     ScanItem,
@@ -769,6 +771,7 @@ def update_job(
     no-op that returns it unchanged, so a retried completion is safe; any other
     transition outside the table is a 409 and changes nothing.
     """
+    control.lock_job(db, job_id, current_user)
     job = (
         db.query(ScanJob)
         .filter(
@@ -786,6 +789,16 @@ def update_job(
         raise HTTPException(status_code=400, detail=f"status must be one of {valid}")
 
     _writable_engagement(job, current_user, db)
+
+    execution = db.query(JobExecution).filter_by(job_id=job_id).first()
+    if execution is not None:
+        require_full_scope(current_user)
+        if body.status == "failed" and job.status == "running":
+            if execution.state == "active":
+                execution.state = "cancel_requested"
+                db.commit()
+            return {**serialize_job(job), "warnings": [], "execution_state": execution.state}
+        raise HTTPException(409, "controlled execution requires owned finalization")
 
     if body.status == job.status and body.status != "running":
         return {**serialize_job(job), "warnings": []}
@@ -824,8 +837,11 @@ def update_job(
 @router.post("/jobs/{job_id}/claim")
 def claim_job(
     job_id: str,
+    request: Request,
+    body: control.ClaimControl | None = None,
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
+    response: Response = None,
 ):
     """Atomically claim a pending job. Returns 409 if the job is not in 'pending'
     state, 404 if it does not exist or is not owned by the caller.
@@ -854,7 +870,7 @@ def claim_job(
     if pending is not None:
         _writable_engagement(pending, current_user, db)
     if pending is not None and pending.status == "pending":
-        engagement = get_engagement_or_404(pending.program_id, current_user, db)
+        engagement = db.query(Engagement).filter_by(id=pending.program_id).with_for_update().populate_existing().one()
         warnings = enforcement.as_warnings(
             enforcement.check(
                 db,
@@ -883,12 +899,17 @@ def claim_job(
             ScanJob.id == job_id,
             ScanJob.program_id.in_(accessible_engagement_ids(current_user["github_id"], db)),
             ScanJob.status == "pending",
+            ~ScanJob.program_id.in_(db.query(Engagement.id).filter(Engagement.stop_work_at.is_not(None))),
         )
         .update(
             {ScanJob.status: "running", ScanJob.started_at: now, ScanJob.case_snapshot: snapshot},
             synchronize_session=False,
         )
     )
+    execution = None
+    if claimed and body is not None:
+        execution = control.issue(db, job_id, current_user, request, body)
+        control.no_store(response)
     db.commit()
 
     if claimed == 0:
@@ -918,7 +939,67 @@ def claim_job(
     data = serialize_job(job)
     if job.case_snapshot is not None:
         data["config"] = {**data["config"], "test_case": job.case_snapshot}
-    return {**data, "warnings": warnings}
+    return {**data, "warnings": warnings, **({"execution_control": execution} if execution else {})}
+
+
+@router.get("/jobs/{job_id}/execution")
+def execution_status(job_id: str, current_user: dict = Depends(get_current_user), db: Session = Depends(get_db), response: Response = None):
+    control.no_store(response)
+    job = db.query(ScanJob).filter(ScanJob.id == job_id,
+        ScanJob.program_id.in_(accessible_engagement_ids(current_user["github_id"], db))).first()
+    if not job:
+        raise HTTPException(404)
+    execution = db.query(JobExecution).filter_by(job_id=job_id).first()
+    if not execution:
+        raise HTTPException(404)
+    state = execution.state
+    if state == "active" and execution.expires_at <= control.now():
+        state = "uncertain"
+    return {**control.binding(execution), "state": state, "status": job.status,
+            "termination_confirmed": execution.state == "cancelled"}
+
+
+@router.post("/jobs/{job_id}/control")
+def refresh_execution(job_id: str, body: control.ControlRequest, request: Request,
+                      current_user: dict = Depends(get_current_user), db: Session = Depends(get_db), response: Response = None):
+    control.no_store(response)
+    execution = control.owned(db, job_id, current_user, request, body)
+    job = db.query(ScanJob).filter_by(id=job_id).one()
+    _writable_engagement(job, current_user, db)
+    if job.engagement.stop_work_at is not None and execution.state == "active":
+        execution.state = "cancel_requested"
+    if execution.expires_at <= control.now() and execution.state == "active":
+        execution.state = "uncertain"
+    action = "continue" if execution.state == "active" and job.status == "running" else "cancel"
+    if action == "continue":
+        execution.expires_at = control.now() + control.timedelta(seconds=control.LEASE_SECONDS)
+    db.commit()
+    return {**control.binding(execution), "action": action, "lease_seconds": control.LEASE_SECONDS}
+
+
+@router.post("/jobs/{job_id}/execution-finish")
+def finish_execution(job_id: str, body: control.FinishControl, request: Request,
+                     current_user: dict = Depends(get_current_user), db: Session = Depends(get_db), response: Response = None):
+    control.no_store(response)
+    execution = control.owned(db, job_id, current_user, request, body)
+    job = db.query(ScanJob).filter_by(id=job_id).one()
+    _writable_engagement(job, current_user, db)
+    if execution.state in {"completed", "failed", "cancelled"}:
+        if execution.state != body.outcome:
+            raise HTTPException(409, "execution already finalized")
+        return {"state": execution.state}
+    if body.outcome == "completed" and (execution.state != "active" or execution.expires_at <= control.now()
+                                        or job.engagement.stop_work_at is not None):
+        execution.state = "cancel_requested"
+        db.commit()
+        raise HTTPException(409, "stop or expired lease prevents successful completion")
+    execution.state = body.outcome
+    if body.outcome != "uncertain":
+        job.status = "done" if body.outcome == "completed" else "failed"
+        job.completed_at = datetime.now(timezone.utc)
+        job.error_message = "" if body.outcome == "completed" else body.outcome
+    db.commit()
+    return {"state": execution.state}
 
 
 def serialize_event(e: JobEvent) -> dict:

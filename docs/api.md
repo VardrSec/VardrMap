@@ -1,5 +1,26 @@
 # API Reference
 
+NM-2 local source builds add explicit owned execution control (not execution
+approval or a worker):
+
+| Method and route | Contract |
+|---|---|
+| `POST /jobs/{job_id}/claim` | Optional `{runner_id: UUID, origin: exact Map URL}` body requires API-key authentication and returns one `execution_control` capability with a ten-second lease. Omitting the body keeps the legacy response/path. |
+| `POST /jobs/{job_id}/control` | `{runner_id, origin, token}` must match the job, authenticated key and claim. Returns `action: continue/cancel` and `lease_seconds`. Expired attempts never renew. |
+| `POST /jobs/{job_id}/execution-finish` | Same bindings plus `outcome: completed/failed/cancelled/uncertain`. A cancellation request or expired lease refuses completed. Uncertain retains running status; cancelled requires the owning Runner's stopped acknowledgement. |
+| `GET /jobs/{job_id}/execution` | Scoped read of control state and acknowledgement; expiry is reported as uncertain, without pretending the process is stopped. No capability is returned. |
+
+For controlled running jobs, legacy `PATCH /jobs/{job_id}` with failed requests
+sticky cancellation from a full-access writer; it returns running until confirmed.
+Legacy PATCH cannot set controlled done. Ordinary jobs keep existing behavior.
+`POST /engagements/{program_id}/stop-work` blocks claims and makes active controlled
+attempts cancel-requested. Releasing stop-work never revives those attempts.
+Remote stops depend on connectivity and bounded lease expiry. See
+[ADR 0006](adr/0006-owned-execution-control.md) for ownership, races and rollback.
+
+Control responses use `Cache-Control: no-store`; malformed claim/control/finalization
+payloads return a generic 422 without reflecting capability values.
+
 The NM-1 issuance adapter is an unregistered read-only prototype, not an API
 endpoint. It cannot approve/claim/execute jobs; see
 [ADR 0005](adr/0005-nm1-contract-issuance.md).

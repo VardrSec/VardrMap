@@ -4,6 +4,14 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Add explicitly opted-in manual job execution ownership, ten-second control
+  leases and sticky stop-work/cancellation requests, with authenticated owner
+  acknowledgement and conservative uncertainty. Additive migration
+  `0032executioncontrol` is required for matching Runner `--controlled` source
+  builds; no worker, legacy migration or Strict authorization claim is enabled.
+  The existing job UI distinguishes a requested cancellation from a terminal
+  response, and control validation errors never reflect capability tokens.
+
 - Add an unregistered read-only NM-1 issuance adapter for owner-reviewed, bounded
   reusable execution approvals. It snapshots explicit authorization/scope and binds
   the unresolved Gate case; no routes, migrations, legacy policy or jobs change.

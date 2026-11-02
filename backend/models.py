@@ -568,6 +568,20 @@ class ScanJob(Base):
     result_links = relationship("JobResultLink", cascade="all, delete-orphan")
 
 
+class JobExecution(Base):
+    """One opt-in execution owner per job; expired/uncertain attempts never reopen."""
+
+    __tablename__ = "job_executions"
+    job_id = Column(String, ForeignKey("scan_jobs.id", ondelete="CASCADE"), primary_key=True)
+    runner_id = Column(String(36), nullable=False)
+    origin = Column(String(500), nullable=False)
+    owner = Column(String, nullable=False)
+    principal_hash = Column(String(64), nullable=False)
+    token_hash = Column(String(64), nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    state = Column(String(30), nullable=False)
+
+
 class JobResultReceipt(Base):
     """Idempotency receipt for a runner result accepted by the control plane."""
 

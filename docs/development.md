@@ -1,5 +1,13 @@
 # Development
 
+NM-2 cancellation uses disposable fixtures in `backend/tests/test_execution_control.py`.
+Run `backend/postgres_tests/test_execution_control.py` against a dedicated
+`vardrmap_test*` PostgreSQL database to verify real cancellation/finalization lock
+ordering as both administrator and application role. SQLite does not verify those
+locks. Migration `0032executioncontrol` is additive; do not apply it to retained
+installations for development checks. Its downgrade retains fences by refusing
+table deletion. Whole NM-2 acceptance is separate from this first increment.
+
 ## Prerequisites
 
 For local-account development, install the updated backend requirements and read

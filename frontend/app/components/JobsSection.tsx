@@ -352,7 +352,9 @@ export default function JobsSection({
       }
       const updated: ScanJob = await res.json();
       setJobs((p) => p.map((j) => (j.id === id ? mapToUI(updated) : j)));
-      flash("Job cancelled.");
+      flash(updated.status === "failed"
+        ? "Job cancelled."
+        : "Cancellation requested; waiting for Runner confirmation.");
     } catch { flash("Failed to cancel job."); }
   }
 

@@ -17,7 +17,7 @@ from deps import (
     require_member_write,
     resolve_owned_client_id,
 )
-from models import Finding, ManualTest, Engagement, EngagementMember, ReconItem, Report, ScanItem, User
+from models import Finding, ManualTest, Engagement, EngagementMember, JobExecution, ReconItem, Report, ScanItem, ScanJob, User
 from schemas import EngagementCreate, EngagementUpdate
 from security import strip_html
 from serializers import serialize_engagement, serialize_engagements
@@ -234,10 +234,15 @@ def engage_stop_work(
     """
     engagement = get_engagement_or_404(program_id, current_user, db)
     require_member_write(engagement, current_user, db)
+    engagement = db.query(Engagement).filter_by(id=program_id).with_for_update().populate_existing().one()
 
     if engagement.stop_work_at is None:
         engagement.stop_work_at = datetime.now(timezone.utc)
     engagement.stop_work_reason = body.reason
+    db.query(JobExecution).filter(
+        JobExecution.job_id.in_(db.query(ScanJob.id).filter_by(program_id=program_id)),
+        JobExecution.state == "active",
+    ).update({JobExecution.state: "cancel_requested"}, synchronize_session=False)
     log_action(db, current_user["github_id"], "stop_work", "engagement", program_id, program_id)
     db.commit()
     db.refresh(engagement)
