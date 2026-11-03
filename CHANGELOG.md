@@ -4,6 +4,9 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Keep the browser evidence fixture on the legacy no-body claim API, preserving
+  strict validation of explicit execution-control payloads.
+
 - Pin the bounded Runner candidate for PostgreSQL CI and enable the isolated
   managed protocol/TLS fixtures. Record one exact historical prose false positive
   without broadening secret-scan exclusions.
