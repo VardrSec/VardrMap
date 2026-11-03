@@ -604,6 +604,61 @@ def test_cross_engagement_operator_has_no_approval_access(specimen):
     unchanged(s)
 
 
+@pytest.mark.parametrize("outcome", ["completed", "failed", "cancelled", "uncertain"])
+@pytest.mark.parametrize("consumed", [False, True])
+@pytest.mark.parametrize("marker", ["required", "approval"])
+def test_legacy_finish_cannot_change_managed_ownership(specimen, outcome, consumed, marker):
+    """An ordinary execution token cannot bypass managed receipts or release capacity."""
+    from managed_wire import digest
+    from models import ManagedStop
+    from routers.jobs import finish_execution
+
+    s = specimen
+    register(s)
+    issued = claim(s)
+    db = s["db"]
+    contract = db.query(ManagedContract).one()
+    body = control.ControlRequest(
+        runner_id=RUNNER, origin=ORIGIN, token=issued["execution_control"]["token"]
+    )
+    if consumed:
+        s["service"].consume(
+            db, s["runner"], job_id="job-1", body=body,
+            contract_id=contract.id, attempt_id=contract.attempt_id,
+            fence=contract.fence, contract_sha256=digest(contract.envelope),
+        )
+    job = db.get(ScanJob, "job-1")
+    if marker == "required":
+        job.managed_approval_id = None
+    else:
+        job.authorization_contract_required = False
+    db.commit()
+
+    def snapshot():
+        db.expire_all()
+        execution = db.get(JobExecution, "job-1")
+        engagement = db.get(Engagement, "eng-1")
+        row = db.query(ManagedContract).one()
+        job = db.get(ScanJob, "job-1")
+        return (
+            execution.state, execution.capacity_reserved, row.consumed,
+            row.attempt_id, row.fence, job.status, job.completed_at,
+            engagement.targets_spent, engagement.duration_allocated,
+            db.query(ManagedApproval).one().issued, db.query(ManagedStop).count(),
+        )
+
+    before = snapshot()
+    with pytest.raises(HTTPException) as refused:
+        finish_execution(
+            "job-1", control.FinishControl(**body.model_dump(), outcome=outcome),
+            s["runner"], {"github_id": "owner-1", "scope": "runner"}, db,
+        )
+    assert refused.value.status_code == 409
+    db.rollback()
+    assert snapshot() == before
+    assert before[1] is True and before[2] is consumed and before[-1] == 0
+
+
 def test_current_contract_binding_observes_revision_and_legacy_control_stays_disabled(
     specimen,
 ):

@@ -1007,8 +1007,8 @@ def finish_execution(job_id: str, body: control.FinishControl, request: Request,
     execution = control.owned(db, job_id, current_user, request, body)
     job = db.query(ScanJob).filter_by(id=job_id).one()
     _writable_engagement(job, current_user, db)
-    if (job.authorization_contract_required or job.managed_approval_id) and body.outcome == "completed":
-        raise HTTPException(409, "managed completion unsupported by legacy adapter")
+    if job.authorization_contract_required or job.managed_approval_id:
+        raise HTTPException(409, "managed finalization unsupported by legacy adapter")
     if execution.state in {"completed", "failed", "cancelled"}:
         if execution.state != body.outcome:
             raise HTTPException(409, "execution already finalized")

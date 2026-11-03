@@ -4,6 +4,9 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Refuse every legacy execution-finish outcome for managed jobs, preserving owned
+  capacity and receipt state until the managed result or known-stop protocol completes.
+
 - Verify observation HTTP sessions under both PostgreSQL roles and signed receipt
   flows behind Full's existing API prefix. Record pending worker decisions without
   choosing or implementing containment, bootstrap or lifecycle architecture.

@@ -1,5 +1,10 @@
 # Architecture
 
+The legacy execution-finish route refuses every outcome for managed jobs. Only
+the existing exact managed result or known-stop receipt protocol can release their
+capacity; a failed/cancelled claim or uncertain termination cannot bypass it.
+
+
 The unregistered `managed_issuance.Issuer` composes existing owned execution and
 budget accounting with separately verified operator receipts. Approval, contract,
 association and clock records are retained by `0036managedauth`. Authority/scope

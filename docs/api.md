@@ -2285,6 +2285,12 @@ conclusions, and older companions may lack independent reader/strategy support.
 
 ### Local managed consumption prototype
 
+Managed jobs refuse every outcome on the legacy `execution-finish` endpoint,
+including `failed`, `cancelled` and `uncertain`. An ordinary execution capability
+cannot replace the exact managed contract/fence, consumption acknowledgment or
+result/known-stop receipt. Refusal leaves execution ownership and all reservations
+unchanged; legacy jobs retain their existing finish behavior.
+
 `Issuer.consume` is an unregistered library operation, not an available HTTP API.
 Only explicit disposable fixtures expose it. It validates current owned permission
 and the signed-contract hash, then atomically consumes once without renewing the
