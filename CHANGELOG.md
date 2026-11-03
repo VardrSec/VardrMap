@@ -4,6 +4,9 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Collect PostgreSQL CI checks from the backend package directory so existing
+  shared fixtures import correctly; no database or test assertions are skipped.
+
 - Preserve the session-expiry notice across concurrent unauthorized bootstrap
   requests and ordinary toast expiry; backend authentication remains unchanged.
 

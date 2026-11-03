@@ -76,7 +76,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           repository: VardrSec/VardrRunner
-          ref: 4f63f888ec29e49698678dbc1ac623e44d61ac96
+          ref: f9ba543e3e9d278282f534e65030c3d5399e09f7
           path: .integration/runner
       - uses: actions/checkout@v7
         with:
@@ -105,7 +105,8 @@ jobs:
               conn.execute("ALTER DATABASE vardrmap_test_integration SET timezone TO 'America/Chicago'")
           PY
       - name: Verify migrations and UTC connections
-        run: python -m pytest backend/postgres_tests -v
+        working-directory: backend
+        run: python -m pytest postgres_tests -v
       - name: Run backend suite on PostgreSQL
         working-directory: backend
         run: python -m pytest tests -v

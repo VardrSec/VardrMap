@@ -585,3 +585,7 @@ preserving the exact signed API-base identity and result/stop receipts. Neither
 fixture enrolls live credentials or executes a target. The
 [pending worker decision record](nm2-worker-decisions-pending.md) lists approved
 constraints and unresolved containment/bootstrap/lifecycle choices; none is chosen.
+
+Run PostgreSQL test collection from `backend`: `python -m pytest postgres_tests -v`.
+These modules share fixtures through the `postgres_tests` package; invoking that
+directory from the repository root does not establish its parent import path.
