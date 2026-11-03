@@ -4,6 +4,10 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Add an unregistered one-shot managed consumption acknowledgement bound to
+  current owned permission and the exact signed contract. Preserve leases,
+  reservations and legacy refusals; no production route or completion. See ADR 0008.
+
 - Add four explicit real Windows/TLS pre-claim entry tests for Runner's durable
   handoff and recovery fence: local artifact, lost claim reply, binding failure
   and local stop. No production route, schema or managed finalization changes.

@@ -333,3 +333,23 @@ with Session(engine) as db:
 print('PASS: prior revision denial; issue linearizes before blocked mutation; current-authority check rejects afterward; queue remains disabled')
 """.replace("MUTATION", mutation),
     )
+
+
+@pytest.mark.parametrize("scenario", ["single", "race", "delay"])
+def test_managed_consumption_acknowledgement(database, tmp_path, scenario):
+    _, url = database
+    migrate(url, "upgrade", "head")
+    calls = {
+        "single": "test_one_acknowledgement_never_renews_or_releases",
+        "race": "test_independent_connections_have_only_one_ack",
+        "delay": "test_delayed_consumption_write_rolls_back",
+    }
+    fixture_process(
+        url,
+        tmp_path,
+        "import pytest\n"
+        "from tests import test_managed_consumption as c\n"
+        "with pytest.MonkeyPatch.context() as patch:\n"
+        "    pair = c.consumption.__wrapped__(s, patch)\n"
+        f"    c.{calls[scenario]}(pair)\n",
+    )

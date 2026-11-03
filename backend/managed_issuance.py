@@ -18,7 +18,16 @@ import execution_control as control
 import managed_authority
 import target_budget
 from deps import get_current_user
-from managed_wire import WireRefused, digest, integer, parse, require, stamp, timestamp, unb64
+from managed_wire import (
+    WireRefused,
+    digest,
+    integer,
+    parse,
+    require,
+    stamp,
+    timestamp,
+    unb64,
+)
 from models import (
     ApiKey,
     Engagement,
@@ -100,7 +109,8 @@ class Issuer:
         require(user.get("scope") == "full", "operator_session_required")
         method = "local_session" if user.get("auth_method") == "local" else "github_session"
         require(
-            method == "local_session" or header.startswith("Bearer "), "operator_session_required"
+            method == "local_session" or header.startswith("Bearer "),
+            "operator_session_required",
         )
         return {**user, "auth_method": method}
 
@@ -151,7 +161,10 @@ class Issuer:
         job_statuses=("pending",),
     ):
         engagement = db.get(Engagement, job.program_id)
-        require(revision == engagement.managed_authority_revision, "authority_revision_changed")
+        require(
+            revision == engagement.managed_authority_revision,
+            "authority_revision_changed",
+        )
         for name, maximum in (
             ("max_executions", 1000),
             ("max_duration_seconds", 86400),
@@ -281,7 +294,13 @@ class Issuer:
                 db.commit()
                 return existing
             result = self._review_locked(
-                db, job, actor, enrollment_id, authorization_id, plan, receipt["context"]
+                db,
+                job,
+                actor,
+                enrollment_id,
+                authorization_id,
+                plan,
+                receipt["context"],
             )
             self.wire.approval(approval, result["context"], actor["github_id"], now())
             row = ManagedApproval(
@@ -322,7 +341,10 @@ class Issuer:
                 .populate_existing()
                 .first()
             )
-            require(row is not None and row.owner == actor["github_id"], "owner_approval_required")
+            require(
+                row is not None and row.owner == actor["github_id"],
+                "owner_approval_required",
+            )
             self._locked_time(db, now)
             row.revoked = True  # No un-revoke/reset operation.
             db.commit()
@@ -402,7 +424,55 @@ class Issuer:
             renew=True,
         )
 
-    def _current(self, db, request, *, job_id, body, contract_id, attempt_id, fence, renew):
+    def consume(
+        self,
+        db,
+        request,
+        *,
+        job_id,
+        body,
+        contract_id,
+        attempt_id,
+        fence,
+        contract_sha256,
+    ):
+        """One-shot unregistered launch acknowledgement; no lease renewal/release.
+
+        A lost response is uncertain and must not be retried as launch permission.
+        Even the identical tuple cannot obtain a second acknowledgement.
+        """
+        integer(fence, 1)
+        require(
+            type(contract_sha256) is str
+            and len(contract_sha256) == 64
+            and all(c in "0123456789abcdef" for c in contract_sha256),
+            "consumption_contract_binding",
+        )
+        return self._current(
+            db,
+            request,
+            job_id=job_id,
+            body=body,
+            contract_id=contract_id,
+            attempt_id=attempt_id,
+            fence=fence,
+            renew=False,
+            consume_sha256=contract_sha256,
+        )
+
+    def _current(
+        self,
+        db,
+        request,
+        *,
+        job_id,
+        body,
+        contract_id,
+        attempt_id,
+        fence,
+        renew,
+        consume_sha256=None,
+    ):
         with self.operation(db) as now:
             user = get_current_user(
                 request, authorization=request.headers.get("authorization"), db=db
@@ -457,12 +527,19 @@ class Issuer:
                 ceilings.append(
                     job.started_at
                     + timedelta(
-                        seconds=min(execution.duration_seconds, permission["max_duration_seconds"])
+                        seconds=min(
+                            execution.duration_seconds,
+                            permission["max_duration_seconds"],
+                        )
                     )
                 )
-                lease = min(control.LEASE_SECONDS, int((min(ceilings) - instant).total_seconds()))
+                lease = min(
+                    control.LEASE_SECONDS,
+                    int((min(ceilings) - instant).total_seconds()),
+                )
                 require(
-                    lease > 0 and execution.expires_at > instant, "live_control_expired_or_stopped"
+                    lease > 0 and execution.expires_at > instant,
+                    "live_control_expired_or_stopped",
                 )
                 execution.expires_at = instant + timedelta(seconds=lease)
                 db.flush()
@@ -476,6 +553,33 @@ class Issuer:
                     action="continue",
                     lease_seconds=lease,
                     lease_expires_at=stamp(execution.expires_at.replace(tzinfo=timezone.utc)),
+                )
+            if consume_sha256 is not None:
+                require(
+                    type(consume_sha256) is str and consume_sha256 == digest(contract.envelope),
+                    "consumption_contract_binding",
+                )
+                changed = (
+                    db.query(ManagedContract)
+                    .filter_by(
+                        id=contract.id,
+                        consumed=False,
+                    )
+                    .update({"consumed": True}, synchronize_session=False)
+                )
+                require(changed == 1, "contract_already_consumed")
+                db.flush()
+                self._locked_time(db, now)
+                self.wire.approval(approval.envelope, result["context"], approval.owner, now())
+                require(
+                    execution.expires_at > max(now().replace(tzinfo=None), control.now()),
+                    "live_control_expired_or_stopped",
+                )
+                response.update(
+                    control.binding(execution),
+                    consumed=True,
+                    schema="vardr.managed-consumption/1",
+                    contract_sha256=consume_sha256,
                 )
             db.commit()
             return response

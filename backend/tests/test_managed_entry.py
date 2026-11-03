@@ -58,6 +58,7 @@ def entry(native, tmp_path):
             anchors=n.anchors,
             claim=lambda body: transport.client.post("/entry/claim", json=body),
             current=lambda body: transport.client.post("/fixture/current", json=body),
+            consume=lambda body: transport.client.post("/fixture/consume", json=body),
         )
 
     directory = tmp_path / "entry-artifact"

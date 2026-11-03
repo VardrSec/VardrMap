@@ -597,3 +597,11 @@ authority; statement completeness cannot turn an unknown result into protection.
 The UI shows expected permission, raw outcome, scanner assessment, credential
 check and independent readback provenance. Linking evidence to a confirmed finding
 remains an explicit operator action. Historical evidence is not rewritten.
+
+### Retained managed consumption
+
+The local prototype uses the existing `ManagedContract.consumed` bit as a one-shot
+conditional transition under the owned current-authority transaction. Only the
+first valid caller receives an exact bound ACK. This does not establish managed
+evidence/completion or release reservations, and has no production route. See
+[ADR 0008](adr/0008-managed-consumption-ack.md).

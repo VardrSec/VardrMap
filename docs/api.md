@@ -2282,3 +2282,12 @@ verifier diagnostics. They do not establish a denied write. Validate coordinated
 versions with the [strict semantic contract](../scripts/integration/README.md#semantic-evidence-and-version-compatibility)
 before rollout; older Map backends may accept the upload without retaining these
 conclusions, and older companions may lack independent reader/strategy support.
+
+### Local managed consumption prototype
+
+`Issuer.consume` is an unregistered library operation, not an available HTTP API.
+Only explicit disposable fixtures expose it. It validates current owned permission
+and the signed-contract hash, then atomically consumes once without renewing the
+lease, completing the job or releasing reservations. Exact ACK and unknown-reply
+rules are in [ADR 0008](adr/0008-managed-consumption-ack.md). Existing marked-job
+legacy claim/control/upload/completion refusals remain in force.

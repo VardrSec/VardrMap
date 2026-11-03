@@ -129,6 +129,13 @@ def harness(specimen, tmp_path, monkeypatch, map_origin):
             db, request, job_id="job-1", body=control.ControlRequest(**body), **args
         )
 
+    @app.post("/fixture/consume")
+    def consume(body: dict, request: Request, db=Depends(get_db)):
+        args = {k: body.pop(k) for k in ("contract_id", "attempt_id", "fence", "contract_sha256")}
+        return service.consume(
+            db, request, job_id="job-1", body=control.ControlRequest(**body), **args
+        )
+
     anchors = tuple(
         TrustAnchor(
             "managed-fixture",
@@ -258,7 +265,8 @@ def test_http_to_shared_validator_ledger_and_inert_launch(harness, auth):
 
 
 @pytest.mark.parametrize(
-    "kind", ["missing", "expired", "foreign", "viewer", "api_runner", "api_full", "disabled"]
+    "kind",
+    ["missing", "expired", "foreign", "viewer", "api_runner", "api_full", "disabled"],
 )
 def test_http_review_requires_actual_owner_session(harness, monkeypatch, kind):
     h = harness
@@ -269,7 +277,12 @@ def test_http_review_requires_actual_owner_session(harness, monkeypatch, kind):
         import jwt
 
         headers["Authorization"] = "Bearer " + jwt.encode(
-            {"sub": "owner-1", "aud": "vardrmap-backend", "iss": "vardrmap-frontend", "exp": 1},
+            {
+                "sub": "owner-1",
+                "aud": "vardrmap-backend",
+                "iss": "vardrmap-frontend",
+                "exp": 1,
+            },
             "test-secret-key-for-pytest-needs-32-chars!!",
             algorithm="HS256",
         )
@@ -298,7 +311,8 @@ def test_http_review_requires_actual_owner_session(harness, monkeypatch, kind):
 
 
 @pytest.mark.parametrize(
-    "kind", ["missing_csrf", "bad_csrf", "origin", "http", "revoked", "expired", "disabled"]
+    "kind",
+    ["missing_csrf", "bad_csrf", "origin", "http", "revoked", "expired", "disabled"],
 )
 def test_http_local_provenance_and_csrf_fail_closed(harness, monkeypatch, kind):
     h = harness
@@ -708,3 +722,55 @@ def test_cached_current_reply_cannot_extend_actual_server_lease(harness, rollbac
     h.ticks[0] = 11
     with pytest.raises(h.error, match="permission_expired"):
         p.launch(lambda: pytest.fail("cached control reply revived expired server lease"))
+
+
+@pytest.mark.parametrize("lost", [False, True])
+def test_http_consumption_receipt_to_runner_barrier(harness, lost):
+    """Real API-key auth and JSON ACK, production Runner parser, inert endpoint."""
+    from vardrrunner.authorization.claim import ClaimError, ManagedRun
+    from vardrrunner.authorization.codec import digest, encoded
+
+    h = harness
+    h.issue()
+    probe = h.probe()
+    probe.claim(h.body)
+    probe.reserve()
+    binding = {
+        **probe.binding,
+        **{k: probe.payload[k] for k in ("contract_id", "attempt_id", "fence")},
+        "authority_revision": probe.context.authority_revision,
+        "authority_sha256": probe.context.authority_sha256,
+    }
+    states, sends = [], []
+
+    def record(run_id, owner, *, acknowledged):
+        states.append(acknowledged)
+
+    def consume(body):
+        sends.append(True)
+        result = probe.post("/fixture/consume", body)
+        if lost:
+            raise OSError("synthetic lost reply after actual server commit")
+        return result
+
+    handle = ManagedRun(
+        SimpleNamespace(binding=binding, envelope=probe.envelope),
+        SimpleNamespace(consumption=record),
+        "inert-run",
+        "inert-owner",
+        1000000,
+        consume,
+    )
+    body = {**probe.request, "contract_sha256": digest(encoded(probe.envelope))}
+    if lost:
+        with pytest.raises(ClaimError, match="consumption_outcome_unknown"):
+            handle._acknowledge(body)
+    else:
+        handle._acknowledge(body)
+    assert states == ([False] if lost else [False, True]) and len(sends) == 1
+    with Session(h.s["engine"]) as db:
+        assert db.query(ManagedContract).one().consumed
+        assert db.get(JobExecution, "job-1").capacity_reserved
+        assert db.query(ManagedApproval).one().issued == 1
+    # A second invocation cannot turn the retained server tombstone into a new ACK.
+    assert h.client.post("/fixture/consume", json=body, headers=h.runner).status_code == 409

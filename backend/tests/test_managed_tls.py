@@ -504,3 +504,49 @@ def test_connection_refusal_prevents_claim_without_fallback(harness, tmp_path):
             assert harness.s["db"].query(ManagedContract).count() == 0
         finally:
             transport.close()
+
+
+@pytest.mark.parametrize("lost", [False, True])
+def test_verified_https_consumption_ack_and_postcommit_loss(tls_harness, lost):
+    """Bound ACK over verified sockets; no process/target execution."""
+    from vardrrunner.authorization.claim import ClaimError, ManagedRun
+    from vardrrunner.authorization.codec import digest, encoded
+
+    t, states = tls_harness, []
+    with t.serve():
+        t.issue()
+        transport = t.transport()
+        probe = t.h.probe(transport)
+        probe.claim(t.h.body)
+        probe.reserve()
+        if lost:
+            t.wire.mode = "drop_consume"
+        binding = {
+            **probe.binding,
+            **{k: probe.payload[k] for k in ("contract_id", "attempt_id", "fence")},
+            "authority_revision": probe.context.authority_revision,
+            "authority_sha256": probe.context.authority_sha256,
+        }
+
+        def record(run_id, owner, *, acknowledged):
+            states.append(acknowledged)
+
+        handle = ManagedRun(
+            SimpleNamespace(binding=binding, envelope=probe.envelope),
+            SimpleNamespace(consumption=record),
+            "inert-run",
+            "inert-owner",
+            1000000,
+            lambda body: transport.client.post("/fixture/consume", json=body),
+        )
+        body = {**probe.request, "contract_sha256": digest(encoded(probe.envelope))}
+        if lost:
+            with pytest.raises(ClaimError, match="consumption_outcome_unknown"):
+                handle._acknowledge(body)
+        else:
+            handle._acknowledge(body)
+        assert states == ([False] if lost else [False, True])
+        assert t.wire.forwarded["/fixture/consume"] == 1
+        with Session(t.h.s["engine"]) as db:
+            assert db.query(ManagedContract).one().consumed
+            assert db.get(JobExecution, "job-1").capacity_reserved

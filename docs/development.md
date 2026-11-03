@@ -494,3 +494,23 @@ additive heartbeat metadata. The local HTTPS browser journey checks real unready
 SQLite readiness, a real account-owned heartbeat, and an injected readiness
 transport failure. Frontend tests cover stale, unknown, malformed and failed polls.
 These fixtures do not certify fresh-host certificate trust or a full diagnostic run.
+
+## Local NM-2 consumption fixtures
+
+`tests/test_managed_consumption.py` checks exact acknowledgements, changed bindings,
+revocation/expiry, delayed rollback and independent-connection winner selection.
+With explicit `NM2_RUNNER_SOURCE`, `tests/test_managed_http.py` also sends actual
+API-key-authenticated JSON through the test-only ASGI adapter to the production
+Runner ACK parser, including a lost post-commit reply. No target is dispatched.
+
+`postgres_tests/test_managed_issuance.py` repeats single-use, race and delayed-write
+checks in migrated schemas as administrator and the restricted application role.
+Use a disposable `vardrmap_test*` database with explicit certificate trust and TLS
+verification. The Windows/TLS entry adapter has been updated but still requires
+real Windows execution; portable fixtures do not accept native containment.
+
+With `NM2_TLS_LOOPBACK=1` and the matching Runner source, the real socket suite
+also verifies the consumption ACK and a truncated post-commit response through
+Runner's existing `api.py` client. It keeps explicit CA/hostname verification,
+zero retries and zero redirects on fixture instances. This is loopback transport
+evidence, not real Windows containment or an activated production adapter.
