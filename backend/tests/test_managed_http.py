@@ -146,6 +146,9 @@ def harness(specimen, tmp_path, monkeypatch, map_origin):
     from managed_observations import Observations
 
     observations = Observations(results)
+    from managed_observation_http import build_observation_router
+
+    app.include_router(build_observation_router(observations))
 
     @app.post("/fixture/observe")
     def observe(body: dict, request: Request, db=Depends(get_db)):

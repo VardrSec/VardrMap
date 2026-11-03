@@ -631,3 +631,13 @@ It records metadata only; absence never authorizes a retry. Reconciliation close
 only an existing exact durable result/stop intent, preserving native proof and
 uncertainty fences. Ordinary recovery remains deferred. See
 [ADR 0011](adr/0011-managed-claim-observation.md).
+
+### Read-only observation HTTP composition
+
+An unregistered router factory adapts the existing enrolled-principal observation
+service without constructing an issuer or reading key configuration. Only explicit
+synthetic apps include it. It adds bounded strict input decoding, a body-read
+wait limit, non-cacheable fixed errors and a reply-size ceiling while preserving
+service authentication, membership and receipt semantics. No claim, renewal,
+accounting or execution route is registered. See
+[ADR 0012](adr/0012-unregistered-observation-http.md).

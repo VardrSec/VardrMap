@@ -2315,3 +2315,20 @@ hashes with the original enrolled API key; no control token is accepted or retur
 It returns bounded metadata and existing immutable receipts without renewing,
 releasing or retrying work. Absence is only a snapshot. See
 [ADR 0011](adr/0011-managed-claim-observation.md).
+
+### Unregistered observation HTTP factory
+
+`managed_observation_http.build_observation_router(existing_service)` reserves
+`POST /jobs/{job_id}/managed/observation` for isolated integration. **It is not
+registered by the production app.** It accepts origin, Runner UUID and exact
+plan/case/association fingerprints using the original enrolled API key. It rejects
+control tokens and other extra fields, returns no capability, and changes no
+business state. Successful observations use the existing v1 metadata/receipt shape.
+
+The adapter requires HTTPS, JSON without content compression, at most 8 KiB of
+request bytes within three seconds of body reading, and at most 16 KiB of reply.
+Handled errors and success are non-cacheable and never echo submitted content.
+The adapter preserves authentication/access status codes; malformed bodies use
+422, unsupported media 415, excess body 413, body timeout 408, disconnect 400,
+service refusal 409 and unavailable service 503. No mutation endpoint is exposed.
+See [ADR 0012](adr/0012-unregistered-observation-http.md).

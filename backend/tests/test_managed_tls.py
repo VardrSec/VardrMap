@@ -675,3 +675,22 @@ def test_explicit_managed_transport_requires_actual_trusted_ca(tls_harness, tmp_
         with pytest.raises(ManagedTransportError):
             client.managed_post("/fixture/claim", t.h.body)
     assert not t.wire.seen
+
+
+@pytest.mark.parametrize("kind", ["result", "stop"])
+def test_unregistered_observation_router_over_verified_managed_transport(tls_harness, kind):
+    from tests.managed_observation_probe import flow
+
+    t = tls_harness
+    with t.serve():
+        t.issue()
+        transport = bounded_transport(t)
+
+        def post(path, *, json):
+            if path == "/fixture/observe":
+                path = "/jobs/job-1/managed/observation"
+            return transport.post(path, json=json)
+
+        flow(t.h, SimpleNamespace(post=post), kind=kind)
+    assert t.wire.forwarded["/jobs/job-1/managed/observation"] == 2
+    assert "/fixture/observe" not in t.wire.seen

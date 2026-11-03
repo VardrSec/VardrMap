@@ -30,3 +30,11 @@ Tests use synthetic keys, mocked sessions and verified loopback TLS with real au
 The principal implementation blocker is Linux/container controlled containment: `execution_control.available()` currently accepts only native Windows. Do not enable a worker with legacy/uncontrolled fallback, Docker socket, privileged mode, weakened TLS, or host credential exposure. Complete the reviewed containment/integration work and actual host acceptance before claiming the preferred deployment works.
 
 Independent review, Windows/Papachin, hosted CI/security/dependency/container checks, actual deployed migration comparison and consolidation remain open. NM-3 has not begun. Backup is waived. No publication, merge, deployment or acceptance.
+
+## Read-only observation adapter follow-up
+
+The subsequent isolated increment adds an unregistered HTTP router factory for
+existing receipt observation only. It supplies no execution right and closes no
+canonical integrated worker exit clause. Production registration, issuer/key
+bootstrap, Linux/container containment and operator lifecycle remain outstanding.
+See [ADR 0012](adr/0012-unregistered-observation-http.md).

@@ -559,3 +559,14 @@ ambiguous claim replies and size/JSON negatives. Test adapters alone register
 fixture routes; no production Map route, key, enrollment or migration is added.
 See [canonical NM-2 exit status](nm2-canonical-exit-status.md): this does not prove
 the required operator-enabled Docker Desktop worker or Linux/container control.
+
+## Read-only managed observation adapter tests
+
+`tests/test_managed_observation_http.py` mounts only the explicit router factory
+in a synthetic app, with actual API-key authentication and disposable SQL. It
+checks unchanged business state and authorization failures, exact bounded inputs,
+read timeout/disconnect, no capability/error reflection and absence from `main`.
+The opt-in TLS suite sends result and stop observations through this adapter using
+the unchanged Runner managed transport. No production route or key is provisioned.
+See [ADR 0012](adr/0012-unregistered-observation-http.md). Worker/container and
+independent acceptance gates remain open.

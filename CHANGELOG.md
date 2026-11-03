@@ -4,6 +4,10 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Add an unregistered read-only managed observation HTTP factory with strict
+  bounded inputs, fixed non-cacheable errors and existing enrollment/receipt
+  checks. No production registration, execution or issuer activation. See ADR 0012.
+
 - Verify Runner's explicit bounded managed JSON transport over synthetic TLS,
   including receipt flows and failure paths. Reconcile canonical NM-2 worker exit;
   no production routes, enrollment, migration or activation changes.
