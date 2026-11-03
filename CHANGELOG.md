@@ -4,6 +4,9 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Install the pinned Runner authorization dependencies in the Map PostgreSQL
+  test interpreter as well as the separate CLI fixture environment.
+
 - Collect PostgreSQL CI checks from the backend package directory so existing
   shared fixtures import correctly; no database or test assertions are skipped.
 

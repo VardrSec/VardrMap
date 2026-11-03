@@ -589,3 +589,8 @@ constraints and unresolved containment/bootstrap/lifecycle choices; none is chos
 Run PostgreSQL test collection from `backend`: `python -m pytest postgres_tests -v`.
 These modules share fixtures through the `postgres_tests` package; invoking that
 directory from the repository root does not establish its parent import path.
+
+PostgreSQL CI enables direct Runner HTTP/TLS probes in the Map test interpreter.
+Install the pinned companion with its authorization extra in that interpreter;
+the separate CLI virtual environment alone does not satisfy those imports. This
+is a CI fixture dependency, not a Map application/runtime requirement.
