@@ -212,3 +212,28 @@ def test_actual_local_journal_stop_is_used_by_native_entry(entry):
         assert record.pid is not None and not process_running(record.pid)
     result = facts(e, "local_stop", handle)
     assert result["intent_state"] == "held_after_claim" and result["local_consumed"] == 1
+
+
+def test_actual_native_artifact_managed_finalization_and_receipt(entry):
+    """Deferred real Windows gate; no cloud fixture may certify this test."""
+    from models import ManagedContract, ManagedResult
+
+    e = entry
+    with e.n.t.serve():
+        e.n.authorize()
+        transport = e.n.t.transport()
+        handle = e.make(transport).acquire(e.directory)
+        e.n.attempts.append(handle.gate)
+        handle.execute(e.directory)
+        handle.finalize(
+            lambda body: transport.client.post("/fixture/result", json=body),
+            lambda body: transport.client.post("/fixture/finish", json=body),
+        )
+    with Session(e.n.t.h.s["engine"]) as db:
+        assert db.query(ManagedResult).one().outcome == "completed"
+        assert db.query(ManagedContract).one().consumed
+        assert db.get(JobExecution, "job-1").state == "completed"
+        assert not db.get(JobExecution, "job-1").capacity_reserved
+        assert db.query(ManagedApproval).one().issued == 1
+        assert db.get(Engagement, "eng-1").targets_spent == 1
+        assert db.get(Engagement, "eng-1").duration_allocated == 30

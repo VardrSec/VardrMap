@@ -1235,6 +1235,20 @@ def upload_job_result(
             detail=f"job {job_id} is a '{job.tool_type}' job; /upload accepts {_VARDRGATE} results",
         )
 
+    result = store_gate_result(db, job, body, current_user)
+    if result["already_processed"]:
+        return result
+    db.commit()
+    _sse.notify(job.program_id, {"type": "job_update", "job_id": job.id, "status": job.status})
+    return result
+
+
+def store_gate_result(db, job, body, current_user):
+    """Shared redacted evidence projection; caller owns authorization/transaction.
+
+    Never register this helper as a route or use it to bypass the legacy managed
+    guard. The managed adapter supplies its stronger owned-attempt validation.
+    """
     receipt_payload = body.model_dump()
     # Preserve hashes of legacy receipts created before case_hash existed.
     if not body.case_hash:
@@ -1412,8 +1426,7 @@ def upload_job_result(
         scan_items_created=created_items,
         evidence_created=created_evidence,
     ))
-    db.commit()
-    _sse.notify(job.program_id, {"type": "job_update", "job_id": job.id, "status": job.status})
+
     return {
         "job_id": job.id,
         "scan_items_created": created_items,

@@ -136,6 +136,44 @@ def harness(specimen, tmp_path, monkeypatch, map_origin):
             db, request, job_id="job-1", body=control.ControlRequest(**body), **args
         )
 
+    from managed_results import Results
+
+    results = Results(service)
+
+    def result_args(body):
+        return {k: body.pop(k) for k in ("contract_id", "attempt_id", "fence", "contract_sha256")}
+
+    @app.post("/fixture/result")
+    def result(body: dict, request: Request, db=Depends(get_db)):
+        args = result_args(body)
+        artifact, sha = body.pop("artifact"), body.pop("artifact_sha256")
+        return results.submit(
+            db,
+            request,
+            job_id="job-1",
+            body=control.ControlRequest(**body),
+            artifact=artifact,
+            artifact_sha256=sha,
+            **args,
+        )
+
+    @app.post("/fixture/finish")
+    def finish(body: dict, request: Request, db=Depends(get_db)):
+        args = result_args(body)
+        completion = {
+            k: body.pop(k) for k in ("receipt_sha256", "outcome", "termination_confirmed")
+        }
+        return results.finish(
+            db, request, job_id="job-1", body=control.ControlRequest(**body), **args, **completion
+        )
+
+    @app.post("/fixture/inspect")
+    def inspect(body: dict, request: Request, db=Depends(get_db)):
+        args = result_args(body)
+        return results.inspect(
+            db, request, job_id="job-1", body=control.ControlRequest(**body), **args
+        )
+
     anchors = tuple(
         TrustAnchor(
             "managed-fixture",
@@ -774,3 +812,10 @@ def test_http_consumption_receipt_to_runner_barrier(harness, lost):
         assert db.query(ManagedApproval).one().issued == 1
     # A second invocation cannot turn the retained server tombstone into a new ACK.
     assert h.client.post("/fixture/consume", json=body, headers=h.runner).status_code == 409
+
+
+def test_http_managed_evidence_completion_receipts(harness):
+    from tests.managed_result_probe import flow
+
+    harness.issue()
+    flow(harness)

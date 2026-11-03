@@ -917,3 +917,22 @@ class AgentProposal(Base):
     created_at = Column(DateTime, nullable=True, default=lambda: datetime.now(timezone.utc))
     resolved_at = Column(DateTime, nullable=True)
     resolved_by = Column(String, default="")
+
+
+class ManagedResult(Base):
+    """Immutable result/terminal receipts retained after job deletion; no raw payload."""
+
+    __tablename__ = "managed_results"
+    contract_id = Column(String, primary_key=True)
+    job_id = Column(String, nullable=False)
+    attempt_id = Column(String, nullable=False)
+    fence = Column(Integer, nullable=False)
+    contract_sha256 = Column(String(64), nullable=False)
+    artifact_sha256 = Column(String(64), nullable=False)
+    case_sha256 = Column(String(64), nullable=False)
+    receipt_sha256 = Column(String(64), nullable=False)
+    evidence_created = Column(Integer, nullable=False)
+    scan_items_created = Column(Integer, nullable=False)
+    preflight_failed = Column(Boolean, nullable=False)
+    outcome = Column(String(16), nullable=True)
+    finished_at = Column(DateTime, nullable=True)

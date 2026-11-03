@@ -605,3 +605,12 @@ conditional transition under the owned current-authority transaction. Only the
 first valid caller receives an exact bound ACK. This does not establish managed
 evidence/completion or release reservations, and has no production route. See
 [ADR 0008](adr/0008-managed-consumption-ack.md).
+
+### Managed result receipts
+
+The additive `managed_results` table retains contract/attempt/case/artifact hashes,
+projection counts and immutable terminal outcome without raw result content or
+cascading deletion. Managed evidence and legacy uploads share the same redacted
+projection; their authorization and transaction adapters remain distinct. A
+terminal managed receipt releases concurrency capacity without refunding other
+charges. See [ADR 0009](adr/0009-managed-result-receipts.md).

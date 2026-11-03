@@ -514,3 +514,17 @@ also verifies the consumption ACK and a truncated post-commit response through
 Runner's existing `api.py` client. It keeps explicit CA/hostname verification,
 zero retries and zero redirects on fixture instances. This is loopback transport
 evidence, not real Windows containment or an activated production adapter.
+
+## Managed evidence/completion verification
+
+`tests/test_managed_results.py` checks case/contract binding, redaction, immutable
+replay, preflight failure, permission denial, delayed rollback and competing
+result/outcome transactions. Legacy Gate/semantic tests continue to use the same
+projection. PostgreSQL scenarios repeat migrations, evidence and completion races
+and rollback as administrator and restricted application role, with verified TLS.
+
+With matching `NM2_RUNNER_SOURCE`, ASGI fixtures exercise the real Runner receipt
+parser. `NM2_TLS_LOOPBACK=1` additionally checks real sockets and truncated replies
+after actual result or terminal commit; no target is dispatched. The separate
+Windows/TLS native entry finalization test remains deferred to Papachin and is
+not certified by cloud passes. See [ADR 0009](adr/0009-managed-result-receipts.md).

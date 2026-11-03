@@ -4,6 +4,11 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Add unregistered managed evidence/completion receipts and authenticated
+  observation, with exact owned artifact/case binding and atomic reservation
+  release. Retain counters and legacy guards. Add additive migration 0037;
+  receipt deletion on downgrade is refused. See ADR 0009.
+
 - Add an unregistered one-shot managed consumption acknowledgement bound to
   current owned permission and the exact signed contract. Preserve leases,
   reservations and legacy refusals; no production route or completion. See ADR 0008.

@@ -550,3 +550,15 @@ def test_verified_https_consumption_ack_and_postcommit_loss(tls_harness, lost):
         with Session(t.h.s["engine"]) as db:
             assert db.query(ManagedContract).one().consumed
             assert db.get(JobExecution, "job-1").capacity_reserved
+
+
+@pytest.mark.parametrize("lost", [None, "result", "finish"])
+def test_verified_https_results_completion_and_lost_replies(tls_harness, lost):
+    from tests.managed_result_probe import flow
+
+    t = tls_harness
+    with t.serve():
+        t.issue()
+        flow(t.h, t.transport(), wire=t.wire, lost=lost)
+    assert t.wire.forwarded["/fixture/result"] == 1
+    assert t.wire.forwarded.get("/fixture/finish", 0) == (0 if lost == "result" else 1)

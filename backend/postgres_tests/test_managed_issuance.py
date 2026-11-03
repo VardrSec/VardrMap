@@ -353,3 +353,26 @@ def test_managed_consumption_acknowledgement(database, tmp_path, scenario):
         "    pair = c.consumption.__wrapped__(s, patch)\n"
         f"    c.{calls[scenario]}(pair)\n",
     )
+
+
+@pytest.mark.parametrize("scenario", ["lifecycle", "evidence_race", "finish_race", "write_rollback", "delayed_finish"])
+def test_managed_results_transactions(database, tmp_path, scenario):
+    _, url = database
+    migrate(url, "upgrade", "head")
+    calls = {
+        "lifecycle": "r.test_atomic_evidence_completion_and_observation(pair)",
+        "evidence_race": "r.test_concurrent_result_winner(pair)",
+        "finish_race": "r.test_concurrent_completion_one_immutable_outcome(pair)",
+        "write_rollback": "r.test_storage_failure_or_delay_rolls_back_atomically(pair, 'evidence_write')",
+        "delayed_finish": "r.test_storage_failure_or_delay_rolls_back_atomically(pair, 'completion_delay')",
+    }
+    fixture_process(
+        url, tmp_path,
+        "import pytest\n"
+        "from tests import test_managed_results as r\n"
+        "from tests import test_managed_consumption as c\n"
+        "with pytest.MonkeyPatch.context() as patch:\n"
+        "    consumed = c.consumption.__wrapped__(s, patch)\n"
+        "    pair = r.results.__wrapped__(consumed)\n"
+        f"    {calls[scenario]}\n",
+    )

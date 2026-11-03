@@ -2291,3 +2291,11 @@ and the signed-contract hash, then atomically consumes once without renewing the
 lease, completing the job or releasing reservations. Exact ACK and unknown-reply
 rules are in [ADR 0008](adr/0008-managed-consumption-ack.md). Existing marked-job
 legacy claim/control/upload/completion refusals remain in force.
+
+### Managed result prototype
+
+`managed_results.Results.submit`, `finish` and `inspect` are unregistered library
+operations, exposed only by explicit disposable test adapters. They require the
+existing owned capability and exact consumed contract. Evidence receipt alone
+never completes work; terminal receipts and inspection rules are documented in
+[ADR 0009](adr/0009-managed-result-receipts.md). No production endpoint is added.
