@@ -237,3 +237,46 @@ def test_actual_native_artifact_managed_finalization_and_receipt(entry):
         assert db.query(ManagedApproval).one().issued == 1
         assert db.get(Engagement, "eng-1").targets_spent == 1
         assert db.get(Engagement, "eng-1").duration_allocated == 30
+
+
+def test_actual_confirmed_native_stop_receipt(entry):
+    """Real Windows/Papachin gate; fake API tests cannot certify containment."""
+    from models import ManagedStop
+    from vardrrunner.execution_control import ExecutionStopped
+
+    e = entry
+    e.n.behavior["hold"] = True
+    errors = []
+    with e.n.t.serve():
+        e.n.authorize()
+        transport = e.n.t.transport()
+        facade = e.make(transport)
+        handle = facade.acquire(e.directory)
+        e.n.attempts.append(handle.gate)
+
+        def stop():
+            try:
+                assert e.n.started.wait(12)
+                facade.journal.request_stop(handle.run_id)
+            except Exception as error:
+                errors.append(type(error).__name__)
+
+        thread = threading.Thread(target=stop, daemon=True)
+        thread.start()
+        with pytest.raises(ExecutionStopped, match="local_emergency_stop") as stopped:
+            handle.execute(e.directory)
+        thread.join(3)
+        assert not thread.is_alive() and not errors and stopped.value.confirmed is True
+        observed_pid = facade.journal.get(handle.run_id).pid
+        assert observed_pid is not None
+        handle.report_stop(lambda body: transport.client.post("/fixture/stopped", json=body))
+        assert facade.journal.get(handle.run_id).pid == observed_pid
+        assert facade.journal.get(handle.run_id).phase.value == "stop_work"
+    with Session(e.n.t.h.s["engine"]) as db:
+        assert db.query(ManagedStop).one().outcome == "cancelled"
+        assert db.get(JobExecution, "job-1").capacity_reserved is False
+        assert db.query(ManagedApproval).one().issued == 1
+        assert (
+            db.get(Engagement, "eng-1").targets_spent,
+            db.get(Engagement, "eng-1").duration_allocated,
+        ) == (1, 30)

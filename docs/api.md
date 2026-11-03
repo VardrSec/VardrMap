@@ -2299,3 +2299,10 @@ operations, exposed only by explicit disposable test adapters. They require the
 existing owned capability and exact consumed contract. Evidence receipt alone
 never completes work; terminal receipts and inspection rules are documented in
 [ADR 0009](adr/0009-managed-result-receipts.md). No production endpoint is added.
+
+### Managed known-stop prototype
+
+`managed_stops.Stops.report` and `inspect` are unregistered library operations.
+They require the original consumed owned contract and fixed known-termination
+report; neither expiry nor a PID establishes a release right. Stop receipts remain
+separate from result receipts. See [ADR 0010](adr/0010-managed-known-stop-receipts.md).

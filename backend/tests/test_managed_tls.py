@@ -562,3 +562,14 @@ def test_verified_https_results_completion_and_lost_replies(tls_harness, lost):
         flow(t.h, t.transport(), wire=t.wire, lost=lost)
     assert t.wire.forwarded["/fixture/result"] == 1
     assert t.wire.forwarded.get("/fixture/finish", 0) == (0 if lost == "result" else 1)
+
+
+@pytest.mark.parametrize("lost", [False, True])
+def test_verified_https_owned_stop_receipt_and_postcommit_loss(tls_harness, lost):
+    from tests.managed_stop_probe import flow
+
+    t = tls_harness
+    with t.serve():
+        t.issue()
+        flow(t.h, t.transport(), wire=t.wire, lost=lost)
+    assert t.wire.forwarded["/fixture/stopped"] == 1

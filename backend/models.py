@@ -936,3 +936,18 @@ class ManagedResult(Base):
     preflight_failed = Column(Boolean, nullable=False)
     outcome = Column(String(16), nullable=True)
     finished_at = Column(DateTime, nullable=True)
+
+
+class ManagedStop(Base):
+    """Retained exact owned stop receipt; no inferred termination or raw error."""
+
+    __tablename__ = "managed_stops"
+    contract_id = Column(String, primary_key=True)
+    job_id = Column(String, nullable=False)
+    attempt_id = Column(String, nullable=False)
+    fence = Column(Integer, nullable=False)
+    contract_sha256 = Column(String(64), nullable=False)
+    outcome = Column(String(16), nullable=False)
+    cause = Column(String(64), nullable=False)
+    receipt_sha256 = Column(String(64), nullable=False)
+    finished_at = Column(DateTime, nullable=False)

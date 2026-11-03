@@ -139,6 +139,9 @@ def harness(specimen, tmp_path, monkeypatch, map_origin):
     from managed_results import Results
 
     results = Results(service)
+    from managed_stops import Stops
+
+    stops = Stops(results)
 
     def result_args(body):
         return {k: body.pop(k) for k in ("contract_id", "attempt_id", "fence", "contract_sha256")}
@@ -171,6 +174,21 @@ def harness(specimen, tmp_path, monkeypatch, map_origin):
     def inspect(body: dict, request: Request, db=Depends(get_db)):
         args = result_args(body)
         return results.inspect(
+            db, request, job_id="job-1", body=control.ControlRequest(**body), **args
+        )
+
+    @app.post("/fixture/stopped")
+    def stopped(body: dict, request: Request, db=Depends(get_db)):
+        args = result_args(body)
+        report = {k: body.pop(k) for k in ("outcome", "cause", "termination_confirmed")}
+        return stops.report(
+            db, request, job_id="job-1", body=control.ControlRequest(**body), **args, **report
+        )
+
+    @app.post("/fixture/stop-status")
+    def stop_status(body: dict, request: Request, db=Depends(get_db)):
+        args = result_args(body)
+        return stops.inspect(
             db, request, job_id="job-1", body=control.ControlRequest(**body), **args
         )
 
@@ -816,6 +834,13 @@ def test_http_consumption_receipt_to_runner_barrier(harness, lost):
 
 def test_http_managed_evidence_completion_receipts(harness):
     from tests.managed_result_probe import flow
+
+    harness.issue()
+    flow(harness)
+
+
+def test_http_owned_managed_stop_receipt(harness):
+    from tests.managed_stop_probe import flow
 
     harness.issue()
     flow(harness)

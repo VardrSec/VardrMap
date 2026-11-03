@@ -614,3 +614,11 @@ cascading deletion. Managed evidence and legacy uploads share the same redacted
 projection; their authorization and transaction adapters remain distinct. A
 terminal managed receipt releases concurrency capacity without refunding other
 charges. See [ADR 0009](adr/0009-managed-result-receipts.md).
+
+### Retained managed stop receipts
+
+The additive `managed_stops` table retains immutable consumed-contract stop
+binding, cause, outcome and receipt hash without cascading deletion. Confirmed
+terminal reporting releases only concurrency capacity; all spent allowances and
+consumption remain. Unknown execution and missing receipts stay held. See
+[ADR 0010](adr/0010-managed-known-stop-receipts.md).

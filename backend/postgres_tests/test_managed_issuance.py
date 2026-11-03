@@ -355,7 +355,9 @@ def test_managed_consumption_acknowledgement(database, tmp_path, scenario):
     )
 
 
-@pytest.mark.parametrize("scenario", ["lifecycle", "evidence_race", "finish_race", "write_rollback", "delayed_finish"])
+@pytest.mark.parametrize(
+    "scenario", ["lifecycle", "evidence_race", "finish_race", "write_rollback", "delayed_finish"]
+)
 def test_managed_results_transactions(database, tmp_path, scenario):
     _, url = database
     migrate(url, "upgrade", "head")
@@ -367,12 +369,36 @@ def test_managed_results_transactions(database, tmp_path, scenario):
         "delayed_finish": "r.test_storage_failure_or_delay_rolls_back_atomically(pair, 'completion_delay')",
     }
     fixture_process(
-        url, tmp_path,
+        url,
+        tmp_path,
         "import pytest\n"
         "from tests import test_managed_results as r\n"
         "from tests import test_managed_consumption as c\n"
         "with pytest.MonkeyPatch.context() as patch:\n"
         "    consumed = c.consumption.__wrapped__(s, patch)\n"
         "    pair = r.results.__wrapped__(consumed)\n"
+        f"    {calls[scenario]}\n",
+    )
+
+
+@pytest.mark.parametrize("scenario", ["known_stop", "race", "write_rollback", "retained_receipt"])
+def test_managed_stop_transactions(database, tmp_path, scenario):
+    _, url = database
+    migrate(url, "upgrade", "head")
+    calls = {
+        "known_stop": "r.test_explicit_known_stop_receipt_is_immutable_and_spent(pair, 'control_lease_expired')",
+        "race": "r.test_concurrent_reports_have_one_immutable_stop_outcome(pair)",
+        "write_rollback": "r.test_receipt_write_failure_rolls_back_release(pair)",
+        "retained_receipt": "r.test_stop_receipt_survives_job_deletion(pair)",
+    }
+    fixture_process(
+        url,
+        tmp_path,
+        "import pytest\n"
+        "from tests import test_managed_stops as r\n"
+        "from tests import test_managed_consumption as c\n"
+        "with pytest.MonkeyPatch.context() as patch:\n"
+        "    consumed = c.consumption.__wrapped__(s, patch)\n"
+        "    pair = r.stops.__wrapped__(consumed)\n"
         f"    {calls[scenario]}\n",
     )

@@ -528,3 +528,14 @@ parser. `NM2_TLS_LOOPBACK=1` additionally checks real sockets and truncated repl
 after actual result or terminal commit; no target is dispatched. The separate
 Windows/TLS native entry finalization test remains deferred to Papachin and is
 not certified by cloud passes. See [ADR 0009](adr/0009-managed-result-receipts.md).
+
+## Managed known-stop verification
+
+`tests/test_managed_stops.py` covers exact reporting, unknown/foreign denials,
+receipt immutability, competing reports, write rollback and tombstone retention
+after job deletion. Authenticated ASGI/verified loopback TLS fixtures exercise
+the real Runner receipt parser, including loss after actual server commit.
+PostgreSQL repeats known-stop/race/rollback/retention cases under both database
+roles against the migrated 0038 head. Real Windows native reporting is explicitly
+opt-in and remains a separate Papachin gate; cloud fixtures cannot accept it.
+See [ADR 0010](adr/0010-managed-known-stop-receipts.md).

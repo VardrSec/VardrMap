@@ -4,6 +4,10 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Add unregistered managed known-stop reporting and exact retained receipts,
+  with atomic terminal capacity release and no refund or fabricated evidence.
+  Add additive migration 0038; downgrade erasure is refused. See ADR 0010.
+
 - Add unregistered managed evidence/completion receipts and authenticated
   observation, with exact owned artifact/case binding and atomic reservation
   release. Retain counters and legacy guards. Add additive migration 0037;
