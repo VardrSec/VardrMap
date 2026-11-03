@@ -240,11 +240,15 @@ with engine.connect() as conn:
         env={**os.environ, "DATABASE_URL": url, "ENV": "staging", "VARDRMAP_AUTH_METHODS": "local"},
     )
     assert result.returncode == 0, result.stderr
+    with engine.connect() as conn:
+        retained_head = conn.scalar(text("SELECT version_num FROM alembic_version"))
     downgrade = migrate(url, "downgrade", "0030agentproposals", success=False)
-    assert "restore a verified backup" in downgrade.stderr
+    # Later retained-state migrations use the same refusal with a capital R.
+    # Preserve both the refusal and the schema/data retention checks below.
+    assert "restore a verified backup" in downgrade.stderr.lower()
     with engine.connect() as conn:
         assert conn.scalar(text("SELECT count(*) FROM local_credentials")) == 1
-        assert conn.scalar(text("SELECT version_num FROM alembic_version")) == "0031localauth"
+        assert conn.scalar(text("SELECT version_num FROM alembic_version")) == retained_head
 
 
 def test_utc_connections_ignore_non_utc_database_default(database):

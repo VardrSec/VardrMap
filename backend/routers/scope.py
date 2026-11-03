@@ -1,5 +1,6 @@
 import csv
 import io
+import managed_authority
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -104,6 +105,7 @@ def add_in_scope_item(
 ):
     engagement = get_engagement_or_404(program_id, current_user, db)
     require_member_write(engagement, current_user, db)
+    engagement = managed_authority.advance(db, engagement)
     item = ScopeItem(
         program_id=program_id,
         scope_type="in",
@@ -128,6 +130,7 @@ def add_out_scope_item(
 ):
     engagement = get_engagement_or_404(program_id, current_user, db)
     require_member_write(engagement, current_user, db)
+    engagement = managed_authority.advance(db, engagement)
     item = ScopeItem(
         program_id=program_id,
         scope_type="out",
@@ -155,6 +158,7 @@ def delete_scope_item(
         raise HTTPException(status_code=400, detail="Invalid scope type")
     engagement = get_engagement_or_404(program_id, current_user, db)
     require_member_write(engagement, current_user, db)
+    engagement = managed_authority.advance(db, engagement)
     item = db.query(ScopeItem).filter(
         ScopeItem.id == item_id,
         ScopeItem.program_id == program_id,
@@ -186,6 +190,8 @@ def import_scope(
     require_member_write(engagement, current_user, db)
 
     parsed, skipped = _parse_hackerone_scope(payload.csv)
+    if payload.commit:
+        engagement = managed_authority.lock(db, engagement)
 
     existing = {
         (s.scope_type, s.value)
@@ -206,6 +212,7 @@ def import_scope(
 
     created = 0
     if payload.commit and new_items:
+        engagement.managed_authority_revision += 1
         for item in new_items:
             db.add(ScopeItem(
                 program_id=program_id,

@@ -1,5 +1,32 @@
 # Development
 
+Managed issuance checks use `tests/test_managed_issuance.py` and
+`postgres_tests/test_managed_issuance.py`. Keep synthetic association/key records,
+independent signing purposes, real administrator/restricted-role lock races,
+denied-clock interleavings, post-lock expiry and stale ORM identities in coverage.
+Inspect exact rollback of all fees, ownership, ordinals and case snapshots. The
+PostgreSQL fixture must use a disposable `vardrmap_test*` database; local native
+validation uses verify-full TLS/SCRAM with its own temporary CA. Never disable TLS
+or use host firewall/service changes for these tests. Raw failures stay private;
+review metadata is explicitly sanitized. No actual tool is invoked in this slice.
+
+`backend/tests/test_managed_wire.py` verifies public synthetic v1 wire vectors,
+purpose/key separation, owner provenance, expiry and bounded parsing. Run tests
+with an explicit child-process environment allowlist, synthetic authentication,
+disposable `vardrmap_test*` database and `PYTHON_DOTENV_DISABLED=1`. Installed
+python-dotenv 1.2.4 supports this before file discovery; never read retained `.env`
+or install into retained test environments. Raw failure output stays private;
+review evidence uses explicitly labeled sanitized derivatives. The adapter is
+unregistered and does not import Runner code. See [wire boundary](adr/0006-managed-contract-wire.md).
+
+NM-2 cancellation uses disposable fixtures in `backend/tests/test_execution_control.py`.
+Run `backend/postgres_tests/test_execution_control.py` against a dedicated
+`vardrmap_test*` PostgreSQL database to verify real cancellation/finalization lock
+ordering as both administrator and application role. SQLite does not verify those
+locks. Migration `0032executioncontrol` is additive; do not apply it to retained
+installations for development checks. Its downgrade retains fences by refusing
+table deletion. Whole NM-2 acceptance is separate from this first increment.
+
 ## Prerequisites
 
 For local-account development, install the updated backend requirements and read
@@ -451,6 +478,14 @@ the loopback three-repository harness exercises actual Gate execution.
 
 ## Container development
 
+The explicit `backend/tests/test_managed_entry.py` fixture additionally requires
+`NM2_PRECLAIM_ENTRY=1` and the existing native/TLS opt-ins. It exercises Runner's
+unregistered one-shot entry using a test-only claim adapter that includes the
+actual frozen case snapshot. It verifies local evidence retention, ambiguous
+claim/binding holds and local stop without uploads, completion or release.
+See [ADR 0007](adr/0007-transactional-managed-issuance.md). Use only disposable
+profiles/databases, synthetic trust and owned loopback resources.
+
 See [container setup](containers.md) for build contexts, non-root runtime, build-time API URL and proxy trust. These images retain the existing hosted authentication configuration.
 
 Settings includes [platform/Runner observations](platform-status.md) without new
@@ -459,3 +494,103 @@ additive heartbeat metadata. The local HTTPS browser journey checks real unready
 SQLite readiness, a real account-owned heartbeat, and an injected readiness
 transport failure. Frontend tests cover stale, unknown, malformed and failed polls.
 These fixtures do not certify fresh-host certificate trust or a full diagnostic run.
+
+## Local NM-2 consumption fixtures
+
+`tests/test_managed_consumption.py` checks exact acknowledgements, changed bindings,
+revocation/expiry, delayed rollback and independent-connection winner selection.
+With explicit `NM2_RUNNER_SOURCE`, `tests/test_managed_http.py` also sends actual
+API-key-authenticated JSON through the test-only ASGI adapter to the production
+Runner ACK parser, including a lost post-commit reply. No target is dispatched.
+
+`postgres_tests/test_managed_issuance.py` repeats single-use, race and delayed-write
+checks in migrated schemas as administrator and the restricted application role.
+Use a disposable `vardrmap_test*` database with explicit certificate trust and TLS
+verification. The Windows/TLS entry adapter has been updated but still requires
+real Windows execution; portable fixtures do not accept native containment.
+
+With `NM2_TLS_LOOPBACK=1` and the matching Runner source, the real socket suite
+also verifies the consumption ACK and a truncated post-commit response through
+Runner's existing `api.py` client. It keeps explicit CA/hostname verification,
+zero retries and zero redirects on fixture instances. This is loopback transport
+evidence, not real Windows containment or an activated production adapter.
+
+## Managed evidence/completion verification
+
+`tests/test_managed_results.py` checks case/contract binding, redaction, immutable
+replay, preflight failure, permission denial, delayed rollback and competing
+result/outcome transactions. Legacy Gate/semantic tests continue to use the same
+projection. PostgreSQL scenarios repeat migrations, evidence and completion races
+and rollback as administrator and restricted application role, with verified TLS.
+
+With matching `NM2_RUNNER_SOURCE`, ASGI fixtures exercise the real Runner receipt
+parser. `NM2_TLS_LOOPBACK=1` additionally checks real sockets and truncated replies
+after actual result or terminal commit; no target is dispatched. The separate
+Windows/TLS native entry finalization test remains deferred to Papachin and is
+not certified by cloud passes. See [ADR 0009](adr/0009-managed-result-receipts.md).
+
+## Managed known-stop verification
+
+`tests/test_managed_stops.py` covers exact reporting, unknown/foreign denials,
+receipt immutability, competing reports, write rollback and tombstone retention
+after job deletion. Authenticated ASGI/verified loopback TLS fixtures exercise
+the real Runner receipt parser, including loss after actual server commit.
+PostgreSQL repeats known-stop/race/rollback/retention cases under both database
+roles against the migrated 0038 head. Real Windows native reporting is explicitly
+opt-in and remains a separate Papachin gate; cloud fixtures cannot accept it.
+See [ADR 0010](adr/0010-managed-known-stop-receipts.md).
+
+## Managed claim observation fixtures
+
+The claim observation tests cover lost claim replies, expired/revoked approvals,
+wrong enrolled keys, inconsistent state, races, source changes and receipt
+regressions. Runner restart fixtures require prior durable native result/stop
+proof; generic terminal metadata cannot close a run. Map's fixture-only HTTP and
+verified TLS adapters exercise the production Runner parser. PostgreSQL repeats
+absence, claim races and terminal receipts under both database roles. Full-suite
+coverage/static checks remain required. Windows/Papachin, independent acceptance,
+CI/security and migration gates remain open. No production route is registered.
+
+## Explicit Runner managed transport fixtures
+
+The browser acceptance suite also checks visible session expiry. Provider-level
+401 handling retains its specific notice across concurrent bootstrap requests;
+ordinary engagement errors and success toasts keep their existing behavior.
+`AppContext.test.tsx` covers concurrent bootstrap responses and the ordinary toast timer.
+
+The opt-in verified TLS suite exercises Runner's bounded managed JSON primitive
+with actual authentication, result/stop/observation flows, redirects, invalid CA,
+ambiguous claim replies and size/JSON negatives. Test adapters alone register
+fixture routes; no production Map route, key, enrollment or migration is added.
+See [canonical NM-2 exit status](nm2-canonical-exit-status.md): this does not prove
+the required operator-enabled Docker Desktop worker or Linux/container control.
+
+## Read-only managed observation adapter tests
+
+`tests/test_managed_observation_http.py` mounts only the explicit router factory
+in a synthetic app, with actual API-key authentication and disposable SQL. It
+checks unchanged business state and authorization failures, exact bounded inputs,
+read timeout/disconnect, no capability/error reflection and absence from `main`.
+The opt-in TLS suite sends result and stop observations through this adapter using
+the unchanged Runner managed transport. No production route or key is provisioned.
+See [ADR 0012](adr/0012-unregistered-observation-http.md). Worker/container and
+independent acceptance gates remain open.
+
+## NM-2 remaining verification and decisions
+
+The observation HTTP PostgreSQL cases use migrated administrator/restricted roles
+and actual API authentication/request-scoped sessions through the threadpool.
+Verified TLS additionally emulates existing Full `/backend` prefix stripping while
+preserving the exact signed API-base identity and result/stop receipts. Neither
+fixture enrolls live credentials or executes a target. The
+[pending worker decision record](nm2-worker-decisions-pending.md) lists approved
+constraints and unresolved containment/bootstrap/lifecycle choices; none is chosen.
+
+Run PostgreSQL test collection from `backend`: `python -m pytest postgres_tests -v`.
+These modules share fixtures through the `postgres_tests` package; invoking that
+directory from the repository root does not establish its parent import path.
+
+PostgreSQL CI enables direct Runner HTTP/TLS probes in the Map test interpreter.
+Install the pinned companion with its authorization extra in that interpreter;
+the separate CLI virtual environment alone does not satisfy those imports. This
+is a CI fixture dependency, not a Map application/runtime requirement.

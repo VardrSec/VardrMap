@@ -1,5 +1,59 @@
 # API Reference
 
+Local managed-issuance builds (`0036managedauth`) accept the optional strict
+boolean `authorization_contract_required` on single fixed Gate job creation.
+It defaults to false and is returned only when true. A required job is inert
+without approval and refuses the legacy claim, live-control, upload and successful
+finish paths. Contract-required pipeline requests are unsupported (400); they
+cannot silently become ordinary jobs. No HTTP approve, signing, enrollment or
+managed execution route is registered by this prototype. Existing omitted calls
+remain unchanged. See [ADR 0007](adr/0007-transactional-managed-issuance.md).
+
+Local duration-budget builds add owner/full-scope
+`PUT /engagements/{program_id}/duration-policy` with required `limit_seconds`.
+Owned claims supply `duration_seconds` (1–86400); receipts return `duration_budget`
+with allocated seconds, cumulative allocated total and ceiling. These are
+nonrefundable allocations, not measured consumption. See
+[the enforcement scope and cleanup overshoot](nm2-duration-budget.md).
+
+Local target-ceiling builds add owner/full-scope
+`PUT /engagements/{program_id}/target-policy` with required `limit` (1–1000000 or
+explicit null before any spend, while idle). Owned fixed Gate claims supply
+`target_binding` with profile, case SHA-256 and canonical origins. Receipts return
+`target_budget` with binding/charged/spent/limit. Spend is cumulative and never
+refunded. See [scope, exclusions and persistence](nm2-target-budget.md).
+
+Local NM-2 builds add owner/full-scope `PUT /engagements/{program_id}/concurrency-policy`
+with required `limit` (1–1000, or explicit null while idle). Enabled engagements
+require owned claims with `concurrency_budget:true`; receipts confirm
+`capacity_reserved:true`. Exhausted capacity/unsafe reconfiguration/deletion return
+409. See [the scope and protocol](nm2-concurrency-budget.md).
+
+NM-2 local source builds add explicit owned execution control (not execution
+approval or a worker):
+
+| Method and route | Contract |
+|---|---|
+| `POST /jobs/{job_id}/claim` | Optional `{runner_id: UUID, origin: exact Map URL}` body requires API-key authentication and returns one `execution_control` capability with a ten-second lease. Omitting the body keeps the legacy response/path. |
+| `POST /jobs/{job_id}/control` | `{runner_id, origin, token}` must match the job, authenticated key and claim. Returns `action: continue/cancel` and `lease_seconds`. Expired attempts never renew. |
+| `POST /jobs/{job_id}/execution-finish` | Same bindings plus `outcome: completed/failed/cancelled/uncertain`. A cancellation request or expired lease refuses completed. Uncertain retains running status; cancelled requires the owning Runner's stopped acknowledgement. |
+| `GET /jobs/{job_id}/execution` | Scoped read of control state and acknowledgement; expiry is reported as uncertain, without pretending the process is stopped. No capability is returned. |
+
+For controlled running jobs, legacy `PATCH /jobs/{job_id}` with failed requests
+sticky cancellation from a full-access writer; it returns running until confirmed.
+Legacy PATCH cannot set controlled done. Ordinary jobs keep existing behavior.
+`POST /engagements/{program_id}/stop-work` blocks claims and makes active controlled
+attempts cancel-requested. Releasing stop-work never revives those attempts.
+Remote stops depend on connectivity and bounded lease expiry. See
+[ADR 0006](adr/0006-owned-execution-control.md) for ownership, races and rollback.
+
+Control responses use `Cache-Control: no-store`; malformed claim/control/finalization
+payloads return a generic 422 without reflecting capability values.
+
+The NM-1 issuance adapter is an unregistered read-only prototype, not an API
+endpoint. It cannot approve/claim/execute jobs; see
+[ADR 0005](adr/0005-nm1-contract-issuance.md).
+
 Protected endpoints require authentication unless noted otherwise: a browser JWT
 (minted after GitHub OAuth), a personal `vmap_` API key in
 `Authorization: Bearer <token>`, or an enabled local browser session cookie.
@@ -2228,3 +2282,59 @@ verifier diagnostics. They do not establish a denied write. Validate coordinated
 versions with the [strict semantic contract](../scripts/integration/README.md#semantic-evidence-and-version-compatibility)
 before rollout; older Map backends may accept the upload without retaining these
 conclusions, and older companions may lack independent reader/strategy support.
+
+### Local managed consumption prototype
+
+Managed jobs refuse every outcome on the legacy `execution-finish` endpoint,
+including `failed`, `cancelled` and `uncertain`. An ordinary execution capability
+cannot replace the exact managed contract/fence, consumption acknowledgment or
+result/known-stop receipt. Refusal leaves execution ownership and all reservations
+unchanged; legacy jobs retain their existing finish behavior.
+
+`Issuer.consume` is an unregistered library operation, not an available HTTP API.
+Only explicit disposable fixtures expose it. It validates current owned permission
+and the signed-contract hash, then atomically consumes once without renewing the
+lease, completing the job or releasing reservations. Exact ACK and unknown-reply
+rules are in [ADR 0008](adr/0008-managed-consumption-ack.md). Existing marked-job
+legacy claim/control/upload/completion refusals remain in force.
+
+### Managed result prototype
+
+`managed_results.Results.submit`, `finish` and `inspect` are unregistered library
+operations, exposed only by explicit disposable test adapters. They require the
+existing owned capability and exact consumed contract. Evidence receipt alone
+never completes work; terminal receipts and inspection rules are documented in
+[ADR 0009](adr/0009-managed-result-receipts.md). No production endpoint is added.
+
+### Managed known-stop prototype
+
+`managed_stops.Stops.report` and `inspect` are unregistered library operations.
+They require the original consumed owned contract and fixed known-termination
+report; neither expiry nor a PID establishes a release right. Stop receipts remain
+separate from result receipts. See [ADR 0010](adr/0010-managed-known-stop-receipts.md).
+
+### Managed claim observation prototype
+
+`managed_observations.Observations.inspect` is an unregistered library operation.
+Its fixture-only adapter accepts original origin/Runner and plan/case/association
+hashes with the original enrolled API key; no control token is accepted or returned.
+It returns bounded metadata and existing immutable receipts without renewing,
+releasing or retrying work. Absence is only a snapshot. See
+[ADR 0011](adr/0011-managed-claim-observation.md).
+
+### Unregistered observation HTTP factory
+
+`managed_observation_http.build_observation_router(existing_service)` reserves
+`POST /jobs/{job_id}/managed/observation` for isolated integration. **It is not
+registered by the production app.** It accepts origin, Runner UUID and exact
+plan/case/association fingerprints using the original enrolled API key. It rejects
+control tokens and other extra fields, returns no capability, and changes no
+business state. Successful observations use the existing v1 metadata/receipt shape.
+
+The adapter requires HTTPS, JSON without content compression, at most 8 KiB of
+request bytes within three seconds of body reading, and at most 16 KiB of reply.
+Handled errors and success are non-cacheable and never echo submitted content.
+The adapter preserves authentication/access status codes; malformed bodies use
+422, unsupported media 415, excess body 413, body timeout 408, disconnect 400,
+service refusal 409 and unavailable service 503. No mutation endpoint is exposed.
+See [ADR 0012](adr/0012-unregistered-observation-http.md).

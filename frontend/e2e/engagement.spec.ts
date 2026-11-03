@@ -63,7 +63,8 @@ test("API playbook, partial assessment and evidence linking use the real backend
   ] };
   const stored = await post(request, base + "/test-cases", headers, { name: "Ownership", spec });
   const job = await post(request, base + "/jobs", headers, { tool_type: "vardrgate_api_test", target_source: "scope", config: { test_case_id: stored.id } });
-  await post(request, `/jobs/${job.id}/claim`, headers, {});
+  // Legacy claims omit the control body; an empty object is not a valid control request.
+  await post(request, `/jobs/${job.id}/claim`, headers, undefined);
   const canonical = (value: unknown): unknown => Array.isArray(value) ? value.map(canonical) : value && typeof value === "object" ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => [k, canonical(v)])) : value;
   const caseHash = createHash("sha256").update(JSON.stringify(canonical(spec))).digest("hex");
   // Synthetic result exercises storage and UI. Real execution is tested by the

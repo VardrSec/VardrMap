@@ -1,5 +1,54 @@
 # Architecture
 
+The legacy execution-finish route refuses every outcome for managed jobs. Only
+the existing exact managed result or known-stop receipt protocol can release their
+capacity; a failed/cancelled claim or uncertain termination cannot bypass it.
+
+
+The unregistered `managed_issuance.Issuer` composes existing owned execution and
+budget accounting with separately verified operator receipts. Approval, contract,
+association and clock records are retained by `0036managedauth`. Authority/scope
+mutations share the engagement lock and advance an internal monotonic revision;
+change/revert cannot revive old signed context. An explicit per-job requirement
+blocks legacy execution even before approval exists. No default engagement mode,
+worker, real enrollment or managed execution route is added. See
+[ADR 0007](adr/0007-transactional-managed-issuance.md) for transaction boundaries.
+
+`backend/managed_wire.py` is an opt-in unregistered crypto wire primitive. It
+verifies enrolled operator public-key approval receipts and constructs exact v1
+contract envelopes with a distinct contract signing key. It owns no scope/plan
+validator, approval-signing route or key enrollment/discovery mechanism. Runner
+remains the full policy validator/execution engine over HTTP. Transactional
+issuance and authenticated managed runtime integration remain separate increments.
+
+Cumulative duration allocation uses nullable `programs.duration_limit`, durable
+`duration_allocated` and owned-attempt `duration_seconds` (`0035durationbudget`).
+The engagement lock serializes finite allocation with claim and policy mutation;
+no finalization or deletion refunds it. Runner enforces a monotonic permission
+window independently of accounting. See [the exact scope](nm2-duration-budget.md).
+
+The opt-in cumulative target slice adds nullable `programs.target_limit`, durable
+`targets_spent` and owned-attempt charge/binding metadata (`0034targetbudget`).
+Spend increments only with a successful claim under the existing engagement lock
+and is never released. It counts conservative represented-origin attempts for
+guarded fixed Gate cases. See [the bounded design](nm2-target-budget.md).
+
+Opt-in engagement capacity uses nullable `programs.concurrency_limit` and durable
+`job_executions.capacity_reserved` (`0033concurrencybudget`). The engagement lock
+serializes reservation, policy mutation and deletion. Only owned confirmed terminal
+outcomes release capacity; uncertainty holds it. Map coordinates and Runner
+executes. See [the bounded design](nm2-concurrency-budget.md).
+
+NM-2 adds opt-in owned manual execution control, described in
+[ADR 0006](adr/0006-owned-execution-control.md). An additive `job_executions` table
+holds per-attempt ownership, hashed control capability, lease and cancellation
+state. It preserves legacy jobs, engagement policy, case hashes and evidence.
+No execution worker or managed authorization approval route is enabled.
+
+NM-1 adds an opt-in, unregistered authorization issuance projection; see
+[ADR 0005](adr/0005-nm1-contract-issuance.md). It changes no installed job or
+engagement behavior and does not enable a worker.
+
 ## Product Family
 
 VardrMap is part of the VardrSec product family. Each product is a separate deployable unit that integrates with the others via the VardrMap API and `vmap_` API keys.
@@ -553,3 +602,47 @@ authority; statement completeness cannot turn an unknown result into protection.
 The UI shows expected permission, raw outcome, scanner assessment, credential
 check and independent readback provenance. Linking evidence to a confirmed finding
 remains an explicit operator action. Historical evidence is not rewritten.
+
+### Retained managed consumption
+
+The local prototype uses the existing `ManagedContract.consumed` bit as a one-shot
+conditional transition under the owned current-authority transaction. Only the
+first valid caller receives an exact bound ACK. This does not establish managed
+evidence/completion or release reservations, and has no production route. See
+[ADR 0008](adr/0008-managed-consumption-ack.md).
+
+### Managed result receipts
+
+The additive `managed_results` table retains contract/attempt/case/artifact hashes,
+projection counts and immutable terminal outcome without raw result content or
+cascading deletion. Managed evidence and legacy uploads share the same redacted
+projection; their authorization and transaction adapters remain distinct. A
+terminal managed receipt releases concurrency capacity without refunding other
+charges. See [ADR 0009](adr/0009-managed-result-receipts.md).
+
+### Retained managed stop receipts
+
+The additive `managed_stops` table retains immutable consumed-contract stop
+binding, cause, outcome and receipt hash without cascading deletion. Confirmed
+terminal reporting releases only concurrency capacity; all spent allowances and
+consumption remain. Unknown execution and missing receipts stay held. See
+[ADR 0010](adr/0010-managed-known-stop-receipts.md).
+
+### Managed claim observation after restart
+
+An explicit unregistered observation authenticates the original enrolled principal
+and plan/case/association fingerprints without returning a control capability.
+It records metadata only; absence never authorizes a retry. Reconciliation closes
+only an existing exact durable result/stop intent, preserving native proof and
+uncertainty fences. Ordinary recovery remains deferred. See
+[ADR 0011](adr/0011-managed-claim-observation.md).
+
+### Read-only observation HTTP composition
+
+An unregistered router factory adapts the existing enrolled-principal observation
+service without constructing an issuer or reading key configuration. Only explicit
+synthetic apps include it. It adds bounded strict input decoding, a body-read
+wait limit, non-cacheable fixed errors and a reply-size ceiling while preserving
+service authentication, membership and receipt semantics. No claim, renewal,
+accounting or execution route is registered. See
+[ADR 0012](adr/0012-unregistered-observation-http.md).

@@ -415,3 +415,20 @@ def test_upload_to_another_users_job_is_404(client, auth_headers, other_headers,
 
 def test_upload_to_an_unknown_job_is_404(client, auth_headers):
     assert client.post("/jobs/nope/upload", json=_RESULT, headers=auth_headers).status_code == 404
+
+
+def test_upload_receipt_replay_preserves_notification_noop(client, auth_headers, program_id, monkeypatch):
+    from unittest.mock import Mock
+    from routers import jobs
+
+    case = _store_case(client, auth_headers, program_id)
+    job = _queue(client, auth_headers, program_id, case).json()["id"]
+    notify = Mock()
+    monkeypatch.setattr(jobs._sse, "notify", notify)
+    body = {"test_case_id": "bola-check", "executions": [], "findings": []}
+    assert client.post(f"/jobs/{job}/upload", json=body, headers=auth_headers).status_code == 200
+    notify.assert_called_once()
+    notify.reset_mock()
+    replay = client.post(f"/jobs/{job}/upload", json=body, headers=auth_headers)
+    assert replay.status_code == 200 and replay.json()["already_processed"] is True
+    notify.assert_not_called()

@@ -198,6 +198,12 @@ class Client(Base):
 class Engagement(Base):
     __tablename__ = "programs"
 
+    concurrency_limit = Column(Integer, nullable=True)
+    target_limit = Column(Integer, nullable=True)
+    targets_spent = Column(Integer, nullable=False, default=0)
+    duration_limit = Column(Integer, nullable=True)
+    duration_allocated = Column(Integer, nullable=False, default=0)
+
     id = Column(String, primary_key=True, default=new_uuid)
     owner_github_id = Column(String, ForeignKey("users.github_id"), nullable=False, index=True)
     name = Column(String(120), nullable=False)
@@ -224,6 +230,7 @@ class Engagement(Base):
     # no ceiling. When set, the job API caps a job's rate for the tools that send
     # live traffic (httpx/nuclei/katana/ffuf) so a program's rate limit is honored.
     max_request_rate = Column(Integer, nullable=True)
+    managed_authority_revision = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     owner = relationship("User", back_populates="engagements")
@@ -552,6 +559,9 @@ class ScanJob(Base):
     target_source = Column(String(20), nullable=False)      # "scope" or "recon"
     config = Column(JSON, nullable=True)                    # tool-specific options
     case_snapshot = Column(JSON, nullable=True)             # spec frozen at claim
+    # Opt-in only. Legacy claims must refuse; only the managed issuer can spend it.
+    managed_approval_id = Column(String(300), nullable=True)
+    authorization_contract_required = Column(Boolean, nullable=False, default=False)
     assessment = Column(JSON, nullable=True)                # independent of lifecycle
     status = Column(String(20), default="pending")          # pending | running | done | failed
     # Soft ref to the scan_job this stage waits on. A dependent job stays out of
@@ -566,6 +576,80 @@ class ScanJob(Base):
     engagement = relationship("Engagement", back_populates="scan_jobs")
     events = relationship("JobEvent", back_populates="job", cascade="all, delete-orphan", order_by="JobEvent.created_at")
     result_links = relationship("JobResultLink", cascade="all, delete-orphan")
+
+
+class JobExecution(Base):
+    """One opt-in execution owner per job; expired/uncertain attempts never reopen."""
+
+    __tablename__ = "job_executions"
+    job_id = Column(String, ForeignKey("scan_jobs.id", ondelete="CASCADE"), primary_key=True)
+    runner_id = Column(String(36), nullable=False)
+    origin = Column(String(500), nullable=False)
+    owner = Column(String, nullable=False)
+    principal_hash = Column(String(64), nullable=False)
+    token_hash = Column(String(64), nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    state = Column(String(30), nullable=False)
+    capacity_reserved = Column(Boolean, nullable=False, default=False)
+    target_charge = Column(Integer, nullable=False, default=0)
+    target_binding = Column(JSON, nullable=True)
+    duration_seconds = Column(Integer, nullable=False, default=0)
+
+
+class ManagedEnrollment(Base):
+    """Explicit server-provisioned association; no enrollment API/bootstrap here."""
+
+    __tablename__ = "managed_enrollments"
+    __table_args__ = (UniqueConstraint("principal_hash", "runner_id", name="uq_managed_principal_runner"),)
+    id = Column(String, primary_key=True)
+    api_key_id = Column(String, nullable=False)
+    owner = Column(String, nullable=False)
+    principal_hash = Column(String(64), nullable=False)
+    runner_id = Column(String(36), nullable=False)
+    origin = Column(String(500), nullable=False)
+    revision = Column(Integer, nullable=False)
+    revoked = Column(Boolean, nullable=False, default=False)
+
+
+class ManagedApproval(Base):
+    """Retained signed approval/counters, including deleted jobs and unknown attempts."""
+
+    __tablename__ = "managed_approvals"
+    __table_args__ = (UniqueConstraint("issuer", "approval_id", name="uq_managed_approval_identity"),)
+    id = Column(String(300), primary_key=True)
+    issuer = Column(String(128), nullable=False)
+    approval_id = Column(String(128), nullable=False)
+    job_id = Column(String, nullable=False, index=True)
+    engagement_id = Column(String, nullable=False, index=True)
+    enrollment_id = Column(String, nullable=False)
+    authorization_id = Column(String, nullable=False)
+    revision = Column(Integer, nullable=False)
+    owner = Column(String, nullable=False)
+    envelope = Column(JSON, nullable=False)
+    plan = Column(JSON, nullable=False)
+    context = Column(JSON, nullable=False)
+    authority_snapshot = Column(JSON, nullable=False)
+    issued = Column(Integer, nullable=False, default=0)
+    revoked = Column(Boolean, nullable=False, default=False)
+
+
+class ManagedContract(Base):
+    __tablename__ = "managed_contracts"
+    __table_args__ = (UniqueConstraint("approval_record_id", "ordinal", name="uq_managed_approval_ordinal"),)
+    id = Column(String, primary_key=True)
+    job_id = Column(String, nullable=False, unique=True)
+    approval_record_id = Column(String(300), nullable=False)
+    ordinal = Column(Integer, nullable=False)
+    attempt_id = Column(String, nullable=False)
+    fence = Column(Integer, nullable=False)
+    envelope = Column(JSON, nullable=False)
+    consumed = Column(Boolean, nullable=False, default=False)
+
+
+class ManagedClock(Base):
+    __tablename__ = "managed_clock"
+    id = Column(Integer, primary_key=True)
+    observed = Column(DateTime, nullable=False)
 
 
 class JobResultReceipt(Base):
@@ -833,3 +917,37 @@ class AgentProposal(Base):
     created_at = Column(DateTime, nullable=True, default=lambda: datetime.now(timezone.utc))
     resolved_at = Column(DateTime, nullable=True)
     resolved_by = Column(String, default="")
+
+
+class ManagedResult(Base):
+    """Immutable result/terminal receipts retained after job deletion; no raw payload."""
+
+    __tablename__ = "managed_results"
+    contract_id = Column(String, primary_key=True)
+    job_id = Column(String, nullable=False)
+    attempt_id = Column(String, nullable=False)
+    fence = Column(Integer, nullable=False)
+    contract_sha256 = Column(String(64), nullable=False)
+    artifact_sha256 = Column(String(64), nullable=False)
+    case_sha256 = Column(String(64), nullable=False)
+    receipt_sha256 = Column(String(64), nullable=False)
+    evidence_created = Column(Integer, nullable=False)
+    scan_items_created = Column(Integer, nullable=False)
+    preflight_failed = Column(Boolean, nullable=False)
+    outcome = Column(String(16), nullable=True)
+    finished_at = Column(DateTime, nullable=True)
+
+
+class ManagedStop(Base):
+    """Retained exact owned stop receipt; no inferred termination or raw error."""
+
+    __tablename__ = "managed_stops"
+    contract_id = Column(String, primary_key=True)
+    job_id = Column(String, nullable=False)
+    attempt_id = Column(String, nullable=False)
+    fence = Column(Integer, nullable=False)
+    contract_sha256 = Column(String(64), nullable=False)
+    outcome = Column(String(16), nullable=False)
+    cause = Column(String(64), nullable=False)
+    receipt_sha256 = Column(String(64), nullable=False)
+    finished_at = Column(DateTime, nullable=False)

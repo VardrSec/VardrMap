@@ -4,6 +4,112 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Install the pinned Runner authorization dependencies in the Map PostgreSQL
+  test interpreter as well as the separate CLI fixture environment.
+
+- Collect PostgreSQL CI checks from the backend package directory so existing
+  shared fixtures import correctly; no database or test assertions are skipped.
+
+- Preserve the session-expiry notice across concurrent unauthorized bootstrap
+  requests and ordinary toast expiry; backend authentication remains unchanged.
+
+- Keep the browser evidence fixture on the legacy no-body claim API, preserving
+  strict validation of explicit execution-control payloads.
+
+- Pin the bounded Runner candidate for PostgreSQL CI and enable the isolated
+  managed protocol/TLS fixtures. Record one exact historical prose false positive
+  without broadening secret-scan exclusions.
+
+- Refuse every legacy execution-finish outcome for managed jobs, preserving owned
+  capacity and receipt state until the managed result or known-stop protocol completes.
+
+- Verify observation HTTP sessions under both PostgreSQL roles and signed receipt
+  flows behind Full's existing API prefix. Record pending worker decisions without
+  choosing or implementing containment, bootstrap or lifecycle architecture.
+
+- Add an unregistered read-only managed observation HTTP factory with strict
+  bounded inputs, fixed non-cacheable errors and existing enrollment/receipt
+  checks. No production registration, execution or issuer activation. See ADR 0012.
+
+- Verify Runner's explicit bounded managed JSON transport over synthetic TLS,
+  including receipt flows and failure paths. Reconcile canonical NM-2 worker exit;
+  no production routes, enrollment, migration or activation changes.
+
+- Add explicit capability-free managed claim observation bound to the original
+  enrolled principal and fingerprints. Reconcile only existing exact durable
+  result/stop intents; no retry, lease renewal or runtime activation. See ADR 0011.
+
+- Add unregistered managed known-stop reporting and exact retained receipts,
+  with atomic terminal capacity release and no refund or fabricated evidence.
+  Add additive migration 0038; downgrade erasure is refused. See ADR 0010.
+
+- Add unregistered managed evidence/completion receipts and authenticated
+  observation, with exact owned artifact/case binding and atomic reservation
+  release. Retain counters and legacy guards. Add additive migration 0037;
+  receipt deletion on downgrade is refused. See ADR 0009.
+
+- Add an unregistered one-shot managed consumption acknowledgement bound to
+  current owned permission and the exact signed contract. Preserve leases,
+  reservations and legacy refusals; no production route or completion. See ADR 0008.
+
+- Add four explicit real Windows/TLS pre-claim entry tests for Runner's durable
+  handoff and recovery fence: local artifact, lost claim reply, binding failure
+  and local stop. No production route, schema or managed finalization changes.
+
+- Add an explicit real-clock Windows/Gate fixture using existing synthetic TLS
+  authorization and Runner native execution. Local success and confirmed stops
+  retain managed reservations; no runtime API, evidence or completion is enabled.
+
+- Add explicit disposable loopback HTTPS tests using Runner's existing HTTP
+  client, verified named certificates and per-fixture no-redirect/no-retry policy.
+  This enables no runtime endpoint, trust enrollment or deployment support.
+
+- Add an unregistered managed refresh primitive that validates current authority
+  and renews its bounded lease atomically. A synthetic HTTP/shared-Runner-validator
+  harness ends at an inert launch sentinel; no managed execution route is enabled.
+
+- Serialize SQLite legacy and managed claims, reservation deletion and stop-work
+  revisions through one writer boundary; refresh owned cancellation state before
+  accepting current permission. Managed execution remains disabled.
+
+- Add retained local managed approval/issuance state (`0036managedauth`), atomic
+  owned claim/ordinal/budget spending, current authority/principal binding and
+  monotonic clock/revision checks. Explicit contract-required Gate jobs remain
+  inert through legacy claim/control/result adapters; managed execution is not
+  enabled. Ordinary omitted behavior and advisory policy stay unchanged.
+
+- Add an unregistered Authorization Contract v1 wire adapter for separately
+  operator-signed approval verification and contract-only signing. Distinct keys
+  and synthetic cross-repository vectors preserve the Runner validation boundary.
+  This primitive alone does not enable managed queue execution or enrollment.
+
+- Add explicit cumulative duration allocations for owned attempts, bound finite
+  receipts and nonrefundable accounting (`0035durationbudget`). Matching opt-in
+  Runner enforces monotonic permission; allocations are not measured consumption
+  or a hard total-job bound. No default migration, worker or phase closure.
+
+- Add explicit cumulative engagement target ceilings for bound fixed Gate owned
+  attempts, charging all represented contact origins without refunds. Requires
+  `0034targetbudget` and matching opt-in Runner. No default migration, worker,
+  duration budget or universal network/RPS claim is added.
+
+- Add owner/full-scope engagement concurrency policy and atomic owned claim
+  reservations, retaining capacity on uncertainty and protecting deletion.
+  Requires `0033concurrencybudget` and matching opt-in Runner. Existing engagements
+  stay unconfigured; no worker or target/duration budget is enabled.
+
+- Add explicitly opted-in manual job execution ownership, ten-second control
+  leases and sticky stop-work/cancellation requests, with authenticated owner
+  acknowledgement and conservative uncertainty. Additive migration
+  `0032executioncontrol` is required for matching Runner `--controlled` source
+  builds; no worker, legacy migration or Strict authorization claim is enabled.
+  The existing job UI distinguishes a requested cancellation from a terminal
+  response, and control validation errors never reflect capability tokens.
+
+- Add an unregistered read-only NM-1 issuance adapter for owner-reviewed, bounded
+  reusable execution approvals. It snapshots explicit authorization/scope and binds
+  the unresolved Gate case; no routes, migrations, legacy policy or jobs change.
+
 - Add focused Naabu-to-Map verification. The integration acceptance runs a real Runner worker
   against the scope and a real Map backend with a stand-in `naabu` process and checks that every
   service the job reports is stored with `source: "naabu"`, linked to the job and never labelled

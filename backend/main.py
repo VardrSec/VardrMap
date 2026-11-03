@@ -221,6 +221,11 @@ async def validation_error(request: Request, exc: RequestValidationError):
     if request.url.path.startswith("/auth/local/"):
         return JSONResponse({"detail": "Invalid authentication request"}, status_code=422,
                             headers={"Cache-Control": "no-store"})
+    if request.url.path.startswith("/jobs/") and request.url.path.endswith(
+        ("/claim", "/control", "/execution-finish")
+    ):
+        return JSONResponse({"detail": "Invalid execution control request"}, status_code=422,
+                            headers={"Cache-Control": "no-store"})
     return await request_validation_exception_handler(request, exc)
 app.include_router(clients.router,        dependencies=_full)
 app.include_router(authorizations.router, dependencies=_full)

@@ -1,3 +1,5 @@
 # Historical synthetic signing key for a disposable PostgreSQL test subprocess.
 # Replaced by a generated per-run key; this exception matches only that finding.
 f6c26eae5232672b3aed85a8f2ba34200bfd3edd:backend/postgres_tests/test_local_auth_concurrency.py:generic-api-key:35
+# Independently reviewed immutable synthetic-test/plain-prose false positives only.
+275b37e2ed237f7dfa7aa0ae54bce8868f8058c0:docs/development.md:generic-api-key:557
