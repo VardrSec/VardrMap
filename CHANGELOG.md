@@ -4,6 +4,10 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Pin the bounded Runner candidate for PostgreSQL CI and enable the isolated
+  managed protocol/TLS fixtures. Record one exact historical prose false positive
+  without broadening secret-scan exclusions.
+
 - Refuse every legacy execution-finish outcome for managed jobs, preserving owned
   capacity and receipt state until the managed result or known-stop protocol completes.
 
