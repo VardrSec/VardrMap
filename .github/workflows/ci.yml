@@ -76,7 +76,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           repository: VardrSec/VardrRunner
-          ref: 4b835e96dbbfedc546be91a68d2ad1638d08d6ba
+          ref: 4f63f888ec29e49698678dbc1ac623e44d61ac96
           path: .integration/runner
       - uses: actions/checkout@v7
         with:
