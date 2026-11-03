@@ -4,6 +4,10 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Add explicit capability-free managed claim observation bound to the original
+  enrolled principal and fingerprints. Reconcile only existing exact durable
+  result/stop intents; no retry, lease renewal or runtime activation. See ADR 0011.
+
 - Add unregistered managed known-stop reporting and exact retained receipts,
   with atomic terminal capacity release and no refund or fabricated evidence.
   Add additive migration 0038; downgrade erasure is refused. See ADR 0010.

@@ -622,3 +622,12 @@ binding, cause, outcome and receipt hash without cascading deletion. Confirmed
 terminal reporting releases only concurrency capacity; all spent allowances and
 consumption remain. Unknown execution and missing receipts stay held. See
 [ADR 0010](adr/0010-managed-known-stop-receipts.md).
+
+### Managed claim observation after restart
+
+An explicit unregistered observation authenticates the original enrolled principal
+and plan/case/association fingerprints without returning a control capability.
+It records metadata only; absence never authorizes a retry. Reconciliation closes
+only an existing exact durable result/stop intent, preserving native proof and
+uncertainty fences. Ordinary recovery remains deferred. See
+[ADR 0011](adr/0011-managed-claim-observation.md).

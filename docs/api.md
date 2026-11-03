@@ -2306,3 +2306,12 @@ never completes work; terminal receipts and inspection rules are documented in
 They require the original consumed owned contract and fixed known-termination
 report; neither expiry nor a PID establishes a release right. Stop receipts remain
 separate from result receipts. See [ADR 0010](adr/0010-managed-known-stop-receipts.md).
+
+### Managed claim observation prototype
+
+`managed_observations.Observations.inspect` is an unregistered library operation.
+Its fixture-only adapter accepts original origin/Runner and plan/case/association
+hashes with the original enrolled API key; no control token is accepted or returned.
+It returns bounded metadata and existing immutable receipts without renewing,
+releasing or retrying work. Absence is only a snapshot. See
+[ADR 0011](adr/0011-managed-claim-observation.md).

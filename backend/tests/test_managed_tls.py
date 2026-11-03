@@ -573,3 +573,14 @@ def test_verified_https_owned_stop_receipt_and_postcommit_loss(tls_harness, lost
         t.issue()
         flow(t.h, t.transport(), wire=t.wire, lost=lost)
     assert t.wire.forwarded["/fixture/stopped"] == 1
+
+
+@pytest.mark.parametrize("kind", ["result", "stop"])
+def test_verified_https_capability_free_claim_observation(tls_harness, kind):
+    from tests.managed_observation_probe import flow
+
+    t = tls_harness
+    with t.serve():
+        t.issue()
+        flow(t.h, t.transport(), kind=kind)
+    assert t.wire.forwarded["/fixture/observe"] == 2

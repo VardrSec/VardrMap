@@ -143,6 +143,17 @@ def harness(specimen, tmp_path, monkeypatch, map_origin):
 
     stops = Stops(results)
 
+    from managed_observations import Observations
+
+    observations = Observations(results)
+
+    @app.post("/fixture/observe")
+    def observe(body: dict, request: Request, db=Depends(get_db)):
+        args = {k: body.pop(k) for k in ("plan_sha256", "case_sha256", "association_sha256")}
+        return observations.inspect(
+            db, request, job_id="job-1", body=control.ClaimControl(**body), **args
+        )
+
     def result_args(body):
         return {k: body.pop(k) for k in ("contract_id", "attempt_id", "fence", "contract_sha256")}
 
@@ -844,3 +855,11 @@ def test_http_owned_managed_stop_receipt(harness):
 
     harness.issue()
     flow(harness)
+
+
+@pytest.mark.parametrize("kind", ["result", "stop"])
+def test_http_capability_free_claim_observation(harness, kind):
+    from tests.managed_observation_probe import flow
+
+    harness.issue()
+    flow(harness, kind=kind)

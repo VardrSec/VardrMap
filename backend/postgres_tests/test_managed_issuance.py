@@ -402,3 +402,23 @@ def test_managed_stop_transactions(database, tmp_path, scenario):
         "    pair = r.stops.__wrapped__(consumed)\n"
         f"    {calls[scenario]}\n",
     )
+
+
+@pytest.mark.parametrize("scenario", ["absence", "race", "result", "stop"])
+def test_capability_free_claim_observation_transactions(database, tmp_path, scenario):
+    _, url = database
+    migrate(url, "upgrade", "head")
+    calls = {
+        "absence": "r.test_absence_is_only_a_snapshot_and_does_not_reserve_or_block_a_later_claim(pair)",
+        "race": "r.test_concurrent_observation_and_claim_do_not_change_reservation_semantics(pair)",
+        "result": "r.test_owned_terminal_receipts_can_be_observed_without_original_capability(pair, 'result')",
+        "stop": "r.test_owned_terminal_receipts_can_be_observed_without_original_capability(pair, 'stop')",
+    }
+    fixture_process(
+        url, tmp_path,
+        "import pytest\n"
+        "from tests import test_managed_observations as r\n"
+        "with pytest.MonkeyPatch.context() as patch:\n"
+        "    pair = r.observation.__wrapped__(s, patch)\n"
+        f"    {calls[scenario]}\n",
+    )

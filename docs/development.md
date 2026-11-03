@@ -539,3 +539,14 @@ PostgreSQL repeats known-stop/race/rollback/retention cases under both database
 roles against the migrated 0038 head. Real Windows native reporting is explicitly
 opt-in and remains a separate Papachin gate; cloud fixtures cannot accept it.
 See [ADR 0010](adr/0010-managed-known-stop-receipts.md).
+
+## Managed claim observation fixtures
+
+The claim observation tests cover lost claim replies, expired/revoked approvals,
+wrong enrolled keys, inconsistent state, races, source changes and receipt
+regressions. Runner restart fixtures require prior durable native result/stop
+proof; generic terminal metadata cannot close a run. Map's fixture-only HTTP and
+verified TLS adapters exercise the production Runner parser. PostgreSQL repeats
+absence, claim races and terminal receipts under both database roles. Full-suite
+coverage/static checks remain required. Windows/Papachin, independent acceptance,
+CI/security and migration gates remain open. No production route is registered.
