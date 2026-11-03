@@ -4,6 +4,9 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Preserve the session-expiry notice across concurrent unauthorized bootstrap
+  requests and ordinary toast expiry; backend authentication remains unchanged.
+
 - Keep the browser evidence fixture on the legacy no-body claim API, preserving
   strict validation of explicit execution-control payloads.
 

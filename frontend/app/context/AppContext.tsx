@@ -5,6 +5,9 @@ import { AuthFetch, EngagementStatus, EngagementType, Finding, Engagement, ScanI
 import { AppAction, AppState, appReducer, initialState } from "./appReducer";
 import { API_URL, authenticatedOptions, getFrontendSession, hasWorkspaceSession } from "../auth-client";
 
+const SESSION_EXPIRED_MESSAGE = "Session expired. Please sign in again.";
+class SessionExpiredError extends Error {}
+
 // Defensively coerce every field so components never have to deal with undefined
 // coming from the API — e.g. a missing recon_count just becomes 0.
 function normalizeEngagement(raw: unknown): Engagement {
@@ -75,9 +78,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const sessionRef = useRef(state.session);
   useEffect(() => { sessionRef.current = state.session; }, [state.session]);
 
-  // Auto-clear toast after 4 s
+  // Ordinary toasts expire; an authentication failure must remain visible.
   useEffect(() => {
-    if (!state.message) return;
+    if (!state.message || state.message === SESSION_EXPIRED_MESSAGE) return;
     const id = setTimeout(() => dispatch({ type: "CLEAR_MESSAGE" }), 4000);
     return () => clearTimeout(id);
   }, [state.message]);
@@ -91,8 +94,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         sessionRef.current = null;
         dispatch({ type: "AUTH_LOADED", session: null });
       }
-      dispatch({ type: "SET_MESSAGE", message: "Session expired. Please sign in again." });
-      throw new Error("Unauthorized");
+      dispatch({ type: "SET_MESSAGE", message: SESSION_EXPIRED_MESSAGE });
+      throw new SessionExpiredError("Unauthorized");
     }
     return response;
   }, []);
@@ -124,7 +127,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const data = await res.json();
       const engagements = Array.isArray(data?.engagements) ? data.engagements.map(normalizeEngagement) : [];
       dispatch({ type: "ENGAGEMENTS_LOADED", engagements });
-    } catch {
+    } catch (error) {
+      if (error instanceof SessionExpiredError) return;
       dispatch({ type: "SET_MESSAGE", message: "Failed to load engagements." });
     }
   }, [authFetch]);
@@ -136,7 +140,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const res = await authFetch(`/engagements/${id}`);
       if (!res.ok) throw new Error();
       dispatch({ type: "ENGAGEMENT_UPDATED", engagement: normalizeEngagement(await res.json()) });
-    } catch {
+    } catch (error) {
+      if (error instanceof SessionExpiredError) return;
       dispatch({ type: "SET_MESSAGE", message: "Failed to refresh engagement." });
     }
   }, [state.selectedEngagementId, authFetch]);
@@ -148,7 +153,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (!res.ok) throw new Error();
       dispatch({ type: "ENGAGEMENT_DELETED", id: state.selectedEngagementId });
       dispatch({ type: "SET_MESSAGE", message: "Engagement deleted." });
-    } catch {
+    } catch (error) {
+      if (error instanceof SessionExpiredError) return;
       dispatch({ type: "SET_MESSAGE", message: "Failed to delete engagement." });
     }
   }, [state.selectedEngagementId, authFetch]);

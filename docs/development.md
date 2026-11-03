@@ -553,6 +553,11 @@ CI/security and migration gates remain open. No production route is registered.
 
 ## Explicit Runner managed transport fixtures
 
+The browser acceptance suite also checks visible session expiry. Provider-level
+401 handling retains its specific notice across concurrent bootstrap requests;
+ordinary engagement errors and success toasts keep their existing behavior.
+`AppContext.test.tsx` covers concurrent bootstrap responses and the ordinary toast timer.
+
 The opt-in verified TLS suite exercises Runner's bounded managed JSON primitive
 with actual authentication, result/stop/observation flows, redirects, invalid CA,
 ambiguous claim replies and size/JSON negatives. Test adapters alone register
