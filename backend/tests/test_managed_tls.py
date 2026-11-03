@@ -13,6 +13,7 @@ from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from types import SimpleNamespace
+from urllib.parse import urlsplit
 
 import pytest
 import uvicorn
@@ -43,8 +44,25 @@ def tls_socket():
 
 
 @pytest.fixture
-def map_origin(tls_socket):
-    return f"https://localhost:{tls_socket.getsockname()[1]}"
+def map_origin(tls_socket, request):
+    return f"https://localhost:{tls_socket.getsockname()[1]}" + getattr(request, "param", "")
+
+
+class ConfiguredPrefix:
+    """Synthetic equivalent of the existing Caddy /backend handle_path."""
+
+    def __init__(self, app, prefix):
+        self.app, self.prefix = app, prefix
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http" and self.prefix:
+            if not scope["path"].startswith(self.prefix + "/"):
+                await send({"type": "http.response.start", "status": 404, "headers": []})
+                return await send({"type": "http.response.body", "body": b""})
+            scope = dict(scope)
+            scope["path"] = scope["path"][len(self.prefix):]
+            scope["raw_path"] = scope["path"].encode()
+        return await self.app(scope, receive, send)
 
 
 def certificates(directory, kind="valid"):
@@ -219,7 +237,7 @@ def tls_harness(harness, tls_socket, tmp_path):
     def serve(sock=tls_socket, cert_file=cert, key_file=key):
         server = uvicorn.Server(
             uvicorn.Config(
-                wire,
+                ConfiguredPrefix(wire, urlsplit(h.origin).path),
                 log_config=None,
                 access_log=False,
                 log_level="critical",
@@ -694,3 +712,25 @@ def test_unregistered_observation_router_over_verified_managed_transport(tls_har
         flow(t.h, SimpleNamespace(post=post), kind=kind)
     assert t.wire.forwarded["/jobs/job-1/managed/observation"] == 2
     assert "/fixture/observe" not in t.wire.seen
+
+
+@pytest.mark.parametrize("map_origin", ["/backend"], indirect=True)
+@pytest.mark.parametrize("kind", ["result", "stop"])
+def test_existing_full_api_prefix_preserves_signed_origin_and_receipts(tls_harness, kind):
+    from tests.managed_observation_probe import flow
+
+    t = tls_harness
+    assert t.h.origin.endswith("/backend")
+    with t.serve():
+        t.issue()
+        transport = bounded_transport(t)
+        assert transport.client.base == t.h.origin
+
+        def post(path, *, json):
+            if path == "/fixture/observe":
+                path = "/jobs/job-1/managed/observation"
+            return transport.post(path, json=json)
+
+        flow(t.h, SimpleNamespace(post=post), kind=kind)
+    assert t.wire.forwarded["/jobs/job-1/managed/observation"] == 2
+    assert t.wire.forwarded["/fixture/claim"] == 1

@@ -4,6 +4,10 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Verify observation HTTP sessions under both PostgreSQL roles and signed receipt
+  flows behind Full's existing API prefix. Record pending worker decisions without
+  choosing or implementing containment, bootstrap or lifecycle architecture.
+
 - Add an unregistered read-only managed observation HTTP factory with strict
   bounded inputs, fixed non-cacheable errors and existing enrollment/receipt
   checks. No production registration, execution or issuer activation. See ADR 0012.

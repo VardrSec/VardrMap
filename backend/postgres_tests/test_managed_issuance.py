@@ -422,3 +422,30 @@ def test_capability_free_claim_observation_transactions(database, tmp_path, scen
         "    pair = r.observation.__wrapped__(s, patch)\n"
         f"    {calls[scenario]}\n",
     )
+
+
+@pytest.mark.parametrize("scenario", ["absence", "result", "stop", "revoked"])
+def test_observation_http_request_scoped_postgresql_sessions(database, tmp_path, scenario):
+    """Exercise actual auth/HTTP/threadpool sessions under both migrated DB roles."""
+    _, url = database
+    migrate(url, "upgrade", "head")
+    calls = {
+        "absence": "h.test_absent_then_claim_observation_never_creates_or_renews_permission(http)",
+        "result": "h.test_retained_terminal_receipt_http_is_read_only_and_no_capability(http, 'result')",
+        "stop": "h.test_retained_terminal_receipt_http_is_read_only_and_no_capability(http, 'stop')",
+        "revoked": "h.test_authentication_never_substitutes_owner_uuid_for_enrollment(http, 'revoked_enrollment', 409)",
+    }
+    fixture_process(
+        url, tmp_path,
+        "import pytest\n"
+        "from tests import test_managed_observations as o\n"
+        "from tests import test_managed_observation_http as h\n"
+        "with pytest.MonkeyPatch.context() as patch:\n"
+        "    observation = o.observation.__wrapped__(s, patch)\n"
+        "    context = h.http.__wrapped__(observation)\n"
+        "    http = next(context)\n"
+        "    try:\n"
+        f"        {calls[scenario]}\n"
+        "    finally:\n"
+        "        next(context, None)\n",
+    )

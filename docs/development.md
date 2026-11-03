@@ -570,3 +570,13 @@ The opt-in TLS suite sends result and stop observations through this adapter usi
 the unchanged Runner managed transport. No production route or key is provisioned.
 See [ADR 0012](adr/0012-unregistered-observation-http.md). Worker/container and
 independent acceptance gates remain open.
+
+## NM-2 remaining verification and decisions
+
+The observation HTTP PostgreSQL cases use migrated administrator/restricted roles
+and actual API authentication/request-scoped sessions through the threadpool.
+Verified TLS additionally emulates existing Full `/backend` prefix stripping while
+preserving the exact signed API-base identity and result/stop receipts. Neither
+fixture enrolls live credentials or executes a target. The
+[pending worker decision record](nm2-worker-decisions-pending.md) lists approved
+constraints and unresolved containment/bootstrap/lifecycle choices; none is chosen.
