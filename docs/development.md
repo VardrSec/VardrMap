@@ -550,3 +550,12 @@ verified TLS adapters exercise the production Runner parser. PostgreSQL repeats
 absence, claim races and terminal receipts under both database roles. Full-suite
 coverage/static checks remain required. Windows/Papachin, independent acceptance,
 CI/security and migration gates remain open. No production route is registered.
+
+## Explicit Runner managed transport fixtures
+
+The opt-in verified TLS suite exercises Runner's bounded managed JSON primitive
+with actual authentication, result/stop/observation flows, redirects, invalid CA,
+ambiguous claim replies and size/JSON negatives. Test adapters alone register
+fixture routes; no production Map route, key, enrollment or migration is added.
+See [canonical NM-2 exit status](nm2-canonical-exit-status.md): this does not prove
+the required operator-enabled Docker Desktop worker or Linux/container control.

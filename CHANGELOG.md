@@ -4,6 +4,10 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Verify Runner's explicit bounded managed JSON transport over synthetic TLS,
+  including receipt flows and failure paths. Reconcile canonical NM-2 worker exit;
+  no production routes, enrollment, migration or activation changes.
+
 - Add explicit capability-free managed claim observation bound to the original
   enrolled principal and fingerprints. Reconcile only existing exact durable
   result/stop intents; no retry, lease renewal or runtime activation. See ADR 0011.

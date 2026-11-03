@@ -147,6 +147,9 @@ class WireFaults:
             return await self.app(scope, receive, send)
         path = scope["path"]
         self.seen[path] = self.seen.get(path, 0) + 1
+        if self.mode == "managed_raw" and path == "/fixture/claim":
+            await send({"type": "http.response.start", "status": 200, "headers": self.raw_headers})
+            return await send({"type": "http.response.body", "body": self.raw_body})
         if path in {
             "/fixture/claim",
             "/fixture/current",
@@ -584,3 +587,91 @@ def test_verified_https_capability_free_claim_observation(tls_harness, kind):
         t.issue()
         flow(t.h, t.transport(), kind=kind)
     assert t.wire.forwarded["/fixture/observe"] == 2
+
+
+def bounded_transport(t):
+    """Test-only adapter to Runner's explicit production-code HTTP primitive."""
+    transport = t.transport()
+
+    def post(path, *, json):
+        payload = transport.client.managed_post(path, json, timeout=transport.timeout)
+        return SimpleNamespace(status_code=200, json=lambda: payload)
+
+    return SimpleNamespace(post=post, client=transport.client)
+
+
+@pytest.mark.parametrize("kind", ["result", "stop"])
+def test_explicit_managed_transport_full_receipt_flow(tls_harness, kind):
+    from tests.managed_observation_probe import flow
+
+    t = tls_harness
+    with t.serve():
+        t.issue()
+        flow(t.h, bounded_transport(t), kind=kind)
+    assert t.wire.forwarded["/fixture/claim"] == 1
+    assert t.wire.forwarded["/fixture/observe"] == 2
+
+
+@pytest.mark.parametrize("code", [301, 302, 303, 307, 308])
+def test_explicit_managed_transport_never_follows_redirect(tls_harness, http_sink, code):
+    from vardrrunner.api import ManagedTransportError
+
+    t = tls_harness
+    with t.serve():
+        t.issue()
+        t.wire.mode, t.wire.location = f"redirect_{code}", f"http://127.0.0.1:{http_sink.server_port}/sink"
+        with pytest.raises(ManagedTransportError, match="^managed request failed$"):
+            bounded_transport(t).post("/fixture/claim", json=t.h.body)
+        assert t.wire.seen["/fixture/claim"] == 1
+    assert http_sink.contacts == 0 and not http_sink.credential_seen
+
+
+@pytest.mark.parametrize("kind", ["status500", "drop_claim"])
+def test_explicit_managed_transport_does_not_replay_ambiguous_claim(tls_harness, kind):
+    from vardrrunner.api import ManagedTransportError
+
+    t = tls_harness
+    with t.serve():
+        t.issue()
+        t.wire.mode = kind
+        with pytest.raises(ManagedTransportError):
+            bounded_transport(t).post("/fixture/claim", json=t.h.body)
+        assert t.wire.seen["/fixture/claim"] == 1
+    with Session(t.h.s["engine"]) as db:
+        assert db.query(ManagedContract).count() == (1 if kind == "drop_claim" else 0)
+        if kind == "drop_claim":
+            assert db.get(JobExecution, "job-1").capacity_reserved
+
+
+@pytest.mark.parametrize("kind", ["declared_size", "chunked_size", "duplicate", "overflow", "utf8", "encoding", "content_type"])
+def test_explicit_managed_transport_bounds_real_response(tls_harness, kind):
+    from vardrrunner.api import ManagedTransportError
+
+    t = tls_harness
+    body = {"duplicate": b'{"x":1,"x":2}', "overflow": b'{"x":1e999}', "utf8": b'\xff'}.get(kind, b"x" * 262145)
+    headers = [(b"content-type", b"application/json")]
+    if kind == "declared_size":
+        headers.append((b"content-length", str(len(body)).encode()))
+    elif kind == "encoding":
+        headers.append((b"content-encoding", b"gzip"))
+    elif kind == "content_type":
+        headers = [(b"content-type", b"text/html")]
+    with t.serve():
+        t.issue()
+        t.wire.mode, t.wire.raw_body, t.wire.raw_headers = "managed_raw", body, headers
+        with pytest.raises(ManagedTransportError, match="^managed request failed$"):
+            bounded_transport(t).post("/fixture/claim", json=t.h.body)
+        assert t.wire.seen["/fixture/claim"] == 1
+    assert t.h.s["db"].query(ManagedContract).count() == 0
+
+
+def test_explicit_managed_transport_requires_actual_trusted_ca(tls_harness, tmp_path):
+    from vardrrunner.api import ManagedTransportError
+
+    t = tls_harness
+    wrong_ca, _, _ = certificates(tmp_path / "untrusted-managed")
+    with t.serve():
+        client = t.transport(ca_file=wrong_ca).client
+        with pytest.raises(ManagedTransportError):
+            client.managed_post("/fixture/claim", t.h.body)
+    assert not t.wire.seen
