@@ -1,5 +1,38 @@
 # Development
 
+## Explicit managed service configuration
+
+This development candidate exposes managed factories only when
+`VARDRMAP_MANAGED_WORKER=1`. Omission or `0` preserves default startup. Other flag
+values and incomplete enabled configuration refuse startup with a fixed error.
+Apply additive schema `0039managedruntime` through the existing migration procedure;
+configuration never applies migrations or repairs state.
+
+Supply these values explicitly in the API's reviewed worker-enabled profile:
+
+| Variable | Required value |
+| --- | --- |
+| `VARDRMAP_MANAGED_ORIGIN` | Exact configured HTTPS issuer URL including API prefix; must match enrollment and Runner configuration. |
+| `VARDRMAP_MANAGED_ISSUER_ID` | Existing trusted issuer identifier. |
+| `VARDRMAP_MANAGED_CONTRACT_KEY_ID` | Distinct contract-signing key identifier. |
+| `VARDRMAP_MANAGED_CONTRACT_KEY_FILE` | Absolute path to an existing regular raw 32-byte Map contract key, supplied only to the API. |
+| `VARDRMAP_MANAGED_OPERATOR_TRUST_FILE` | Absolute path to existing public operator anchor JSON, capped at 32 KiB. |
+
+The public anchor file is a list of 1–100 exact objects containing `issuer_id`,
+`key_id`, `approver_id`, unpadded base64url `public_key`, and boolean `revoked`.
+`approver_id` names the existing owner. Existing `ContractWire` checks distinct
+approval/contract keys, duplicate anchors and signature purpose. Private operator
+approval keys remain outside Map and the worker. This loader generates no key,
+creates no user/enrollment/approval and runs no database operation or target work.
+Keep private key custody and mounts scoped to the API; do not put raw keys in
+arguments, public trust, Runner state or logs. Ordinary startup stays disabled.
+
+Configuration checks use disposable keys without database access. Actual managed
+worker, stop, disconnected/restart and recovery acceptance remains required before
+calling the configured distribution supported. Historical ADRs describing
+unregistered prototypes retain their original scope; this opt-in supplies the
+explicit assembly seam.
+
 `tests/test_managed_stops.py` exercises both result/stop receipt orderings with
 active, expired and approval-revoked permission, including retained evidence,
 immutable replay, capacity release and conservative spent allowances.
@@ -41,7 +74,8 @@ the operator signs it outside Map using existing separately provisioned signing
 material, and the owner registers that exact receipt. Existing public operator
 trust and Map's distinct contract-signing key must already be configured in the
 injected issuer. No private approval key is sent to Map or the worker. The HTTP
-factories remain unregistered and worker activation remains separately gated.
+factories remain absent by default; explicit service configuration and worker
+activation are separately controlled.
 
 Managed issuance checks use `tests/test_managed_issuance.py` and
 `postgres_tests/test_managed_issuance.py`. Keep synthetic association/key records,

@@ -1,12 +1,19 @@
 # API Reference
 
+Managed HTTP factories remain absent from default startup. Explicit
+`VARDRMAP_MANAGED_WORKER=1` uses the reviewed
+[configuration](development.md#explicit-managed-service-configuration) to assemble
+one shared issuer/result/runtime graph. This is a development candidate; installed
+worker acceptance and release remain open. The opt-in does not approve queued work
+or start an execution process.
+
 Managed result and known-stop receipts are mutually exclusive. Once either lane
 has retained its first receipt, the other is refused without evidence writes,
 reservation changes or replacement. Expiry and approval revocation do not erase
 the winning historical receipt or authorize conflicting publication.
 
-`backend/managed_approval_http.py` supplies an **unregistered** human-owner factory
-over the existing configured `Issuer`; main never registers it. Existing local
+`backend/managed_approval_http.py` supplies a **default-unregistered** human-owner factory
+over the existing configured `Issuer`. Existing local
 owner sessions require CSRF and allowed Origin, and existing GitHub owner sessions
 retain their JWT checks. Neither runner-scope nor full-scope API keys can supply
 human approval provenance. No private operator signing key is accepted:
@@ -26,9 +33,9 @@ outside Map and the worker; Map's separately provisioned contract key remains
 distinct. [Terminal binding](development.md#explicit-managed-key-binding) selects
 existing API-key/Runner associations and grants no human approval.
 
-`backend/managed_http.py` provides an **unregistered** router factory requiring an
-explicitly constructed existing `Issuer`. `main.py` does not call it. The following
-paths describe an isolated adapter contract, not enabled deployment endpoints:
+`backend/managed_http.py` provides a **default-unregistered** router factory requiring an
+explicitly constructed existing `Issuer`. The following paths are exposed only
+through explicit service configuration or isolated adapters:
 
 | Method and path | Contract |
 |---|---|
@@ -46,9 +53,9 @@ Existing sessions retain their CSRF checks and cannot substitute for the executi
 API key. The control factory adds no approval, finalization, enrollment, signing or worker route;
 schema `0038managedstops` is reused without migration or implicit configuration.
 
-`backend/managed_receipt_http.py` adds a separate **unregistered** factory injected
+`backend/managed_receipt_http.py` adds a separate **default-unregistered** factory injected
 with existing `Results`. It shares that service's issuer/ownership protocol with
-`Stops`. Main never registers these paths:
+`Stops`. Explicit service configuration is required for these paths:
 
 | Method and path | Contract |
 |---|---|
@@ -2372,8 +2379,8 @@ cannot replace the exact managed contract/fence, consumption acknowledgment or
 result/known-stop receipt. Refusal leaves execution ownership and all reservations
 unchanged; legacy jobs retain their existing finish behavior.
 
-`Issuer.consume` is an unregistered library operation, not an available HTTP API.
-Only explicit disposable fixtures expose it. It validates current owned permission
+`Issuer.consume` is a library operation exposed only by the explicit configured
+managed factory or disposable adapters. It validates current owned permission
 and the signed-contract hash, then atomically consumes once without renewing the
 lease, completing the job or releasing reservations. Exact ACK and unknown-reply
 rules are in [ADR 0008](adr/0008-managed-consumption-ack.md). Existing marked-job
@@ -2381,22 +2388,22 @@ legacy claim/control/upload/completion refusals remain in force.
 
 ### Managed result prototype
 
-`managed_results.Results.submit`, `finish` and `inspect` are unregistered library
-operations, exposed only by explicit disposable test adapters. They require the
+`managed_results.Results.submit`, `finish` and `inspect` are library
+operations behind explicit configured factories or disposable adapters. They require the
 existing owned capability and exact consumed contract. Evidence receipt alone
 never completes work; terminal receipts and inspection rules are documented in
 [ADR 0009](adr/0009-managed-result-receipts.md). No production endpoint is added.
 
 ### Managed known-stop prototype
 
-`managed_stops.Stops.report` and `inspect` are unregistered library operations.
+`managed_stops.Stops.report` and `inspect` are default-unregistered library operations.
 They require the original consumed owned contract and fixed known-termination
 report; neither expiry nor a PID establishes a release right. Stop receipts remain
 separate from result receipts. See [ADR 0010](adr/0010-managed-known-stop-receipts.md).
 
 ### Managed claim observation prototype
 
-`managed_observations.Observations.inspect` is an unregistered library operation.
+`managed_observations.Observations.inspect` is a default-unregistered library operation.
 Its fixture-only adapter accepts original origin/Runner and plan/case/association
 hashes with the original enrolled API key; no control token is accepted or returned.
 It returns bounded metadata and existing immutable receipts without renewing,
@@ -2407,7 +2414,8 @@ releasing or retrying work. Absence is only a snapshot. See
 
 `managed_observation_http.build_observation_router(existing_service)` reserves
 `POST /jobs/{job_id}/managed/observation` for isolated integration. **It is not
-registered by the production app.** It accepts origin, Runner UUID and exact
+registered during default startup.** Explicit service configuration enables it.
+It accepts origin, Runner UUID and exact
 plan/case/association fingerprints using the original enrolled API key. It rejects
 control tokens and other extra fields, returns no capability, and changes no
 business state. Successful observations use the existing v1 metadata/receipt shape.

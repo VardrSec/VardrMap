@@ -1,11 +1,20 @@
 # Architecture
 
+The explicit `managed_configuration.configure_managed(app)` assembly is inert when
+`VARDRMAP_MANAGED_WORKER` is omitted or `0`. Exact `1` requires reviewed HTTPS
+origin/issuer configuration, existing public operator anchors and a separate raw
+32-byte Map contract key. Invalid enabled configuration refuses startup with a
+fixed error. One Wire/Issuer/Results/Runtimes graph is injected into all managed
+factories; runtime-aware claims cannot fall back to unbound issuance. This assembly
+does not migrate, provision authority or launch queue work. Default routes and
+ordinary authentication remain unchanged.
+
 Managed result submission checks for an existing known-stop receipt while holding
 the same engagement/job ownership locks used by stop reporting. The reciprocal
 checks serialize both receipt orderings without relying on locking an absent row;
 only the retained winning lane may continue its existing receipt protocol.
 
-`managed_approval_http.build_approval_router(issuer)` is an unregistered boundary
+`managed_approval_http.build_approval_router(issuer)` is a default-unregistered boundary
 over existing owner-session review, separately signed receipt registration and
 approval revocation. Existing local CSRF/Origin and GitHub session checks remain
 authoritative; API-key authentication cannot become human provenance. The factory
@@ -25,9 +34,9 @@ authority or approval record; managed execution still requires those separately.
 Heartbeat and ordinary startup never call this operation; no enrollment HTTP
 service or migration is introduced.
 
-`managed_http.build_managed_router(issuer)` is an unregistered discovery and runtime
+`managed_http.build_managed_router(issuer)` is a default-unregistered discovery and runtime
 adapter over the existing transactional issuer. It constructs no keys, enrollment,
-authority or worker. Main never registers it. Inventory is bounded, authenticated
+authority or worker. Explicit configuration supplies registration. Inventory is bounded, authenticated
 against an existing API key/enrollment and restricted to accessible engagements;
 it exposes only assigned registered pending Gate work. It verifies stored approval
 signatures/windows but grants no execution permission. The claim transaction still
@@ -38,7 +47,7 @@ and fence checks. This boundary reuses schema 0038 and changes no ordinary/manua
 job behavior. Human approval, explicit provisioning, worker
 activation and proven container process containment remain separate increments.
 
-`managed_receipt_http.build_receipt_router(results)` is a separate unregistered
+`managed_receipt_http.build_receipt_router(results)` is a separate default-unregistered
 boundary over existing `Results` and `Stops`. It adds no signing, authority,
 execution or renewal logic. The same owned API key/control capability and consumed
 contract bind result submission, completion, known-stop reporting and observation.
@@ -47,7 +56,8 @@ completion's live-authority checks. A known terminal receipt may release existin
 concurrency capacity but refunds no target/duration/issuance charge; uncertainty
 retains the reservation. The adapter bounds outer JSON, artifact fields and receipt
 size, sanitizes failures, and treats termination confirmation as the owning
-Runner's assertion. Schema 0038 and the default unregistered state are unchanged.
+Runner's assertion. The default unregistered state is unchanged; the opt-in runtime
+binding uses additive schema 0039 without downgrading existing receipt rules.
 
 The legacy execution-finish route refuses every outcome for managed jobs. Only
 the existing exact managed result or known-stop receipt protocol can release their
