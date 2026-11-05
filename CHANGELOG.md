@@ -4,6 +4,12 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Add a separate unregistered result/completion and known-stop HTTP router
+  factory over existing owned receipt services. Bound requests and responses,
+  preserve historical evidence and exact termination receipts, and retain
+  all existing authority, reservation and nonrefundable-budget behavior. No
+  receipt endpoint or execution worker is activated.
+
 - Add an unregistered, explicitly injected managed HTTP router factory for
   enrolled-key discovery, one-shot claim and current/refresh/consume operations.
   Claims return the retained case snapshot; bounded strict requests and fixed

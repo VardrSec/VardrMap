@@ -17,8 +17,32 @@ three-second total body-read limit. Duplicate keys, nonfinite numbers and extra
 fields are refused. Responses are capped at 256 KiB, carry `Cache-Control: no-store`
 and use the fixed error `managed_request_refused` without input/exception details.
 Existing sessions retain their CSRF checks and cannot substitute for the execution
-API key. No approval, finalization, enrollment, signing or worker route is added;
+API key. The control factory adds no approval, finalization, enrollment, signing or worker route;
 schema `0038managedstops` is reused without migration or implicit configuration.
+
+`backend/managed_receipt_http.py` adds a separate **unregistered** factory injected
+with existing `Results`. It shares that service's issuer/ownership protocol with
+`Stops`. Main never registers these paths:
+
+| Method and path | Contract |
+|---|---|
+| `POST /jobs/{job_id}/managed/result` | Original owned control binding, contract/attempt/fence/hash plus UTF-8 `artifact` string and `artifact_sha256`. Requires acknowledged consumption; stores existing redacted, frozen-case-bound evidence and returns its immutable receipt. |
+| `POST /jobs/{job_id}/managed/finish` | Same binding plus `receipt_sha256`, `outcome` and strict boolean `termination_confirmed`. Requires an owned result receipt and confirmed termination; successful completion also requires live authority. |
+| `POST /jobs/{job_id}/managed/stopped` | Same binding plus `outcome`, fixed known `cause` and strict boolean `termination_confirmed`. Delegates the existing known-stop protocol; uncertainty and unrecognized causes cannot release capacity. |
+| `POST /jobs/{job_id}/managed/stop-status` | Same original owned binding observes a retained stop receipt without renewal, replay, inferred termination or reservation release. No control token is returned. |
+
+All four require HTTPS and the original authenticated API key/control capability.
+Local sessions retain CSRF validation and cannot replace that key. A result request
+is capped at 1 MiB of outer JSON; other requests at 8 KiB. The existing artifact
+limit remains 512,000 UTF-8 bytes and the smaller approved artifact ceiling. Each
+body read has a three-second total deadline; strict JSON rejects duplicate keys,
+nonfinite numbers and extra fields. Receipts are capped at 16 KiB, never echo
+artifacts/credentials, and use `Cache-Control: no-store` with the fixed failure
+`managed_receipt_refused`. Owned historical evidence and known-stop reporting stay
+available after approval expiry/revocation under the existing service policy.
+Terminal confirmation remains the owning Runner's assertion, not independent OS
+attestation. No budget refund, automatic retry, authority creation or route
+activation is introduced.
 
 Local managed-issuance builds (`0036managedauth`) accept the optional strict
 boolean `authorization_contract_required` on single fixed Gate job creation.

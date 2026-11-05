@@ -10,8 +10,19 @@ reprojects authority and charges the existing budgets. Its response adds only th
 retained claim case snapshot, preserving the Runner's polled-versus-claimed check.
 Current/refresh/consume retain existing owned token, principal, contract, attempt
 and fence checks. This boundary reuses schema 0038 and changes no ordinary/manual
-job behavior. Human approval, explicit provisioning, result/stop adapters, worker
+job behavior. Human approval, explicit provisioning, worker
 activation and proven container process containment remain separate increments.
+
+`managed_receipt_http.build_receipt_router(results)` is a separate unregistered
+boundary over existing `Results` and `Stops`. It adds no signing, authority,
+execution or renewal logic. The same owned API key/control capability and consumed
+contract bind result submission, completion, known-stop reporting and observation.
+Evidence retention after approval expiry/revocation stays distinct from successful
+completion's live-authority checks. A known terminal receipt may release existing
+concurrency capacity but refunds no target/duration/issuance charge; uncertainty
+retains the reservation. The adapter bounds outer JSON, artifact fields and receipt
+size, sanitizes failures, and treats termination confirmation as the owning
+Runner's assertion. Schema 0038 and the default unregistered state are unchanged.
 
 The legacy execution-finish route refuses every outcome for managed jobs. Only
 the existing exact managed result or known-stop receipt protocol can release their
