@@ -4,6 +4,13 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Add an unregistered human-owner review/register/revoke HTTP factory that
+  verifies separately signed approval receipts through the existing issuer.
+  Add explicit terminal association/revocation of existing Map API keys, with
+  hidden input or bounded opt-in stdin, immutable bindings and retained revisioned
+  tombstones. Binding grants no execution approval and creates no account,
+  API key, signing key or authority record.
+
 - Add a separate unregistered result/completion and known-stop HTTP router
   factory over existing owned receipt services. Bound requests and responses,
   preserve historical evidence and exact termination receipts, and retain

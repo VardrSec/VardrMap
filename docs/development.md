@@ -1,5 +1,44 @@
 # Development
 
+## Explicit managed key binding
+
+An installation operator can invoke `python -m managed_enrollment` from the
+configured backend environment after the existing managed schema is installed.
+The command uses that environment's existing database credential; it creates no
+account, API key, signing key, authority or approval. Development checks use only
+disposable databases and synthetic keys.
+
+Select the existing owner ID from the authenticated `/me` response, an existing
+API-key ID from `/auth/apikeys`, and the intended installation's stable UUID from
+`vardrrunner identity show`. The API key must already belong to that owner with
+runner or full scope. The origin must exactly match the trusted Map issuer URL.
+Replace the non-secret placeholders below:
+
+```text
+python -m managed_enrollment bind --owner OWNER_ID --api-key-id KEY_ID --runner-id RUNNER_UUID --origin https://vardrsec.localhost:8443/backend
+python -m managed_enrollment revoke --owner OWNER_ID --enrollment-id ENROLLMENT_ID
+```
+
+Binding prompts for the existing key through hidden TTY input. Without a TTY it
+refuses unless automation explicitly selects `--key-stdin`; that mode reads at
+most 259 bytes and accepts one ASCII key of at most 256 bytes plus optional LF or
+CRLF. The input pipe must close after that key. The raw key is never printed,
+written or accepted as an argument; no environment or plaintext-file fallback is
+added. Successful output contains association metadata only. Revocation needs no
+recovered key and retains its tombstone/revision. Repeating an exact active bind
+or revocation is idempotent. Rebinding a revoked association, changing bound
+metadata, revision overflow and missing schema are refused without repair or
+migration. A unique-constraint
+race refuses safely; a later exact invocation can observe its retained winner.
+
+Binding is separate from approval and creates no execution permission. An owner
+session must obtain an unsigned context through the unregistered approval factory,
+the operator signs it outside Map using existing separately provisioned signing
+material, and the owner registers that exact receipt. Existing public operator
+trust and Map's distinct contract-signing key must already be configured in the
+injected issuer. No private approval key is sent to Map or the worker. The HTTP
+factories remain unregistered and worker activation remains separately gated.
+
 Managed issuance checks use `tests/test_managed_issuance.py` and
 `postgres_tests/test_managed_issuance.py`. Keep synthetic association/key records,
 independent signing purposes, real administrator/restricted-role lock races,

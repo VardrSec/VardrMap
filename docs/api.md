@@ -1,5 +1,26 @@
 # API Reference
 
+`backend/managed_approval_http.py` supplies an **unregistered** human-owner factory
+over the existing configured `Issuer`; main never registers it. Existing local
+owner sessions require CSRF and allowed Origin, and existing GitHub owner sessions
+retain their JWT checks. Neither runner-scope nor full-scope API keys can supply
+human approval provenance. No private operator signing key is accepted:
+
+| Method and path | Contract |
+|---|---|
+| `POST /jobs/{job_id}/managed/approval/review` | `{enrollment_id, authorization_id, plan, expires_at, max_executions, max_duration_seconds, max_artifact_bytes, credential_grants}` projects current authoritative facts into an unsigned review context. It creates no approval or reservation. The issuer origin comes from trusted configuration, never the request body. |
+| `POST /jobs/{job_id}/managed/approval/register` | `{enrollment_id, authorization_id, plan, approval}` verifies the separately signed v1 approval envelope against existing operator public trust and the exact current projection. Returns `approval_record_id`; exact receipt replay cannot reset issuance counters. |
+| `POST /jobs/{job_id}/managed/approval/revoke` | Empty `{}` owner-session request retains the approval as permanently revoked without resetting counters or inferring process termination. There is no un-revoke operation. |
+
+These paths require HTTPS and strict, identity-encoded JSON capped at 1 MiB with
+a three-second total body-read deadline. Replies are capped at 256 KiB, use
+`Cache-Control: no-store`, and expose only the fixed error
+`managed_approval_refused` on failure. Modified signatures, stale case/authority
+bindings and expired receipts do not become permission. Operator signing remains
+outside Map and the worker; Map's separately provisioned contract key remains
+distinct. [Terminal binding](development.md#explicit-managed-key-binding) selects
+existing API-key/Runner associations and grants no human approval.
+
 `backend/managed_http.py` provides an **unregistered** router factory requiring an
 explicitly constructed existing `Issuer`. `main.py` does not call it. The following
 paths describe an isolated adapter contract, not enabled deployment endpoints:

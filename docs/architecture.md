@@ -1,5 +1,25 @@
 # Architecture
 
+`managed_approval_http.build_approval_router(issuer)` is an unregistered boundary
+over existing owner-session review, separately signed receipt registration and
+approval revocation. Existing local CSRF/Origin and GitHub session checks remain
+authoritative; API-key authentication cannot become human provenance. The factory
+accepts neither operator private keys nor arbitrary signing requests. Current
+authority projection and signature validation remain in the existing issuer/wire
+services, with no second policy validator.
+
+`python -m managed_enrollment` is an explicit terminal administration operation
+using the installation's existing database credential. It verifies an existing
+owner/API-key row and raw-key possession, then retains the existing schema's
+association with a stable Runner UUID and exact HTTPS issuer origin. It stores
+only the derived Bearer-principal hash, not the raw key. An exact active binding is
+idempotent; conflicting metadata or a revoked binding is refused. Revocation
+increments the retained revision once and never deletes, revives or resets the
+association. Binding requires an existing owner/key and creates no trust,
+authority or approval record; managed execution still requires those separately.
+Heartbeat and ordinary startup never call this operation; no enrollment HTTP
+service or migration is introduced.
+
 `managed_http.build_managed_router(issuer)` is an unregistered discovery and runtime
 adapter over the existing transactional issuer. It constructs no keys, enrollment,
 authority or worker. Main never registers it. Inventory is bounded, authenticated
