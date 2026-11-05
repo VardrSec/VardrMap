@@ -5,6 +5,9 @@ target, no real credential. The six identities mirror the researcher's usual cas
 the resource owner, another authenticated user, a user from a different tenant,
 an administrator, an anonymous caller and a caller with rejected credentials.
 """
+import pytest
+
+from authorization_coverage import operation_matches, parse_request
 from assessments import case_hash
 from db import SessionLocal
 from models import ApiEndpoint, AuthorizationTestCase, Evidence, ScanItem, ScanJob
@@ -595,3 +598,113 @@ def test_a_candidate_from_one_case_outweighs_a_conclusive_other(client, auth_hea
             [run("allow", 200, "owner"), run("allow", 200, "peer")], [finding])
     op = operation(coverage(client, auth_headers, program_id), "GET", "/orders/{id}")
     assert op["state"] == "violation_candidate" and op["candidates"]["open"] == 1
+
+
+@pytest.mark.parametrize("path", [
+    "/users/42", "/users/550e8400-e29b-41d4-a716-446655440000",
+    "/users/0123456789abcdef0123456789abcdef",
+])
+def test_identifier_requests_do_not_cover_literal_routes(path):
+    request = parse_request({"method": "GET", "url": HOST + path})
+    for template, expected in [("/users/admin", False), ("/users/{userId}", True), (path, True)]:
+        endpoint = ApiEndpoint(method="GET", scheme="https", host="api.example.com", port=443, path_template=template)
+        assert operation_matches(endpoint, request) is expected
+
+
+@pytest.mark.parametrize("template,path,expected", [
+    ("/users/{id}", "/users/", False),
+    ("/users/{id}", "/users//42", False),
+    ("/users/{id}", "/users/42/", False),
+    ("/users//{id}/", "/users//42/", True),
+    ("/users/admin", "/users/{id}", False),
+    ("/users/admin", "/users/admin", True),
+    ("/users/{userId}", "/users/admin", True),
+    ("/users/42", "/users/43", False),
+    ("/", "/", True),
+])
+def test_route_segments_are_directional_and_preserve_empty_segments(template, path, expected):
+    endpoint = ApiEndpoint(method="GET", scheme="https", host="api.example.com", port=443, path_template=template)
+    assert operation_matches(endpoint, parse_request({"method": "GET", "url": HOST + path})) is expected
+
+
+@pytest.mark.parametrize("url,method,expected", [
+    ("https://API.EXAMPLE.COM:443/users/42?expand=roles", "get", True),
+    ("https://api.example.com:444/users/42", "GET", False),
+    ("http://api.example.com/users/42", "GET", False),
+    ("https://other.example.com/users/42", "GET", False),
+    ("https://api.example.com/users/42", "POST", False),
+])
+def test_directional_matching_preserves_origin_and_method_constraints(url, method, expected):
+    endpoint = ApiEndpoint(method="GET", scheme="https", host="api.example.com", path_template="/users/{userId}")
+    assert operation_matches(endpoint, parse_request({"method": method, "url": url})) is expected
+
+
+def test_current_and_historical_runs_never_credit_unrelated_literal_routes(client, auth_headers, program_id):
+    capture(client, auth_headers, program_id, "GET", "/users/admin")
+    capture(client, auth_headers, program_id, "GET", "/users/7")
+    tested = spec("users", "GET", "/users/42", [OWNER, PEER])
+    case_id = store(client, auth_headers, program_id, tested)
+    job_id = execute(client, auth_headers, program_id, case_id, tested, clean_run([OWNER, PEER]))
+    data = coverage(client, auth_headers, program_id)
+    assert operation(data, "GET", "/users/{id}")["state"] == "conclusive"
+    literal = operation(data, "GET", "/users/admin")
+    assert literal["state"] == "untested" and literal["cases"] == []
+    db = SessionLocal()
+    try:
+        row = db.query(AuthorizationTestCase).filter_by(id=case_id).one()
+        row.spec = spec("users", "GET", "/elsewhere/42", [OWNER, PEER])
+        db.commit()
+    finally:
+        db.close()
+    data = coverage(client, auth_headers, program_id)
+    assert operation(data, "GET", "/users/{id}")["historical_assessments"][0]["job_id"] == job_id
+    literal = operation(data, "GET", "/users/admin")
+    assert literal["state"] == "untested" and literal["historical_assessments"] == []
+
+
+@pytest.mark.parametrize("destination,template", [
+    ("/users/admin", "/users/admin"),
+    ("/users//42", "/users//{id}"),
+    ("/users/42/", "/users/{id}/"),
+])
+def test_edited_case_keeps_candidate_and_evidence_on_frozen_route(
+    client, auth_headers, program_id, destination, template,
+):
+    capture(client, auth_headers, program_id, "GET", "/users/7")
+    capture(client, auth_headers, program_id, "GET", destination)
+    original = spec("users", "GET", "/users/42", [OWNER, PEER])
+    case_id = store(client, auth_headers, program_id, original)
+    finding = {"category": "potential_bola", "severity": "high", "message": "peer read the user"}
+    job_id = execute(client, auth_headers, program_id, case_id, original,
+                     [run("allow", 200, "owner"), run("allow", 200, "peer")], [finding])
+    before = operation(coverage(client, auth_headers, program_id), "GET", "/users/{id}")
+    evidence = before["candidate_evidence"]
+    assert len(evidence) == 1 and evidence[0]["job_id"] == job_id
+    edit_case(client, auth_headers, program_id, case_id,
+              spec("users", "GET", destination, [OWNER, PEER]))
+
+    data = coverage(client, auth_headers, program_id)
+    old = operation(data, "GET", "/users/{id}")
+    # The inventory placeholder still legitimately matches the edited literal
+    # path, but its old run is historical, never current for the edited case.
+    if destination == "/users/admin":
+        assert len(old["cases"]) == 1 and not old["cases"][0]["executed"]
+    else:
+        assert old["cases"] == []
+    assert old["state"] == "violation_candidate"
+    assert old["candidate_evidence"] == evidence
+    assert old["candidates"] == {"open": 1, "promoted": 0, "false_positive": 0, "backing_evidence": 1}
+    history = old["historical_assessments"]
+    assert len(history) == 1
+    assert history[0]["job_id"] == job_id and history[0]["reason"] == "case_modified"
+    assert history[0]["candidates"]["open"] == 1
+    moved = operation(data, "GET", template)
+    assert moved["state"] == "stale" and not moved["cases"][0]["executed"]
+    assert moved["candidate_evidence"] == moved["historical_assessments"] == []
+    assert moved["candidates"] == {"open": 0, "promoted": 0, "false_positive": 0, "backing_evidence": 0}
+    response = client.get(f"/engagements/{program_id}/evidence", headers=auth_headers,
+                          params={"job_id": job_id, "identity_id": "peer"})
+    assert response.status_code == 200
+    rows = response.json()["evidence"]
+    assert [row["id"] for row in rows] == [evidence[0]["evidence_id"]]
+    assert rows[0]["content_hash"] == evidence[0]["content_hash"]

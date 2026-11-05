@@ -2052,11 +2052,22 @@ Supports `state` (one of the states below), `limit` (default 200, maximum 1000) 
 whole engagement.
 
 A stored case covers an operation only when its request matches by method, scheme,
-host, effective port and path shape (identifier-shaped segments are normalised as at
-capture, and a `{placeholder}` template segment matches one concrete segment). A case
+host, effective port and path shape. Inventory `{placeholder}` segments match exactly
+one non-empty segment of the concrete request path; literal segments match exactly.
+Inferred identifiers in a case do not act as wildcards against literal inventory routes.
+Repeated and trailing slashes remain significant. All matching inventory templates
+remain eligible; this does not infer server routing precedence when templates overlap.
+The same rules apply to frozen historical requests. A case
 with no `allow`/`deny` expectation reviews nothing and appears in `unmatched_cases`
 (`no_reviewed_expectation`), as does a case whose request matches no observed
 operation (`no_observed_operation`).
+
+Known limitation: explicit URL port `0` is currently treated as the scheme default
+by both inventory canonical-key construction and coverage matching. Captures at
+`:0` and the default port can therefore share an inventory operation; coverage
+cannot establish their separation. Correcting this requires coordinated capture
+and matching changes plus a safe strategy for already conflated inventory records;
+this route-matching correction does not rewrite those records.
 
 A run counts as **current** coverage for a case only when the spec frozen at claim
 (`case_snapshot`) hashes to the case's present spec and the assessment verified that snapshot. An edited

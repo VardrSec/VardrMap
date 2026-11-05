@@ -8,9 +8,9 @@ It creates no table, infers no permission and judges nothing secure.
 Semantics that must not drift:
 
 * A case "covers" an operation only by a deterministic route match (same method,
-  scheme, host, effective port and path shape). Identifier-shaped segments are
-  normalised with the same rule inventory capture uses, and a `{placeholder}`
-  segment in an inventory template matches exactly one concrete segment.
+  scheme, host, effective port and path shape). A `{placeholder}` segment in an
+  inventory template matches exactly one non-empty concrete request segment;
+  literals and empty segments match exactly. Overlapping templates remain eligible.
 * "Executed" means a job reported an assessment. A finished job without one, a
   queued job and a failed job are not executions.
 * A run is **current** coverage for a case only when the spec frozen at claim
@@ -94,21 +94,24 @@ def parse_request(request: object) -> dict | None:
         "host": url.hostname.lower(),
         "port": _port(url.scheme, port),
         "template": infer_path_template(url.path or "/"),
+        "path": url.path or "/",
     }
 
 
 def _segments(template: str) -> list[str]:
-    return [part for part in template.split("/") if part != ""]
+    return template.split("/")
 
 
-def _template_matches(endpoint_template: str, case_template: str) -> bool:
-    if endpoint_template == case_template:
+def _template_matches(endpoint_template: str, case_path: str) -> bool:
+    # Only inventory placeholders are wildcards; request identifiers are evidence,
+    # not permission to match unrelated literal routes. Empty segments are significant.
+    if endpoint_template == case_path:
         return True
-    left, right = _segments(endpoint_template), _segments(case_template)
+    left, right = _segments(endpoint_template), _segments(case_path)
     if len(left) != len(right):
         return False
     return all(
-        a == b or (a.startswith("{") and a.endswith("}")) or (b.startswith("{") and b.endswith("}"))
+        a == b or (bool(b) and bool(_OBJECT_SEGMENT.fullmatch(a)))
         for a, b in zip(left, right)
     )
 
@@ -119,7 +122,7 @@ def operation_matches(endpoint: ApiEndpoint, request: dict) -> bool:
         and (endpoint.scheme or "https") == request["scheme"]
         and (endpoint.host or "").lower() == request["host"]
         and _port(endpoint.scheme or "https", endpoint.port) == request["port"]
-        and _template_matches(endpoint.path_template, request["template"])
+        and _template_matches(endpoint.path_template, request["path"])
     )
 
 
