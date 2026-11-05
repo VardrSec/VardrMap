@@ -1,5 +1,25 @@
 # API Reference
 
+`backend/managed_http.py` provides an **unregistered** router factory requiring an
+explicitly constructed existing `Issuer`. `main.py` does not call it. The following
+paths describe an isolated adapter contract, not enabled deployment endpoints:
+
+| Method and path | Contract |
+|---|---|
+| `POST /jobs/managed/pending` | Existing API key plus `{origin, runner_id, limit?:1..20, after?:job_id}` discovers that enrollment's registered, non-revoked pending Gate jobs. Returns unresolved current cases, approved plans and `next_after`; no token, lease or reservation. Discovery is advisory: claim rechecks current authority and budgets. |
+| `POST /jobs/{job_id}/managed/claim` | Existing `ClaimControl` fields require the enrolled key, exact configured origin/Runner UUID, concurrency/target binding and finite duration. Returns existing issuer contracts/control plus `config.test_case` from the retained `ScanJob.case_snapshot`. No automatic retry. |
+| `POST /jobs/{job_id}/managed/current` | Existing `ControlRequest` fields plus `contract_id`, `attempt_id`, `fence` check owned current authority without renewing. |
+| `POST /jobs/{job_id}/managed/refresh` | Same exact binding rechecks current authority and renews the existing bounded lease; expired attempts cannot renew. |
+| `POST /jobs/{job_id}/managed/consume` | Same binding plus `contract_sha256` acknowledges one launch consumption. A duplicate or ambiguous acknowledgement grants no retry right. |
+
+These adapter requests require HTTPS, identity-encoded JSON, an 8 KiB body and a
+three-second total body-read limit. Duplicate keys, nonfinite numbers and extra
+fields are refused. Responses are capped at 256 KiB, carry `Cache-Control: no-store`
+and use the fixed error `managed_request_refused` without input/exception details.
+Existing sessions retain their CSRF checks and cannot substitute for the execution
+API key. No approval, finalization, enrollment, signing or worker route is added;
+schema `0038managedstops` is reused without migration or implicit configuration.
+
 Local managed-issuance builds (`0036managedauth`) accept the optional strict
 boolean `authorization_contract_required` on single fixed Gate job creation.
 It defaults to false and is returned only when true. A required job is inert

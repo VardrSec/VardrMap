@@ -4,6 +4,12 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Add an unregistered, explicitly injected managed HTTP router factory for
+  enrolled-key discovery, one-shot claim and current/refresh/consume operations.
+  Claims return the retained case snapshot; bounded strict requests and fixed
+  failures preserve existing authentication. No route, worker, enrollment,
+  approval signer or key bootstrap is activated.
+
 - Verify that edited cases retain historical candidates and evidence on their frozen
   route across literal-route and slash-boundary collisions. Document the existing
   explicit-port-zero inventory/coverage limitation without rewriting stored data.

@@ -1,5 +1,18 @@
 # Architecture
 
+`managed_http.build_managed_router(issuer)` is an unregistered discovery and runtime
+adapter over the existing transactional issuer. It constructs no keys, enrollment,
+authority or worker. Main never registers it. Inventory is bounded, authenticated
+against an existing API key/enrollment and restricted to accessible engagements;
+it exposes only assigned registered pending Gate work. It verifies stored approval
+signatures/windows but grants no execution permission. The claim transaction still
+reprojects authority and charges the existing budgets. Its response adds only the
+retained claim case snapshot, preserving the Runner's polled-versus-claimed check.
+Current/refresh/consume retain existing owned token, principal, contract, attempt
+and fence checks. This boundary reuses schema 0038 and changes no ordinary/manual
+job behavior. Human approval, explicit provisioning, result/stop adapters, worker
+activation and proven container process containment remain separate increments.
+
 The legacy execution-finish route refuses every outcome for managed jobs. Only
 the existing exact managed result or known-stop receipt protocol can release their
 capacity; a failed/cancelled claim or uncertain termination cannot bypass it.

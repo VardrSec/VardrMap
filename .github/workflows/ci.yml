@@ -1,6 +1,7 @@
 name: CI
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
   pull_request:
@@ -71,17 +72,17 @@ jobs:
       INTEGRATION_DATABASE_URL: postgresql://postgres:ci-fixture-password@127.0.0.1:5432/vardrmap_test_integration?sslmode=disable
     steps:
       - uses: actions/checkout@v7
-      # Pin companion revisions so a PR is tested against a reproducible stack: the Runner
-      # and Gate commits the VardrSec distribution pins (versions.json), not older ones.
+      # Exact development companions for NM-1/NM-2 closeout, independently of
+      # production distribution pins. A pin change remains a separate verified PR.
       - uses: actions/checkout@v7
         with:
           repository: VardrSec/VardrRunner
-          ref: 602a5423dcede0e37dacad52aab3bdad900c9021
+          ref: 2cbf3619c2db3682e5de7aa4ed70c8f1b07335c5
           path: .integration/runner
       - uses: actions/checkout@v7
         with:
           repository: VardrSec/VardrGate
-          ref: 7f82e499ec407eba072e129e3f3b94f1a4eabe94
+          ref: 54536ea1d900d0e35adf93b4e026962c4d45d34a
           path: .integration/gate
       - uses: actions/setup-python@v7
         with:

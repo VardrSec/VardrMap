@@ -76,6 +76,12 @@ frontend; invalid values fail closed. Local authentication (ADR 0004) must keep:
 - **No recurring scans.** Runner runs only when invoked; `/schedules` and
   `scheduled_scans` were removed (`0029dropschedules`). Do not reintroduce scheduling
   or anything implying unattended execution.
+- **Owner-authorized New Moon work (2026-11-05):** the approved charter and current
+  instruction allow an explicitly enabled managed Runner to consume approved work.
+  This limited path supersedes the blanket unattended-worker restriction above;
+  it adds no recurring scans or autonomous target selection. Preserve legacy
+  advisory behavior; declared managed contracts use the shared Strict/Advisory
+  semantics, authenticated ownership, grants, budgets and fail-closed control.
 - Queueable `tool_type`s and their config keys are allowlisted in `routers/jobs.py`,
   with bounds mirroring VardrRunner's. **`ffuf.wordlist` is a name, never a path** — a
   path would let the API make the runner read and replay any local file.
