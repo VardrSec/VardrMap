@@ -4,6 +4,10 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Match coverage inventory templates directionally against concrete case and historical
+  request paths, preserving empty segments. Prevent unrelated literal routes from
+  inheriting coverage, historical attribution, or relationship owner context.
+
 - Install the pinned Runner authorization dependencies in the Map PostgreSQL
   test interpreter as well as the separate CLI fixture environment.
 

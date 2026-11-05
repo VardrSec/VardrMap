@@ -456,3 +456,27 @@ def test_boundary_draft_does_not_choose_between_conflicting_resource_tenants(cli
     assert any("resource.tenant_id" in gap and "different tenants" in gap for gap in body["boundary_context"]["missing_context"])
     assert {e["decision"] for e in draft["spec"]["expected_access"]} == {"skip"}
     assert body["boundary_context"]["ready_to_run"] is False
+
+
+def test_numeric_case_does_not_suppress_literal_route_boundary_questions(client, auth_headers, program_id):
+    capture(client, auth_headers, program_id, "GET", "/users/admin", label="anonymous")
+    capture(client, auth_headers, program_id, "GET", "/users/7")
+    tested = case("users", "/users/42")
+    case_id = store(client, auth_headers, program_id, tested)
+    execute(client, auth_headers, program_id, case_id, tested, results_for(CAST))
+    data = relationships(client, auth_headers, program_id)
+    assert hypotheses(data, "GET /users/{id}") == {}
+    found = hypotheses(data, "GET /users/admin")
+    assert {boundary for _, boundary in found} == {"cross_tenant", "same_tenant_peer", "higher_privilege", "anonymous"}
+    assert all(h["status"] == "untested" for h in found.values())
+    from authorization_relationships import draft_for_boundary
+    from tests.test_authorization_coverage import coverage, operation
+
+    endpoint = operation(coverage(client, auth_headers, program_id), "GET", "/users/admin")
+    db = SessionLocal()
+    try:
+        draft = draft_for_boundary(db, program_id, endpoint["endpoint_id"], "cross_tenant")
+        assert draft["resource"] is None
+        assert any("no reviewed case" in gap for gap in draft["missing_context"])
+    finally:
+        db.close()
