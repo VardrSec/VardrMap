@@ -4,6 +4,9 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Refuse a managed result after an accepted known-stop receipt under the existing
+  engagement/job transaction locks. Either receipt lane now preserves its immutable
+  winner, including late historical uploads after expiry or approval revocation.
 - Add an unregistered human-owner review/register/revoke HTTP factory that
   verifies separately signed approval receipts through the existing issuer.
   Add explicit terminal association/revocation of existing Map API keys, with

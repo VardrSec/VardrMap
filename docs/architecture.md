@@ -1,5 +1,10 @@
 # Architecture
 
+Managed result submission checks for an existing known-stop receipt while holding
+the same engagement/job ownership locks used by stop reporting. The reciprocal
+checks serialize both receipt orderings without relying on locking an absent row;
+only the retained winning lane may continue its existing receipt protocol.
+
 `managed_approval_http.build_approval_router(issuer)` is an unregistered boundary
 over existing owner-session review, separately signed receipt registration and
 approval revocation. Existing local CSRF/Origin and GitHub session checks remain

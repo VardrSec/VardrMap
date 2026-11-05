@@ -1,5 +1,10 @@
 # API Reference
 
+Managed result and known-stop receipts are mutually exclusive. Once either lane
+has retained its first receipt, the other is refused without evidence writes,
+reservation changes or replacement. Expiry and approval revocation do not erase
+the winning historical receipt or authorize conflicting publication.
+
 `backend/managed_approval_http.py` supplies an **unregistered** human-owner factory
 over the existing configured `Issuer`; main never registers it. Existing local
 owner sessions require CSRF and allowed Origin, and existing GitHub owner sessions

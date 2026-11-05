@@ -1,5 +1,9 @@
 # Development
 
+`tests/test_managed_stops.py` exercises both result/stop receipt orderings with
+active, expired and approval-revoked permission, including retained evidence,
+immutable replay, capacity release and conservative spent allowances.
+
 ## Explicit managed key binding
 
 An installation operator can invoke `python -m managed_enrollment` from the
