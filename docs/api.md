@@ -2062,6 +2062,13 @@ with no `allow`/`deny` expectation reviews nothing and appears in `unmatched_cas
 (`no_reviewed_expectation`), as does a case whose request matches no observed
 operation (`no_observed_operation`).
 
+Known limitation: explicit URL port `0` is currently treated as the scheme default
+by both inventory canonical-key construction and coverage matching. Captures at
+`:0` and the default port can therefore share an inventory operation; coverage
+cannot establish their separation. Correcting this requires coordinated capture
+and matching changes plus a safe strategy for already conflated inventory records;
+this route-matching correction does not rewrite those records.
+
 A run counts as **current** coverage for a case only when the spec frozen at claim
 (`case_snapshot`) hashes to the case's present spec and the assessment verified that snapshot. An edited
 case (a changed request, identity, expected access or context; renaming it does not count), a deleted

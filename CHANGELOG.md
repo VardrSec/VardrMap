@@ -4,6 +4,10 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Verify that edited cases retain historical candidates and evidence on their frozen
+  route across literal-route and slash-boundary collisions. Document the existing
+  explicit-port-zero inventory/coverage limitation without rewriting stored data.
+
 - Match coverage inventory templates directionally against concrete case and historical
   request paths, preserving empty segments. Prevent unrelated literal routes from
   inheriting coverage, historical attribution, or relationship owner context.

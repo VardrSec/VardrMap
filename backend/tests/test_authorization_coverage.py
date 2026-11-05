@@ -660,3 +660,51 @@ def test_current_and_historical_runs_never_credit_unrelated_literal_routes(clien
     assert operation(data, "GET", "/users/{id}")["historical_assessments"][0]["job_id"] == job_id
     literal = operation(data, "GET", "/users/admin")
     assert literal["state"] == "untested" and literal["historical_assessments"] == []
+
+
+@pytest.mark.parametrize("destination,template", [
+    ("/users/admin", "/users/admin"),
+    ("/users//42", "/users//{id}"),
+    ("/users/42/", "/users/{id}/"),
+])
+def test_edited_case_keeps_candidate_and_evidence_on_frozen_route(
+    client, auth_headers, program_id, destination, template,
+):
+    capture(client, auth_headers, program_id, "GET", "/users/7")
+    capture(client, auth_headers, program_id, "GET", destination)
+    original = spec("users", "GET", "/users/42", [OWNER, PEER])
+    case_id = store(client, auth_headers, program_id, original)
+    finding = {"category": "potential_bola", "severity": "high", "message": "peer read the user"}
+    job_id = execute(client, auth_headers, program_id, case_id, original,
+                     [run("allow", 200, "owner"), run("allow", 200, "peer")], [finding])
+    before = operation(coverage(client, auth_headers, program_id), "GET", "/users/{id}")
+    evidence = before["candidate_evidence"]
+    assert len(evidence) == 1 and evidence[0]["job_id"] == job_id
+    edit_case(client, auth_headers, program_id, case_id,
+              spec("users", "GET", destination, [OWNER, PEER]))
+
+    data = coverage(client, auth_headers, program_id)
+    old = operation(data, "GET", "/users/{id}")
+    # The inventory placeholder still legitimately matches the edited literal
+    # path, but its old run is historical, never current for the edited case.
+    if destination == "/users/admin":
+        assert len(old["cases"]) == 1 and not old["cases"][0]["executed"]
+    else:
+        assert old["cases"] == []
+    assert old["state"] == "violation_candidate"
+    assert old["candidate_evidence"] == evidence
+    assert old["candidates"] == {"open": 1, "promoted": 0, "false_positive": 0, "backing_evidence": 1}
+    history = old["historical_assessments"]
+    assert len(history) == 1
+    assert history[0]["job_id"] == job_id and history[0]["reason"] == "case_modified"
+    assert history[0]["candidates"]["open"] == 1
+    moved = operation(data, "GET", template)
+    assert moved["state"] == "stale" and not moved["cases"][0]["executed"]
+    assert moved["candidate_evidence"] == moved["historical_assessments"] == []
+    assert moved["candidates"] == {"open": 0, "promoted": 0, "false_positive": 0, "backing_evidence": 0}
+    response = client.get(f"/engagements/{program_id}/evidence", headers=auth_headers,
+                          params={"job_id": job_id, "identity_id": "peer"})
+    assert response.status_code == 200
+    rows = response.json()["evidence"]
+    assert [row["id"] for row in rows] == [evidence[0]["evidence_id"]]
+    assert rows[0]["content_hash"] == evidence[0]["content_hash"]
