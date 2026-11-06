@@ -7,6 +7,11 @@ first response; the post-consumption runtime acknowledgement confirms that exact
 tuple. Host-only `VardrStop` authentication cannot authorize execution. Defaults and
 native/manual calls without runtime fields retain their existing behavior.
 
+An authenticated active host stop grant can close the uploaded-result/before-finish
+window by failing that same immutable result receipt. It creates no second stop
+receipt, successful outcome or refund. Exact host lookup remains available after
+grant expiry/revocation; those states still refuse new terminal reports.
+
 Managed HTTP factories remain absent from default startup. Explicit
 `VARDRMAP_MANAGED_WORKER=1` uses the reviewed
 [configuration](development.md#explicit-managed-service-configuration) to assemble

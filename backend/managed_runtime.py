@@ -511,7 +511,7 @@ class Runtimes:
         )
         # Enrollment/API-key revocation blocks execution, not this independently
         # approved, still-active reporting grant for an already bound attempt.
-        return job, execution, binding
+        return job, execution, binding, contract
 
     def observed_exit(
         self,
@@ -545,26 +545,47 @@ class Runtimes:
                 finished >= normalized_start(row.identity["started_at"]),
                 "host_exit_before_start",
             )
-            job, execution, expected = self._lock_host_attempt(db, row, binding)
+            job, execution, expected, contract = self._lock_host_attempt(
+                db, row, binding
+            )
             row = self._host(db, request, runtime_id, locked=True)
             self._active(row, now().replace(tzinfo=None))
             old = self.stops._row(db, expected)
+            result = self.results._result(db, expected)
+            require(old is None or result is None, "conflicting_runtime_receipts")
             require(
-                (old is None and not row.retired and row.report_sha256 is None)
+                (
+                    old is None
+                    and (result is None or result.outcome is None)
+                    and not row.retired
+                    and row.report_sha256 is None
+                )
                 or (
-                    old is not None and row.retired and row.report_sha256 == report_sha
+                    (
+                        old is not None
+                        or (result is not None and result.outcome == "failed")
+                    )
+                    and row.retired
+                    and row.report_sha256 == report_sha
                 ),
                 "host_report_changed",
             )
-            receipt = self.stops._stop_locked(
-                db,
-                now,
-                job,
-                execution,
-                expected,
-                outcome="failed",
-                cause="observed_exit",
-            )
+            if result is not None:
+                require(contract.consumed is True, "result_consumption_required")
+                receipt = self.results._fail_locked(
+                    db, now, job, execution, expected, result
+                )
+                job.error_message = "observed_exit"
+            else:
+                receipt = self.stops._stop_locked(
+                    db,
+                    now,
+                    job,
+                    execution,
+                    expected,
+                    outcome="failed",
+                    cause="observed_exit",
+                )
             row.retired, row.report_sha256 = True, report_sha
             db.flush()
             self.issuer._locked_time(db, now)

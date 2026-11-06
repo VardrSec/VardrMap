@@ -4,14 +4,21 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Bind opt-in Windows native fallback fixtures to the independently verified
+  corrected Gate binary and its matching five-phase receipt.
+
+- Close the uploaded-result/before-finish runtime-exit window through the existing
+  failed-result receipt lane. Atomically retain the original result/evidence,
+  retire its runtime and release capacity without a second stop receipt, success
+  or allowance refund. Add a real PostgreSQL Runtime-before-Clock lock regression.
+
 - Align human-session classification with existing bearer-token normalization so
   whitespace variants of full API keys cannot acquire owner-session provenance.
 
 - Add explicit runtime admission, atomic claim association and purpose-separated
   host stop/receipt protocols under additive `0039managedruntime`. Preserve
   unconsumed retirement without inventing acknowledgement or refunding spent
-  allowances. Keep pending uploaded results held until the reviewed failed-result
-  recovery increment; runtime/platform acceptance remains separate.
+  allowances. Runtime/platform acceptance remains separate.
 
 - Add explicit, default-disabled assembly of the managed HTTP services. Enabled
   configuration requires exact HTTPS origin, existing operator public trust and

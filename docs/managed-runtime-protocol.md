@@ -96,7 +96,8 @@ retained incarnation and exact server binding. The server accepts no caller-sele
 outcome, cause, old token or confirmation boolean. It fixes `failed/observed_exit`
 and shares the native producer's serialized result/stop exclusion and terminal
 reservation mutation. Its response wraps the canonical immutable managed-stop
-receipt in `vardr.worker-host-stop/1` with runtime ID/hash.
+receipt, or the existing result's failed completion, in `vardr.worker-host-stop/1`
+with runtime ID/hash. A host report can never produce a successful completion.
 
 An already bound attempt can retain this independently approved stop grant after
 enrollment/API-key or work-approval revocation. The retained enrollment's owner,
@@ -111,9 +112,16 @@ consumed, confirmed-stop right. Read-only observation recognizes this narrow
 `observed_exit` case only with the retained exact retired-runtime/report proof;
 it never invents a consumption acknowledgement or native handle.
 
-An existing uploaded `ManagedResult` without terminal completion remains held in
-this increment. It cannot acquire a second stop receipt. A reviewed failed-result
-recovery producer must close that window before NM-2 acceptance.
+If an uploaded `ManagedResult` has no terminal completion, the same authenticated
+report atomically fails that existing receipt and retires the exact runtime. It
+requires the retained consumed contract and uses the native failed-finish helper;
+it creates no `ManagedStop`. The original result, artifact/case hashes, evidence,
+candidates and spent allowances remain unchanged. Existing native terminal
+completions cannot be replaced by a host report; use immutable lookup instead.
+An identical accepted host report is idempotent while its grant remains active;
+a changed report is refused. Read-only reconciliation keeps the canonical result
+and failed completion without inventing a native process-termination assertion or
+rewriting the Runner's original intended outcome.
 
 ## Immutable reconciliation
 

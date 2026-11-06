@@ -7,8 +7,12 @@ contract JSON cannot safely hold this independent authority. An optional trusted
 issuer hook locks admission before the clock and associates the issued contract
 within the existing claim transaction, including lost first replies. Native stop
 mutation is shared after producer authentication; native allowed causes remain
-unchanged. [The protocol](managed-runtime-protocol.md) specifies exact retirement,
-revocation, immutable lookup and the remaining pending-result recovery gate.
+unchanged. Pending uploaded results use the same failed-only terminal helper as
+native failed finish, under existing attempt locks; retirement and capacity release
+commit with that completion, preserving evidence and spent allowances without a
+second stop row. [The protocol](managed-runtime-protocol.md) specifies exact
+retirement, revocation and immutable lookup. Installed recovery acceptance remains
+required.
 
 The explicit `managed_configuration.configure_managed(app)` assembly is inert when
 `VARDRMAP_MANAGED_WORKER` is omitted or `0`. Exact `1` requires reviewed HTTPS

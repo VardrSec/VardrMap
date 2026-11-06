@@ -274,6 +274,10 @@ class Results:
                 row is not None and row.receipt_sha256 == receipt_sha256,
                 "owned_result_receipt_required",
             )
+            if outcome == "failed":
+                receipt = self._fail_locked(db, now, job, execution, binding, row)
+                db.commit()
+                return receipt
             if row.outcome is not None:
                 require(row.outcome == outcome, "different_completion")
                 db.commit()
@@ -336,6 +340,37 @@ class Results:
                 live(check_state=False)
             db.commit()
             return self._completion(binding, row, execution)
+
+    def _fail_locked(self, db, now, job, execution, binding, row):
+        """Failed-only terminalization after producer auth and exact attempt locks.
+
+        Native failed finish and trusted host recovery share immutable result
+        identity, exclusion and capacity mutation; successful permission checks
+        remain exclusively in finish(). This never creates a second stop row.
+        """
+        require(self._result(db, binding) is row, "owned_result_receipt_required")
+        require(
+            db.query(ManagedStop)
+            .filter_by(contract_id=binding["contract_id"])
+            .with_for_update()
+            .first()
+            is None,
+            "stop_protocol_already_started",
+        )
+        if row.outcome is not None:
+            require(row.outcome == "failed", "different_completion")
+            return self._completion(binding, row, execution)
+        require(
+            execution.state not in {"completed", "failed", "cancelled"},
+            "foreign_completion",
+        )
+        require(execution.capacity_reserved is True, "owned_reservation_required")
+        row.outcome, row.finished_at = "failed", now().replace(tzinfo=None)
+        execution.state, execution.capacity_reserved = "failed", False
+        job.status, job.completed_at, job.error_message = "failed", row.finished_at, "failed"
+        db.flush()
+        self.issuer._locked_time(db, now)
+        return self._completion(binding, row, execution)
 
     def inspect(
         self,

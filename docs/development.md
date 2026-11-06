@@ -8,6 +8,24 @@ protocol/state invariants, not PostgreSQL lock behavior, Docker namespace exit,
 Windows/WSL timing or full worker acceptance. No enabled default or alternative
 runtime is inferred from passing fixtures.
 
+The opt-in Windows native fallback fixtures now require the corrected Gate commit
+`54536ea1d900d0e35adf93b4e026962c4d45d34a`, built with Windows Go 1.26.3, binary
+SHA-256 `28ad13758063a5541a904a30608fff84d8abe3759e65b54dec5ca67bb9684094`.
+`NM2_NATIVE_GATE_BINARY` and the independent five-phase guarded execution receipt
+at `NM2_NATIVE_GATE_RECEIPT` must both match that hash. Enable `NM2_NATIVE_GATE=1`,
+`NM2_PRECLAIM_ENTRY=1` and `NM2_TLS_LOOPBACK=1`, supply the matching
+`NM2_RUNNER_SOURCE` and `NM2_GUARDED_FIXTURE_SOURCE`, and set `NM2_NATIVE_RESULTS`
+inside the disposable test `TEMP` directory. Run `tests/test_managed_native.py`
+and `tests/test_managed_entry.py` with the Map test interpreter. This rerun writes
+new evidence; older milestone receipts keep their original hashes and limits.
+
+`postgres_tests/test_managed_runtime.py` uses the existing disposable administrator
+and restricted application-role schemas. It observes an actual claim blocked on a
+runtime row, then requires the holder to acquire the operation clock with NOWAIT;
+this detects the reversed Runtime/Clock order without assuming an event means a
+database lock wait. Its PostgreSQL execution belongs to the existing PostgreSQL CI
+job, separately from SQLite/ASGI protocol evidence.
+
 ## Explicit managed service configuration
 
 This development candidate exposes managed factories only when

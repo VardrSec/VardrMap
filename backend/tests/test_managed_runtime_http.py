@@ -6,6 +6,7 @@ from datetime import timedelta
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from execution_control import ControlRequest
 from managed_http import build_managed_router
 from managed_observations import Observations
 from managed_results import Results
@@ -338,27 +339,143 @@ def test_expired_or_revoked_grant_blocks_new_report_but_keeps_exact_final_receip
     )
 
 
-def test_result_before_finish_stays_held_instead_of_creating_a_second_receipt(http):
-    h = http
-    claim(h)
+def pending_result(h):
+    claimed = claim(h).json()
     consume(h)
     assert confirm(h).status_code == 200
     h.raw = {
         "test_case_id": "case-1",
         "case_hash": h.s["plan"]["case_hash"],
-        "executions": [],
-        "findings": [],
+        "executions": [
+            {
+                "identity_id": claimed["config"]["test_case"]["identities"][0]["id"],
+                "status_code": 200,
+                "observed_outcome": "allow",
+            }
+        ],
+        "findings": [
+            {
+                "severity": "high",
+                "message": "synthetic candidate",
+                "category": "fixture",
+            }
+        ],
     }
     result = h.client.post(
         "/jobs/job-1/managed/result", json=receipt.artifact(h), headers=h.headers
     )
     assert result.status_code == 200, result.text
+    return result.json()
+
+
+def retained_rows(h):
+    with Session(h.s["engine"]) as db:
+        return tuple(
+            tuple(db.execute(model.__table__.select().order_by(model.id)).all())
+            for model in (receipt.Evidence, receipt.ScanItem, receipt.JobResultReceipt)
+        )
+
+
+@pytest.mark.parametrize(
+    "authority",
+    ["live", "lease_expired", "enrollment_revoked", "key_deleted", "approval_revoked"],
+)
+def test_exited_runtime_fails_the_retained_result_without_replacing_evidence_or_refunding(
+    http, authority
+):
+    h = http
+    ack = pending_result(h)
+    retained = receipt.state(h)
+    evidence = retained_rows(h)
+    if authority == "lease_expired":
+        h.s["wall"][0] += timedelta(seconds=11)
+    elif authority != "live":
+        with Session(h.s["engine"]) as db:
+            if authority == "enrollment_revoked":
+                row = db.get(ManagedEnrollment, "enrollment-1")
+                row.revoked, row.revision = True, row.revision + 1
+            elif authority == "key_deleted":
+                db.delete(db.get(ApiKey, "key-1"))
+            else:
+                db.query(ManagedApproval).one().revoked = True
+            db.commit()
+    intent = observed(h)
+    reply = post(h, "/observed-exit", intent)
+    assert reply.status_code == 200, reply.text
+    completion = reply.json()["receipt"]
+    assert completion == {
+        "schema": "vardr.managed-completion/1",
+        **lookup(h).json()["binding"],
+        "receipt_sha256": ack["receipt_sha256"],
+        "outcome": "failed",
+        "capacity_reserved": False,
+    }
+    after = receipt.state(h)
+    assert after == {
+        **retained,
+        "job": "failed",
+        "execution": "failed",
+        "capacity": False,
+        "results": [(ack["receipt_sha256"], ack["artifact_sha256"], "failed")],
+    }
+    assert after["evidence"] == after["candidates"] == after["legacy_receipts"] == 1
+    assert after["stops"] == [] and state(h)[-1][2] is True
+    assert post(h, "/observed-exit", intent).json() == reply.json()
+    assert post(h, "/observed-exit", {**intent, "exit_code": 1}).status_code == 409
+    assert lookup(h).json()["receipt"] == completion and receipt.state(h) == after
+    assert retained_rows(h) == evidence
+    if authority == "live":
+        original = receipt.post(h, "/result")
+        assert original.json() == ack
+        with Session(h.s["engine"]) as db:
+            observed_result = h.results.inspect(
+                db,
+                h.s["runner"],
+                job_id="job-1",
+                body=ControlRequest(
+                    origin=runtime.ORIGIN, runner_id=RUNNER, token=h.owned["token"]
+                ),
+                **{
+                    k: h.owned[k]
+                    for k in ("contract_id", "attempt_id", "fence", "contract_sha256")
+                },
+            )
+        assert observed_result["result"] == ack
+        assert observed_result["completion"] == completion
+        assert observed_result["consumed"] is True
+        assert (
+            receipt.post(h, "/finish", receipt.finish_body(h, ack)).status_code == 409
+        )
+
+
+@pytest.mark.parametrize("change", ["expired", "revoked"])
+def test_failed_result_receipt_remains_readable_after_stop_grant_retirement(
+    http, change
+):
+    h = http
+    pending_result(h)
+    intent = observed(h)
+    accepted = post(h, "/observed-exit", intent)
+    assert accepted.status_code == 200
+    before = state(h)
+    if change == "expired":
+        h.s["wall"][0] += timedelta(seconds=3601)
+    else:
+        assert post(h, "/revoke", {}, h.owner).status_code == 200
+    assert post(h, "/observed-exit", intent).status_code == 409
+    assert lookup(h).json()["receipt"] == accepted.json()["receipt"]
+    assert state(h) == before
+
+
+@pytest.mark.parametrize("outcome", ["completed", "cancelled", "failed"])
+def test_host_cannot_replace_an_existing_native_result_completion(http, outcome):
+    h = http
+    ack = pending_result(h)
+    native = receipt.post(h, "/finish", receipt.finish_body(h, ack, outcome))
+    assert native.status_code == 200, native.text
     before = state(h)
     assert post(h, "/observed-exit", observed(h)).status_code == 409
-    assert (
-        state(h) == before and before[5] == ("active", True) and before[6:8] == (0, 1)
-    )
-    assert lookup(h).json()["receipt"] is None
+    assert lookup(h).json()["receipt"] == native.json() and state(h) == before
 
 
 @pytest.mark.parametrize(
@@ -388,11 +505,15 @@ def test_changed_identity_or_secret_never_releases_the_bound_attempt(http, chang
     )
 
 
-def test_failure_after_stop_write_rolls_back_receipt_retirement_and_release_together(
-    http,
+@pytest.mark.parametrize("result_uploaded", [False, True])
+def test_failure_after_terminal_write_rolls_back_receipt_retirement_and_release_together(
+    http, result_uploaded
 ):
     h = http
-    claim(h)
+    if result_uploaded:
+        pending_result(h)
+    else:
+        claim(h)
     intent, before = observed(h), state(h)
 
     def fault(conn, cursor, statement, parameters, context, executemany):
@@ -491,9 +612,15 @@ def test_distinct_nanosecond_start_is_a_distinct_incarnation_in_database(http):
 
 
 @pytest.mark.parametrize("change", ["expired", "revoked"])
-def test_expired_or_revoked_grant_cannot_create_the_first_stop_receipt(http, change):
+@pytest.mark.parametrize("result_uploaded", [False, True])
+def test_expired_or_revoked_grant_cannot_create_the_first_terminal_receipt(
+    http, change, result_uploaded
+):
     h = http
-    claim(h)
+    if result_uploaded:
+        pending_result(h)
+    else:
+        claim(h)
     intent = observed(h)
     if change == "expired":
         h.s["wall"][0] += timedelta(seconds=3601)
