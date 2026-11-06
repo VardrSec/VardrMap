@@ -4,6 +4,9 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Record two exact historical secret-scan false positives for deterministic
+  public runtime-protocol test vectors; keep scan rules and future findings active.
+
 - Retain an immutable host-authorized unbound-runtime retirement under the existing
   Runtime-before-Clock lock order, fencing late associated claims without job or
   budget writes. Add opt-in v2 original-key observation with exact runtime proof;
