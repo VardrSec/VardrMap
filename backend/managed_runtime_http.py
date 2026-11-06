@@ -70,6 +70,14 @@ class LookupInput(BaseModel):
     runtime_sha256: Fingerprint
 
 
+class UnboundExitInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    runtime_sha256: Fingerprint
+    finished_at: Timestamp
+    exit_code: Annotated[int, Field(strict=True, ge=0, le=255)]
+    observation_sha256: Fingerprint
+
+
 class RevokeInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -146,5 +154,13 @@ def build_runtime_router(service):
     @router.post(RUNTIME_PATH + "/receipt")
     async def receipt(runtime_id: str, request: Request, db=Depends(get_db)):
         return await dispatch(request, db, runtime_id, "receipt", LookupInput)
+
+    @router.post(RUNTIME_PATH + "/observed-unbound-exit")
+    async def observed_unbound_exit(
+        runtime_id: str, request: Request, db=Depends(get_db)
+    ):
+        return await dispatch(
+            request, db, runtime_id, "observed_unbound_exit", UnboundExitInput
+        )
 
     return router

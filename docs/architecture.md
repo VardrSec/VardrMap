@@ -14,6 +14,12 @@ second stop row. [The protocol](managed-runtime-protocol.md) specifies exact
 retirement, revocation and immutable lookup. Installed recovery acceptance remains
 required.
 
+An unbound exited runtime can instead retain a purpose-separated retirement
+receipt in the same schema 0039 row. Claim preparation and retirement serialize on
+Runtime before Clock, so an irreversible retirement cannot coexist with a later
+runtime-associated claim. Original-key v2 observation keeps existing job/principal
+checks and proves exact runtime association; it supplies no execution capability.
+
 The explicit `managed_configuration.configure_managed(app)` assembly is inert when
 `VARDRMAP_MANAGED_WORKER` is omitted or `0`. Exact `1` requires reviewed HTTPS
 origin/issuer configuration, existing public operator anchors and a separate raw

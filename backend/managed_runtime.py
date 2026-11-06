@@ -129,18 +129,13 @@ class Runtimes:
         )
         bound = Runtimes._binding(row)
         require(
-            (
-                bound is not None
-                or (
-                    row.confirmed_at is None
-                    and not row.retired
-                    and row.report_sha256 is None
-                )
-            )
+            (bound is not None or row.confirmed_at is None)
             and (row.report_sha256 is None or row.retired)
             and (not row.retired or row.report_sha256 is not None),
             "retained_runtime_inconsistent",
         )
+        if row.report_sha256 is not None:
+            fingerprint(row.report_sha256)
 
     @staticmethod
     def _public(row):
@@ -598,6 +593,82 @@ class Runtimes:
                 "receipt": receipt,
             }
 
+    @staticmethod
+    def _unbound_receipt(row):
+        require(
+            row.retired is True
+            and row.confirmed_at is None
+            and Runtimes._binding(row) is None,
+            "unbound_runtime_retirement_required",
+        )
+        receipt = {
+            "schema": "vardr.worker-unbound-retirement/1",
+            "runtime_id": row.id,
+            "runtime_sha256": row.runtime_sha256,
+            "origin": row.origin,
+            "runner_id": row.runner_id,
+            "enrollment_id": row.enrollment_id,
+            "report_sha256": fingerprint(row.report_sha256),
+            "bound": False,
+            "retired": True,
+        }
+        return {**receipt, "receipt_sha256": digest(receipt)}
+
+    def observed_unbound_exit(
+        self,
+        db,
+        request,
+        *,
+        runtime_id,
+        runtime_sha256,
+        finished_at,
+        exit_code,
+        observation_sha256,
+    ):
+        fingerprint(runtime_sha256)
+        fingerprint(observation_sha256)
+        integer(exit_code, 0, 255)
+        finished = normalized_start(finished_at)
+        report_sha = digest(
+            {
+                "schema": "vardr.worker-unbound-exit-report/1",
+                "runtime_id": runtime_id,
+                "runtime_sha256": runtime_sha256,
+                "finished_at": finished_at,
+                "exit_code": exit_code,
+                "observation_sha256": observation_sha256,
+            }
+        )
+        with self.issuer.operation(db) as now:
+            self.issuer._begin_write(db)
+            # Runtime precedes Clock in claim preparation too. A retire winner
+            # permanently refuses a late claim; a claim winner needs bound exit.
+            row = self._host(db, request, runtime_id, locked=True)
+            require(row.runtime_sha256 == runtime_sha256, "host_runtime_binding")
+            require(
+                finished >= normalized_start(row.identity["started_at"]),
+                "host_exit_before_start",
+            )
+            self._active(row, now().replace(tzinfo=None))
+            require(self._binding(row) is None, "unbound_runtime_required")
+            require(
+                (not row.retired and row.report_sha256 is None)
+                or (row.retired and row.report_sha256 == report_sha),
+                "host_report_changed",
+            )
+            row.retired, row.report_sha256 = True, report_sha
+            db.flush()
+            self.issuer._locked_time(db, now)
+            self._active(row, now().replace(tzinfo=None))
+            receipt = self._unbound_receipt(row)
+            db.commit()
+            return {
+                "schema": "vardr.worker-host-stop/1",
+                "runtime_id": runtime_id,
+                "runtime_sha256": runtime_sha256,
+                "receipt": receipt,
+            }
+
     def receipt(self, db, request, *, runtime_id, runtime_sha256):
         """Hash-authenticated immutable observation even after grant expiry/revoke."""
         row = self._host(db, request, runtime_id)
@@ -605,7 +676,9 @@ class Runtimes:
             row.runtime_sha256 == fingerprint(runtime_sha256), "host_runtime_binding"
         )
         binding, receipt = self._binding(row), None
-        if binding is not None:
+        if binding is None and row.retired:
+            receipt = self._unbound_receipt(row)
+        elif binding is not None:
             stop, result = (
                 self.stops._row(db, binding),
                 self.results._result(db, binding),
@@ -663,3 +736,41 @@ def retired_host_stop(db, binding, stop):
         and execution.state == "failed"
         and execution.capacity_reserved is False
     )
+
+
+def observed_runtime_retirement(
+    db,
+    *,
+    runtime_id,
+    runtime_sha256,
+    enrollment,
+    principal,
+    owner,
+    binding,
+):
+    """Original enrolled-key observation, not an execution/stop capability."""
+    _uuid(runtime_id)
+    fingerprint(runtime_sha256)
+    row = (
+        db.query(ManagedRuntime)
+        .filter_by(id=runtime_id)
+        .with_for_update()
+        .populate_existing()
+        .first()
+    )
+    if row is None or row.owner != owner:
+        raise HTTPException(404)
+    Runtimes._check(row)
+    require(
+        row.runtime_sha256 == runtime_sha256
+        and row.enrollment_id == enrollment.id
+        and row.enrollment_revision == enrollment.revision
+        and row.api_key_id == enrollment.api_key_id
+        and row.principal_sha256 == principal == enrollment.principal_hash
+        and row.owner == enrollment.owner
+        and row.origin == enrollment.origin
+        and row.runner_id == enrollment.runner_id
+        and Runtimes._binding(row) == binding,
+        "original_runtime_association_required",
+    )
+    return Runtimes._unbound_receipt(row) if binding is None and row.retired else None

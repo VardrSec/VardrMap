@@ -123,6 +123,57 @@ a changed report is refused. Read-only reconciliation keeps the canonical result
 and failed completion without inventing a native process-termination assertion or
 rewriting the Runner's original intended outcome.
 
+## Physical exit before a runtime claim is bound
+
+A durable local claim-send intent does not prove that its POST reached Map.
+After direct stopped-incarnation proof, the host may send
+`POST /managed/runtimes/{runtime_id}/observed-unbound-exit` using the same active
+`VardrStop` capability and exactly:
+
+```text
+{runtime_sha256, finished_at, exit_code, observation_sha256}
+```
+
+This operation locks the runtime before the clock, as claim preparation does.
+If claim already associated an attempt, retirement refuses and the exact bound
+reporting lane is required. If retirement wins, its irreversible marker refuses
+every later runtime-tagged claim. It changes no job, approval, receipt lane or
+budget. A pending job can remain pending; this proves that incarnation is unbound,
+not that another native invocation cannot claim the job.
+
+The report digest has the distinct `vardr.worker-unbound-exit-report/1` purpose
+and includes runtime ID/hash and all four submitted fields. The host response
+wraps this canonical receipt in `vardr.worker-host-stop/1`:
+
+```text
+{schema:"vardr.worker-unbound-retirement/1", runtime_id, runtime_sha256,
+ origin, runner_id, enrollment_id, report_sha256, bound:false, retired:true,
+ receipt_sha256}
+```
+
+`receipt_sha256` hashes the canonical receipt without that hash field. Existing
+schema 0039's retirement/report columns retain it without migration. Exact report
+replay is idempotent while the grant is active; changed reports refuse. Lookup
+retains the receipt after grant expiry/revocation, but those states cannot create
+a retirement. Null binding without this retained receipt remains a hold.
+
+For local audit, the existing original-key job observation accepts optional paired
+`runtime_id`/`runtime_sha256`. Supplying both selects
+`vardr.managed-claim-observation/2`, with the exact v1 fields and one additional
+`runtime_retirement` receipt or null. Omission preserves the exact v1 response.
+Existing ownership, active enrollment, original key, Runner/origin and
+plan/case/association checks remain. The runtime must match the observed attempt,
+including both associations being absent for an unbound receipt. Deleted keys,
+revoked enrollment, unrelated attempts and partial request pairs refuse.
+
+The worker must durably link the runtime ID/hash to the original run/job and
+fingerprints in the same journal transaction as claim-send preparation. Only that
+retained link and authenticated matching v2 receipt may retire local metadata as
+not claimed by the retired runtime. Contract/consumption/PID/artifact/receipt or
+active-ledger evidence prevents this path. Old unlinked intents stay held. No
+control token, consumption acknowledgement, budget refund or retry right is made;
+the original claim and runtime tombstones remain.
+
 ## Immutable reconciliation
 
 `POST /managed/runtimes/{runtime_id}/receipt` takes only `{runtime_sha256}` under

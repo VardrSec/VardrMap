@@ -12,6 +12,13 @@ window by failing that same immutable result receipt. It creates no second stop
 receipt, successful outcome or refund. Exact host lookup remains available after
 grant expiry/revocation; those states still refuse new terminal reports.
 
+The same capability may irreversibly retire an exactly observed exited runtime
+whose claim association is still absent, through `observed-unbound-exit`. Runtime
+locking serializes this with late claims; pending jobs and allowances are unchanged.
+Original-key job observation accepts paired runtime ID/hash for an explicit v2
+retirement proof; omitted fields keep v1 unchanged. An absent binding alone never
+closes an unknown local claim. See the [exact protocol](managed-runtime-protocol.md#physical-exit-before-a-runtime-claim-is-bound).
+
 Managed HTTP factories remain absent from default startup. Explicit
 `VARDRMAP_MANAGED_WORKER=1` uses the reviewed
 [configuration](development.md#explicit-managed-service-configuration) to assemble

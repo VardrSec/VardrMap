@@ -7,7 +7,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 from starlette.concurrency import run_in_threadpool
 from starlette.requests import ClientDisconnect
 
@@ -29,6 +29,15 @@ class ObservationInput(BaseModel):
     plan_sha256: Fingerprint
     case_sha256: Fingerprint
     association_sha256: Fingerprint
+    runtime_id: UUID | None = None
+    runtime_sha256: Fingerprint | None = None
+
+    @model_validator(mode="after")
+    def paired_runtime(self):
+        supplied = self.model_fields_set & {"runtime_id", "runtime_sha256"}
+        if supplied and (len(supplied) != 2 or self.runtime_id is None or self.runtime_sha256 is None):
+            raise ValueError("paired_runtime_observation_required")
+        return self
 
 
 async def _payload(request):
@@ -100,6 +109,10 @@ def build_observation_router(service):
                 plan_sha256=body.plan_sha256,
                 case_sha256=body.case_sha256,
                 association_sha256=body.association_sha256,
+                **(
+                    {"runtime_id": str(body.runtime_id), "runtime_sha256": body.runtime_sha256}
+                    if body.runtime_id is not None else {}
+                ),
             )
             if len(canonical(reply)) > 16384:
                 return _refused(503)

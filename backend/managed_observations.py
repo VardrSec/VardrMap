@@ -30,7 +30,8 @@ class Observations:
         self.results, self.issuer = results, results.issuer
         self.stops = Stops(results)
 
-    def inspect(self, db, request, *, job_id, body, plan_sha256, case_sha256, association_sha256):
+    def inspect(self, db, request, *, job_id, body, plan_sha256, case_sha256, association_sha256,
+                runtime_id=None, runtime_sha256=None):
         """Observe one original approval/association; no token, renewal or retry grant.
 
         Absence is a snapshot, not proof that an earlier claim cannot commit later.
@@ -39,6 +40,7 @@ class Observations:
         """
         for value in (plan_sha256, case_sha256, association_sha256):
             hash_value(value)
+        require((runtime_id is None) == (runtime_sha256 is None), "paired_runtime_observation_required")
         with self.issuer.operation(db):
             user = get_current_user(
                 request, authorization=request.headers.get("authorization"), db=db
@@ -184,6 +186,15 @@ class Observations:
                     consumed=contract.consumed,
                     authority_revision=approval.revision,
                     authority_sha256=approval.context["authority_sha256"],
+                )
+            if runtime_id is not None:
+                from managed_runtime import observed_runtime_retirement
+
+                reply["schema"] = "vardr.managed-claim-observation/2"
+                reply["runtime_retirement"] = observed_runtime_retirement(
+                    db, runtime_id=runtime_id, runtime_sha256=runtime_sha256,
+                    enrollment=enrollment, principal=principal, owner=user["github_id"],
+                    binding=binding if reply["claim"] is not None else None,
                 )
             # No control/accounting/receipt mutations; existing telemetry is unchanged.
             db.rollback()
