@@ -70,6 +70,10 @@ def test_distribution_queue_uses_supported_flat_config_and_separate_review_plan(
         assert job["config"] == {"test_case_id": case["id"], "timeout": 20}
         from vardrrunner.authorization.plan import compile_gate_plan
 
+        assert (
+            Path(compile_gate_plan.__code__.co_filename).resolve()
+            == (runner / "vardrrunner" / "authorization" / "plan.py").resolve()
+        )
         plan = compile_gate_plan(case["spec"], module.EXECUTION, tool_sha256="a" * 64)
         assert plan["execution"] == {
             "timeout_seconds": 20,
