@@ -4,6 +4,10 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Raise existing PostgreSQL/browser CI job ceilings to 25/20 minutes after
+  recorded 15/10-minute cancellations during complete verification. Preserve all
+  tests, roles, assertions and integration steps.
+
 - Preserve all SQLite fixture foreign keys after PostgreSQL DDL generation by
   cloning schema metadata per fixture engine; production migrations are unchanged.
 

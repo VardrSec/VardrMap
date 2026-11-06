@@ -49,7 +49,7 @@ jobs:
   postgres:
     name: PostgreSQL migrations and integration
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     services:
       postgres:
         image: postgres:17
@@ -133,7 +133,7 @@ jobs:
   browser:
     name: Browser acceptance
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
