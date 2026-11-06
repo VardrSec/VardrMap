@@ -4,6 +4,9 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Preserve all SQLite fixture foreign keys after PostgreSQL DDL generation by
+  cloning schema metadata per fixture engine; production migrations are unchanged.
+
 - Add persistent runtime v3 with immutable availability policy,
   optional finite controls, signed64 decimal counters and retained predecessor/
   head history in additive `0041persistentruntime`. Reuse per-job authorization,
