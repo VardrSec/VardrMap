@@ -1,5 +1,15 @@
 # Architecture
 
+Additive `ManagedRuntime` storage retains owner-approved Docker incarnation,
+purpose-separated stop-capability hash, immutable issued-attempt association and
+retirement marker. It is required because existing execution tokens and signed
+contract JSON cannot safely hold this independent authority. An optional trusted
+issuer hook locks admission before the clock and associates the issued contract
+within the existing claim transaction, including lost first replies. Native stop
+mutation is shared after producer authentication; native allowed causes remain
+unchanged. [The protocol](managed-runtime-protocol.md) specifies exact retirement,
+revocation, immutable lookup and the remaining pending-result recovery gate.
+
 The explicit `managed_configuration.configure_managed(app)` assembly is inert when
 `VARDRMAP_MANAGED_WORKER` is omitted or `0`. Exact `1` requires reviewed HTTPS
 origin/issuer configuration, existing public operator anchors and a separate raw

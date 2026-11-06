@@ -411,3 +411,15 @@ def test_human_factory_is_unregistered_and_contains_no_signer_or_key_bootstrap(h
         for name in ("review", "register", "revoke")
     }
     assert paths.isdisjoint(app.openapi()["paths"])
+
+
+@pytest.mark.parametrize("prefix", ["Bearer  ", "Bearer \t"])
+def test_normalized_full_api_key_is_never_human_session_provenance(http, prefix):
+    h = http
+    with Session(h.s["engine"]) as db:
+        db.get(ApiKey, "key-1").scope = "full"
+        db.commit()
+    before = state(h)
+    reply = post(h, "review", headers={"Authorization": prefix + KEY})
+    assert reply.status_code == 409 and state(h) == before
+    assert reply.json() == {"detail": "managed_approval_refused"}

@@ -8,7 +8,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 from starlette.concurrency import run_in_threadpool
 from starlette.requests import ClientDisconnect
 
@@ -43,6 +43,19 @@ class ManagedControlInput(control.ControlRequest):
 
 class ConsumeInput(ManagedControlInput):
     contract_sha256: Annotated[str, Field(strict=True, pattern=r"^[a-f0-9]{64}$")]
+
+
+class ClaimInput(control.ClaimControl):
+    runtime_id: UUID | None = None
+    runtime_sha256: (
+        Annotated[str, Field(strict=True, pattern=r"^[a-f0-9]{64}$")] | None
+    ) = None
+
+    @model_validator(mode="after")
+    def paired_runtime(self):
+        if (self.runtime_id is None) != (self.runtime_sha256 is None):
+            raise ValueError("paired_runtime_required")
+        return self
 
 
 async def _payload(request, model):
@@ -156,9 +169,23 @@ def _pending(service, db, request, body):
         return reply
 
 
-def _operate(service, operation, db, request, job_id, body):
+def _operate(service, operation, db, request, job_id, body, runtimes=None):
     if operation == "claim":
-        reply = service.claim(db, request, job_id=job_id, body=body)
+        claim = control.ClaimControl(
+            **body.model_dump(exclude={"runtime_id", "runtime_sha256"})
+        )
+        if body.runtime_id is not None:
+            require(runtimes is not None, "runtime_admission_unavailable")
+            reply = runtimes.claim(
+                db,
+                request,
+                job_id=job_id,
+                body=claim,
+                runtime_id=str(body.runtime_id),
+                runtime_sha256=body.runtime_sha256,
+            )
+        else:
+            reply = service.claim(db, request, job_id=job_id, body=claim)
         # This is the retained claim snapshot, never the polled or later live case.
         snapshot = db.get(ScanJob, job_id).case_snapshot
         require(type(snapshot) is dict, "frozen_case_required")
@@ -175,7 +202,7 @@ def _operate(service, operation, db, request, job_id, body):
     return getattr(service, operation)(db, request, job_id=job_id, body=owned, **args)
 
 
-def build_managed_router(service):
+def build_managed_router(service, runtimes=None):
     """Explicitly injected Issuer only; main never constructs or registers it.
 
     No keys, environment settings or enrollment state are created/read implicitly.
@@ -207,7 +234,7 @@ def build_managed_router(service):
                 reply = await run_in_threadpool(_pending, service, db, request, body)
             else:
                 reply = await run_in_threadpool(
-                    _operate, service, operation, db, request, job_id, body
+                    _operate, service, operation, db, request, job_id, body, runtimes
                 )
             if len(canonical(reply)) > RESPONSE_MAX_BYTES:
                 return refused(503)
@@ -229,7 +256,7 @@ def build_managed_router(service):
 
     @router.post(JOB_PATH + "/claim")
     async def claim(job_id: str, request: Request, db=Depends(get_db)):
-        return await dispatch(request, db, "claim", control.ClaimControl, job_id)
+        return await dispatch(request, db, "claim", ClaimInput, job_id)
 
     @router.post(JOB_PATH + "/current")
     async def current(job_id: str, request: Request, db=Depends(get_db)):

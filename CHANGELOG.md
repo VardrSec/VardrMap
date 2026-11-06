@@ -4,6 +4,15 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Align human-session classification with existing bearer-token normalization so
+  whitespace variants of full API keys cannot acquire owner-session provenance.
+
+- Add explicit runtime admission, atomic claim association and purpose-separated
+  host stop/receipt protocols under additive `0039managedruntime`. Preserve
+  unconsumed retirement without inventing acknowledgement or refunding spent
+  allowances. Keep pending uploaded results held until the reviewed failed-result
+  recovery increment; runtime/platform acceptance remains separate.
+
 - Add explicit, default-disabled assembly of the managed HTTP services. Enabled
   configuration requires exact HTTPS origin, existing operator public trust and
   a distinct Map contract key; invalid configuration refuses startup. It creates

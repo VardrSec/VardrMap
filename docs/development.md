@@ -1,5 +1,13 @@
 # Development
 
+The bounded [runtime protocol](managed-runtime-protocol.md) requires additive head
+`0039managedruntime` before enabled requests. Focused SQLite/ASGI tests are
+`test_managed_runtime.py` and `test_managed_runtime_http.py`; existing native
+result/stop/consumption/observation regressions must also pass. Those tests verify
+protocol/state invariants, not PostgreSQL lock behavior, Docker namespace exit,
+Windows/WSL timing or full worker acceptance. No enabled default or alternative
+runtime is inferred from passing fixtures.
+
 ## Explicit managed service configuration
 
 This development candidate exposes managed factories only when
@@ -69,7 +77,7 @@ migration. A unique-constraint
 race refuses safely; a later exact invocation can observe its retained winner.
 
 Binding is separate from approval and creates no execution permission. An owner
-session must obtain an unsigned context through the unregistered approval factory,
+session must obtain an unsigned context through the default-unregistered approval factory,
 the operator signs it outside Map using existing separately provisioned signing
 material, and the owner registers that exact receipt. Existing public operator
 trust and Map's distinct contract-signing key must already be configured in the

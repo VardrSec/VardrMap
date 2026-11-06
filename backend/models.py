@@ -951,3 +951,35 @@ class ManagedStop(Base):
     cause = Column(String(64), nullable=False)
     receipt_sha256 = Column(String(64), nullable=False)
     finished_at = Column(DateTime, nullable=False)
+
+
+class ManagedRuntime(Base):
+    """Owner-approved immutable incarnation and separate host stop-only grant."""
+
+    __tablename__ = "managed_runtimes"
+    id = Column(String(36), primary_key=True)
+    owner = Column(String(128), nullable=False)
+    enrollment_id = Column(String(128), nullable=False)
+    enrollment_revision = Column(Integer, nullable=False)
+    api_key_id = Column(String(128), nullable=False)
+    principal_sha256 = Column(String(64), nullable=False)
+    runner_id = Column(String(36), nullable=False)
+    origin = Column(String(500), nullable=False)
+    identity = Column(JSON, nullable=False)
+    runtime_sha256 = Column(String(64), nullable=False)
+    physical_sha256 = Column(String(64), nullable=False, unique=True)
+    owner_nonce = Column(String(64), nullable=False, unique=True)
+    capability_sha256 = Column(String(64), nullable=False, unique=True)
+    ttl_seconds = Column(Integer, nullable=False)
+    registered_at = Column(DateTime, nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    revoked = Column(Boolean, nullable=False, default=False)
+    retired = Column(Boolean, nullable=False, default=False)
+    job_id = Column(String(128), nullable=True)
+    contract_id = Column(String(36), nullable=True, unique=True)
+    attempt_id = Column(String(36), nullable=True)
+    fence = Column(Integer, nullable=True)
+    contract_sha256 = Column(String(64), nullable=True)
+    bound_at = Column(DateTime, nullable=True)
+    confirmed_at = Column(DateTime, nullable=True)
+    report_sha256 = Column(String(64), nullable=True)

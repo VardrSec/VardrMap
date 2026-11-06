@@ -1,5 +1,12 @@
 # API Reference
 
+The explicit managed-worker profile adds [runtime admission and host receipt
+contracts](managed-runtime-protocol.md) under `0039managedruntime`. Optional paired
+`runtime_id`/`runtime_sha256` on managed claim are associated atomically before its
+first response; the post-consumption runtime acknowledgement confirms that exact
+tuple. Host-only `VardrStop` authentication cannot authorize execution. Defaults and
+native/manual calls without runtime fields retain their existing behavior.
+
 Managed HTTP factories remain absent from default startup. Explicit
 `VARDRMAP_MANAGED_WORKER=1` uses the reviewed
 [configuration](development.md#explicit-managed-service-configuration) to assemble

@@ -104,7 +104,10 @@ class Issuer:
 
     def _operator(self, db, request):
         header = request.headers.get("authorization", "")
-        require(not header.startswith("Bearer vmap_"), "operator_session_required")
+        # Match get_current_user's token normalization before classifying the
+        # credential; extra bearer whitespace must not turn a key into a session.
+        bearer = header.split(" ", 1)[1].strip() if header.startswith("Bearer ") else ""
+        require(not bearer.startswith("vmap_"), "operator_session_required")
         user = get_current_user(request, authorization=header or None, db=db)
         require(user.get("scope") == "full", "operator_session_required")
         method = "local_session" if user.get("auth_method") == "local" else "github_session"
@@ -593,7 +596,7 @@ class Issuer:
             "managed_budget_controls_required",
         )
 
-    def claim(self, db, request, *, job_id, body):
+    def claim(self, db, request, *, job_id, body, on_claim=None):
         """Unregistered one-shot prototype; all ownership/fees/issuance commit together.
 
         Existing ScanJob/JobExecution permit one physical attempt per job. N is an
@@ -610,6 +613,10 @@ class Issuer:
             require(job.status == "pending", "pending_job_required")
             approval, result = self._claim_permission(db, request, job, body, now)
             self._budgets(body, approval)
+            # Trusted in-process preparation acquires runtime locks before the
+            # clock lock; it returns the atomic issued-contract association.
+            associate = on_claim(db=db, now=now, job=job, approval=approval,
+                                 projection=result) if on_claim is not None else None
             self._locked_time(db, now)
             engagement = db.get(Engagement, job.program_id)
             concurrency_budget.before_claim(db, engagement, body)
@@ -663,6 +670,8 @@ class Issuer:
                 )
             )
             db.flush()
+            if associate is not None:
+                associate(db.query(ManagedContract).filter_by(id=contract_id).one())
             # Signing/flush/lock delays consume permission; denial rolls all fees,
             # ownership, ordinal and case snapshot back, preserving only clock.
             self._locked_time(db, now)

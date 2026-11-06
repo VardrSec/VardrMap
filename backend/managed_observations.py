@@ -159,8 +159,12 @@ class Observations:
                 }
                 result = self.results._result(db, binding)
                 stop = self.stops._row(db, binding)
+                from managed_runtime import retired_host_stop
+
                 require(
-                    contract.consumed or (result is None and stop is None),
+                    contract.consumed or (result is None and stop is None)
+                    or (result is None and stop is not None
+                        and retired_host_stop(db, binding, stop)),
                     "inconsistent_observed_consumption",
                 )
                 reply.update(
