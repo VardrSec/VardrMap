@@ -23,7 +23,9 @@ new evidence; older milestone receipts keep their original hashes and limits.
 and restricted application-role schemas. It observes an actual claim blocked on a
 runtime row, then requires the holder to acquire the operation clock with NOWAIT;
 this detects the reversed Runtime/Clock order without assuming an event means a
-database lock wait. Its PostgreSQL execution belongs to the existing PostgreSQL CI
+database lock wait. The full SQL trace and exact holder PID in `pg_blocking_pids`
+establish the wait even when PostgreSQL truncates its long activity-query text.
+Its PostgreSQL execution belongs to the existing PostgreSQL CI
 job, separately from SQLite/ASGI protocol evidence.
 
 ## Explicit managed service configuration

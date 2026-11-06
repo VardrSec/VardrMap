@@ -243,9 +243,15 @@ with engine.connect() as conn:
     with engine.connect() as conn:
         retained_head = conn.scalar(text("SELECT version_num FROM alembic_version"))
     downgrade = migrate(url, "downgrade", "0030agentproposals", success=False)
-    # Later retained-state migrations use the same refusal with a capital R.
-    # Preserve both the refusal and the schema/data retention checks below.
-    assert "restore a verified backup" in downgrade.stderr.lower()
+    # Require the retained head's explicit preservation/recovery refusal, not
+    # an unrelated migration failure. The schema/data checks still follow.
+    refusal = downgrade.stderr.lower()
+    if retained_head == "0039managedruntime":
+        assert "retain runtime incarnations, bound attempts and stop-grant hashes" in refusal
+        assert "roll back code only" in refusal
+        assert "reconcile retained execution ownership before restoring an independently verified backup" in refusal
+    else:
+        assert "restore a verified backup" in refusal
     with engine.connect() as conn:
         assert conn.scalar(text("SELECT count(*) FROM local_credentials")) == 1
         assert conn.scalar(text("SELECT version_num FROM alembic_version")) == retained_head

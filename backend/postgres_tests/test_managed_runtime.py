@@ -55,6 +55,7 @@ try:
     with Session(engine) as holder, ThreadPoolExecutor(1) as pool:
         holder.execute(text("SET LOCAL statement_timeout = '10s'"))
         holder.query(ManagedRuntime).filter_by(id=runtime_id).with_for_update().one()
+        holder_pid = holder.connection().connection.driver_connection.info.backend_pid
         pending = pool.submit(issue)
         try:
             assert entered.wait(5), 'claim did not reach Runtime FOR UPDATE'
@@ -65,10 +66,14 @@ try:
                     blocked = bool(conn.scalar(text(
                         "SELECT count(*) FROM pg_stat_activity WHERE pid=:pid "
                         "AND wait_event_type='Lock' AND query LIKE '%managed_runtimes%' "
-                        "AND query LIKE '%FOR UPDATE%'"), {'pid': claimant['pid']}))
+                        "AND :holder=ANY(pg_blocking_pids(pid))"),
+                        {'pid': claimant['pid'], 'holder': holder_pid}))
                 if blocked:
                     break
                 time.sleep(.02)
+            # The traced full SQL already proves FOR UPDATE. pg_stat_activity
+            # truncates the 1672-byte ORM query at its default 1024-byte bound;
+            # exact blocker identity proves the held Runtime lock independently.
             assert blocked and not pending.done(), 'claim did not wait on held runtime'
             # NOWAIT makes the previous late-hook ordering fail immediately:
             # it held Clock while waiting for Runtime, completing a lock cycle.
