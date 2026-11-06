@@ -4,6 +4,17 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Add explicit bounded v2 healthy sequencing under additive `0040runtimesequence`:
+  append-only attempt history, original-token idle release after confirmed
+  completed work, conditional physical-incarnation retirement and exact historical
+  receipt lookup. Preserve v1 shapes, per-job signed contracts and spent charges.
+  Original-key observation `/3` echoes the durable sequence without retry rights.
+  Native drain, installed sequence acceptance and PostgreSQL interleavings require
+  their separate verification; a DONE digest is correlation, not attestation.
+  Preserve SQLite v1 rows/uniqueness through batch CHECK installation, reject
+  unsupported old writers without spending allowances, and refuse orphan same-job
+  runtime history rather than returning an unclaimed observation.
+
 - Record two exact historical secret-scan false positives for deterministic
   public runtime-protocol test vectors; keep scan rules and future findings active.
 

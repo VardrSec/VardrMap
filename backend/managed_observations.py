@@ -12,6 +12,7 @@ from models import (
     ManagedApproval,
     ManagedContract,
     ManagedResult,
+    ManagedRuntimeAttempt,
     ManagedStop,
 )
 from routers.jobs import _writable_engagement
@@ -31,7 +32,7 @@ class Observations:
         self.stops = Stops(results)
 
     def inspect(self, db, request, *, job_id, body, plan_sha256, case_sha256, association_sha256,
-                runtime_id=None, runtime_sha256=None):
+                runtime_id=None, runtime_sha256=None, runtime_sequence=None):
         """Observe one original approval/association; no token, renewal or retry grant.
 
         Absence is a snapshot, not proof that an earlier claim cannot commit later.
@@ -41,6 +42,7 @@ class Observations:
         for value in (plan_sha256, case_sha256, association_sha256):
             hash_value(value)
         require((runtime_id is None) == (runtime_sha256 is None), "paired_runtime_observation_required")
+        require(runtime_sequence is None or runtime_id is not None, "sequence_runtime_required")
         with self.issuer.operation(db):
             user = get_current_user(
                 request, authorization=request.headers.get("authorization"), db=db
@@ -130,6 +132,9 @@ class Observations:
                     and db.query(ManagedStop).filter_by(job_id=job.id).first() is None,
                     "inconsistent_observed_claim",
                 )
+                require(runtime_sequence is None or db.query(ManagedRuntimeAttempt)
+                        .filter_by(job_id=job.id).first() is None,
+                        "inconsistent_observed_runtime_history")
             else:
                 require(
                     contract.approval_record_id == approval.id
@@ -166,7 +171,7 @@ class Observations:
                 require(
                     contract.consumed or (result is None and stop is None)
                     or (result is None and stop is not None
-                        and retired_host_stop(db, binding, stop)),
+                        and retired_host_stop(db, binding, stop, self.results)),
                     "inconsistent_observed_consumption",
                 )
                 reply.update(
@@ -195,7 +200,12 @@ class Observations:
                     db, runtime_id=runtime_id, runtime_sha256=runtime_sha256,
                     enrollment=enrollment, principal=principal, owner=user["github_id"],
                     binding=binding if reply["claim"] is not None else None,
+                    runtime_sequence=runtime_sequence, results=self.results,
                 )
+                if runtime_sequence is not None:
+                    reply.update(schema="vardr.managed-claim-observation/3",
+                                 runtime_id=runtime_id, runtime_sha256=runtime_sha256,
+                                 runtime_sequence=runtime_sequence)
             # No control/accounting/receipt mutations; existing telemetry is unchanged.
             db.rollback()
             return reply

@@ -1,5 +1,17 @@
 # Architecture
 
+Additive schema `0040runtimesequence` keeps v1 runtime rows intact and adds nullable
+`max_attempts`, monotone `last_sequence`, one active pointer and an immutable
+retirement snapshot. `ManagedRuntimeAttempt` retains each exact seven-field
+job/contract binding; completed release metadata and its full canonical completion
+snapshot are written once. Runtime locking serializes all cursor changes before
+Clock. Host writes lock the preselected job parents before Runtime and recheck the
+exact cursor before changing any job; they never retarget after waiting. Receipt
+lookup refuses a changed monotone projection. No existing receipt or allocation is
+overwritten, refunded or reused for a later attempt.
+Schema CHECKs also reject legacy binding writes into v2 rows and retirement without
+a physical receipt; they preserve v1 data and do not authorize old-code rollback.
+
 Additive `ManagedRuntime` storage retains owner-approved Docker incarnation,
 purpose-separated stop-capability hash, immutable issued-attempt association and
 retirement marker. It is required because existing execution tokens and signed

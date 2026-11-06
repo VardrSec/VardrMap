@@ -1,5 +1,16 @@
 # API Reference
 
+Explicit `max_attempts` in runtime registration opts into bounded
+[healthy sequencing](managed-runtime-protocol.md#bounded-healthy-sequencing-v2)
+under `0040runtimesequence`; omission preserves the existing v1 API. V2 claim and
+runtime-bind require the exact `runtime_sequence`. Original-token
+`POST /jobs/{job_id}/managed/runtime-idle-release` records a completed/drained
+attempt before another may claim. Host lookup separates active job receipt from
+whole-incarnation retirement; exact historical lookup uses
+`POST /managed/runtimes/{runtime_id}/attempts/{runtime_sequence}/receipt`.
+Explicit sequence on original-key job observation selects `/3`, echoing runtime
+ID/hash/sequence; prior `/1` and `/2` shapes remain unchanged.
+
 The explicit managed-worker profile adds [runtime admission and host receipt
 contracts](managed-runtime-protocol.md) under `0039managedruntime`. Optional paired
 `runtime_id`/`runtime_sha256` on managed claim are associated atomically before its

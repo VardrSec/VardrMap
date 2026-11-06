@@ -957,6 +957,19 @@ class ManagedRuntime(Base):
     """Owner-approved immutable incarnation and separate host stop-only grant."""
 
     __tablename__ = "managed_runtimes"
+    __table_args__ = (
+        CheckConstraint(
+            "max_attempts IS NULL OR (job_id IS NULL AND contract_id IS NULL "
+            "AND attempt_id IS NULL AND fence IS NULL AND contract_sha256 IS NULL "
+            "AND bound_at IS NULL AND confirmed_at IS NULL)",
+            name="ck_managed_runtime_v2_binding",
+        ),
+        CheckConstraint(
+            "max_attempts IS NULL OR NOT retired OR (retirement_receipt IS NOT NULL "
+            "AND trim(CAST(retirement_receipt AS TEXT)) <> 'null')",
+            name="ck_managed_runtime_v2_retirement",
+        ),
+    )
     id = Column(String(36), primary_key=True)
     owner = Column(String(128), nullable=False)
     enrollment_id = Column(String(128), nullable=False)
@@ -983,3 +996,28 @@ class ManagedRuntime(Base):
     bound_at = Column(DateTime, nullable=True)
     confirmed_at = Column(DateTime, nullable=True)
     report_sha256 = Column(String(64), nullable=True)
+    # NULL preserves the original one-attempt protocol. Explicit bounds opt in.
+    max_attempts = Column(Integer, nullable=True)
+    last_sequence = Column(Integer, nullable=False, default=0)
+    active_sequence = Column(Integer, nullable=True)
+    retirement_receipt = Column(JSON, nullable=True)
+
+
+class ManagedRuntimeAttempt(Base):
+    """Append-only v2 runtime history; release metadata is written once."""
+
+    __tablename__ = "managed_runtime_attempts"
+    runtime_id = Column(String(36), primary_key=True)
+    runtime_sequence = Column(Integer, primary_key=True)
+    job_id = Column(String(128), nullable=False, unique=True)
+    contract_id = Column(String(36), nullable=False, unique=True)
+    attempt_id = Column(String(36), nullable=False)
+    fence = Column(Integer, nullable=False)
+    contract_sha256 = Column(String(64), nullable=False)
+    bound_at = Column(DateTime, nullable=False)
+    confirmed_at = Column(DateTime, nullable=True)
+    released_at = Column(DateTime, nullable=True)
+    terminal_receipt = Column(JSON, nullable=True)
+    terminal_receipt_sha256 = Column(String(64), nullable=True)
+    native_done_sha256 = Column(String(64), nullable=True)
+    release_receipt = Column(JSON, nullable=True)

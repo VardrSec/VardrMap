@@ -50,11 +50,16 @@ class ClaimInput(control.ClaimControl):
     runtime_sha256: (
         Annotated[str, Field(strict=True, pattern=r"^[a-f0-9]{64}$")] | None
     ) = None
+    runtime_sequence: Annotated[int, Field(strict=True, ge=1, le=32)] | None = None
 
     @model_validator(mode="after")
     def paired_runtime(self):
         if (self.runtime_id is None) != (self.runtime_sha256 is None):
             raise ValueError("paired_runtime_required")
+        if "runtime_sequence" in self.model_fields_set and (
+            self.runtime_sequence is None or self.runtime_id is None or self.runtime_sha256 is None
+        ):
+            raise ValueError("sequence_runtime_required")
         return self
 
 
@@ -172,7 +177,7 @@ def _pending(service, db, request, body):
 def _operate(service, operation, db, request, job_id, body, runtimes=None):
     if operation == "claim":
         claim = control.ClaimControl(
-            **body.model_dump(exclude={"runtime_id", "runtime_sha256"})
+            **body.model_dump(exclude={"runtime_id", "runtime_sha256", "runtime_sequence"})
         )
         if body.runtime_id is not None:
             require(runtimes is not None, "runtime_admission_unavailable")
@@ -183,6 +188,7 @@ def _operate(service, operation, db, request, job_id, body, runtimes=None):
                 body=claim,
                 runtime_id=str(body.runtime_id),
                 runtime_sha256=body.runtime_sha256,
+                runtime_sequence=body.runtime_sequence,
             )
         else:
             reply = service.claim(db, request, job_id=job_id, body=claim)

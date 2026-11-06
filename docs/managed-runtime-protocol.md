@@ -5,9 +5,96 @@ and requires explicit worker configuration, an existing issuer, operator public
 trust, a separate Map contract-signing key and an existing Runner enrollment.
 Protocol tests do not establish Docker termination or platform acceptance.
 
-The first incarnation supports one issued attempt. Sequential attempts in the same
-container need a later reviewed binding/history and descendant-drain increment;
-this prototype does not complete that worker requirement.
+Omitting `max_attempts` retains the one-attempt v1 protocol below. Explicit v2
+sequencing is a development candidate; source protocol tests do not complete its
+native descendant-drain or installed worker acceptance.
+
+## Bounded healthy sequencing (v2)
+
+Additive schema `0040runtimesequence` preserves v1 records without inferring a
+sequence history. Registration may explicitly add integer `max_attempts` (1–32);
+even explicit `1` selects admission `/2`, whose only added key is `max_attempts`.
+Null, boolean, fractional or out-of-range values refuse. Exact registration replay
+cannot change this selection, extend TTL or upgrade the same physical incarnation.
+The six-field identity and capability purpose hash are unchanged.
+
+Schema CHECKs forbid v2 rows from acquiring legacy binding columns or a retired
+marker without retained non-null retirement JSON. SQLite migration batch
+copy preserves existing v1 rows and uniqueness; PostgreSQL uses ordinary additive
+ALTER statements. These backstops reject unsupported old writers, and do not make
+code-only rollback over enabled v2 state supported. Retain history and reconcile
+ownership before any independently verified recovery procedure.
+
+V2 managed claim adds exact next `runtime_sequence` (1–32) to the runtime ID/hash.
+Under Runtime before Clock, the existing claim transaction appends an immutable
+attempt binding and advances `last_sequence`/the active pointer. No next claim is
+allowed while an active binding exists, after retirement/expiry/revocation or above
+the fixed ceiling. Every job still needs its own signed approval, grants, budgets
+and independently validated contract; no job is reopened or retried. Runtime-bind
+`/2` adds `runtime_sequence` to the existing flat acknowledgement.
+
+Only canonical `completed` work that is consumed, runtime-confirmed and has released
+capacity may use `POST /jobs/{job_id}/managed/runtime-idle-release`. It requires the
+current original enrolled key, original execution token and active unrevoked runtime
+grant. Its body is the existing consumed tuple/token plus runtime ID/hash/sequence,
+`terminal_receipt_sha256` and `native_done_sha256`. The terminal digest hashes the
+**full canonical completion object**, not its embedded result-receipt SHA. The DONE
+digest correlates the trusted worker's validated native DONE/drain acknowledgement;
+Map cannot independently attest it. The worker must first retain local completion,
+drain descendants and quiesce its old control loop.
+
+The exact release acknowledgement is:
+
+```text
+{schema:"vardr.worker-idle-release/1", runtime_id, runtime_sha256,
+ runtime_sequence, binding, terminal_receipt_sha256, native_done_sha256,
+ released:true, receipt_sha256}
+```
+
+Its digest covers every preceding key. The transaction retains this receipt and
+completion snapshot, then clears the active pointer without refunding anything.
+An exact explicit replay observes the same receipt; changed input refuses. The
+worker requires a durable ACK before reusing the slot. Lost ACK, failed/cancelled
+work, forced exit or unknown ownership holds/exits; none creates reuse rights.
+
+Host `/receipt` on v2 returns exact keys `schema` (`vardr.worker-receipt-observation/2`),
+`runtime_id`, `runtime_sha256`, `last_sequence`, `active`, `retirement`. Active is
+null or `{runtime_sequence,binding,receipt}`; its job receipt alone never proves
+whole-container exit. Exact historical lookup is
+`POST /managed/runtimes/{runtime_id}/attempts/{runtime_sequence}/receipt`, with the
+same `{runtime_sha256}` body and stop-capability authentication. Its keys are schema
+`vardr.worker-attempt-observation/1`, runtime ID/hash/sequence, `binding`, `receipt`,
+`release`. No list or truncation may hide older ownership. Both lookups remain
+available after stop-grant expiry/revocation.
+
+V2 bound host exit pins `runtime_sequence` plus the exact existing binding. Idle
+exit pins `last_sequence` even when no binding is active. A delayed idle-N request
+cannot retire idle-(N+1). Bound writes lock the preselected job chain then Runtime,
+recheck the exact cursor and refuse on change; they never retarget under Runtime.
+Purpose hashes cover `{schema,runtime_id,...exact_body}`, using
+`vardr.worker-exit-report/2` or `vardr.worker-unbound-exit-report/2` respectively.
+The unchanged four-key `vardr.worker-host-stop/1` ACK wraps this physical receipt:
+
+```text
+{schema:"vardr.worker-retirement/2", runtime_id, runtime_sha256, origin,
+ runner_id, enrollment_id, runtime_sequence, last_sequence, binding,
+ attempt_receipt, report_sha256, retired:true, receipt_sha256}
+```
+
+The final digest covers every preceding key. Idle sequence/binding/attempt receipt
+are all null. A bound sequence equals `last_sequence`; its nested canonical v1 job
+receipt remains unchanged. Physical retirement preserves an already completed,
+failed or cancelled job. Only an unfinished attempt can enter the existing failed
+result or observed-exit stop lane; there is no second receipt or success rewrite.
+
+Original-key observation with explicit runtime ID/hash/sequence selects
+`vardr.managed-claim-observation/3` and echoes all three fields. Existing `/1` and
+`/2` shapes are unchanged. A claimed sequence observes its own history even when a
+later sequence is active. Conflicting/orphan/partial history refuses. An untouched
+unknown local intent may use final retirement only when `last_sequence` is below
+its requested sequence, proving it was never issued; absence alone stays held.
+Current original-key/enrollment authentication remains required. No observation
+creates a claim/consume/release ACK, retry or refund.
 
 ## Immutable admission
 

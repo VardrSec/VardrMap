@@ -31,12 +31,17 @@ class ObservationInput(BaseModel):
     association_sha256: Fingerprint
     runtime_id: UUID | None = None
     runtime_sha256: Fingerprint | None = None
+    runtime_sequence: Annotated[int, Field(strict=True, ge=1, le=32)] | None = None
 
     @model_validator(mode="after")
     def paired_runtime(self):
         supplied = self.model_fields_set & {"runtime_id", "runtime_sha256"}
         if supplied and (len(supplied) != 2 or self.runtime_id is None or self.runtime_sha256 is None):
             raise ValueError("paired_runtime_observation_required")
+        if "runtime_sequence" in self.model_fields_set and (
+            self.runtime_sequence is None or self.runtime_id is None or self.runtime_sha256 is None
+        ):
+            raise ValueError("sequence_runtime_required")
         return self
 
 
@@ -113,6 +118,7 @@ def build_observation_router(service):
                     {"runtime_id": str(body.runtime_id), "runtime_sha256": body.runtime_sha256}
                     if body.runtime_id is not None else {}
                 ),
+                **({"runtime_sequence": body.runtime_sequence} if body.runtime_sequence is not None else {}),
             )
             if len(canonical(reply)) > 16384:
                 return _refused(503)

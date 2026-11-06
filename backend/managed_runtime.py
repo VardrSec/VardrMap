@@ -108,6 +108,8 @@ def _uuid(value):
 class Runtimes:
     def __init__(self, results):
         self.results, self.issuer, self.stops = results, results.issuer, Stops(results)
+        from managed_runtime_sequence import Sequences
+        self.sequences = Sequences(self)
 
     @staticmethod
     def _check(row):
@@ -136,10 +138,17 @@ class Runtimes:
         )
         if row.report_sha256 is not None:
             fingerprint(row.report_sha256)
+        if row.max_attempts is None:
+            require(row.last_sequence == 0 and row.active_sequence is None
+                    and row.retirement_receipt is None, "retained_runtime_inconsistent")
+        else:
+            integer(row.max_attempts, 1, 32)
+            integer(row.last_sequence, 0, row.max_attempts)
+            require(bound is None and row.confirmed_at is None, "retained_runtime_inconsistent")
 
     @staticmethod
     def _public(row):
-        return {
+        reply = {
             "schema": "vardr.worker-admission/1",
             "runtime_id": row.id,
             "runtime_sha256": row.runtime_sha256,
@@ -150,6 +159,9 @@ class Runtimes:
             "identity": row.identity,
             "expires_at": stamp(row.expires_at.replace(tzinfo=timezone.utc)),
         }
+        if row.max_attempts is not None:
+            reply.update(schema="vardr.worker-admission/2", max_attempts=row.max_attempts)
+        return reply
 
     @staticmethod
     def _binding(row):
@@ -197,11 +209,14 @@ class Runtimes:
         identity: dict,
         capability_sha256,
         expires_in_seconds,
+        max_attempts=None,
     ):
         _uuid(runtime_id)
         _uuid(runner_id)
         fingerprint(capability_sha256)
         ttl = integer(expires_in_seconds, 60, 604800)
+        if max_attempts is not None:
+            integer(max_attempts, 1, 32)
         sha, physical = check_identity(identity)
         with self.issuer.operation(db) as now:
             actor = self.issuer._operator(db, request)
@@ -243,6 +258,8 @@ class Runtimes:
                     expires_at=instant + timedelta(seconds=ttl),
                     revoked=False,
                     retired=False,
+                    max_attempts=max_attempts,
+                    last_sequence=0,
                 )
                 db.add(row)
             else:
@@ -261,6 +278,9 @@ class Runtimes:
                     and row.ttl_seconds == ttl,
                     "runtime_registration_changed",
                 )
+                require(row.max_attempts == max_attempts, "runtime_registration_changed")
+                if max_attempts is not None:
+                    self.sequences.checked(db, row)
             db.flush()
             self.issuer._locked_time(db, now)
             reply = self._public(row)
@@ -300,9 +320,15 @@ class Runtimes:
         attempt_id,
         fence,
         contract_sha256,
+        runtime_sequence=None,
     ):
         _uuid(runtime_id)
         fingerprint(runtime_sha256)
+        if runtime_sequence is not None:
+            return self.sequences.bind(db, request, job_id=job_id, body=body,
+                runtime_id=runtime_id, runtime_sha256=runtime_sha256,
+                runtime_sequence=runtime_sequence, contract_id=contract_id,
+                attempt_id=attempt_id, fence=fence, contract_sha256=contract_sha256)
         with self.issuer.operation(db) as now:
             _, job, execution, approval, binding = self.results._owned(
                 db,
@@ -326,6 +352,7 @@ class Runtimes:
             )
             require(row is not None, "runtime_unavailable")
             self._check(row)
+            require(row.max_attempts is None, "runtime_protocol_changed")
             expected = projection["authority_snapshot"]["enrollment"]
             require(
                 row.owner == approval.owner == execution.owner
@@ -366,9 +393,12 @@ class Runtimes:
             db.commit()
             return reply
 
-    def claim(self, db, request, *, job_id, body, runtime_id, runtime_sha256):
+    def claim(self, db, request, *, job_id, body, runtime_id, runtime_sha256, runtime_sequence=None):
         _uuid(runtime_id)
         fingerprint(runtime_sha256)
+        if runtime_sequence is not None:
+            return self.sequences.claim(db, request, job_id=job_id, body=body,
+                runtime_id=runtime_id, runtime_sha256=runtime_sha256, runtime_sequence=runtime_sequence)
 
         def prepare(*, db, now, job, approval, projection):
             row = (
@@ -380,6 +410,7 @@ class Runtimes:
             )
             require(row is not None, "runtime_unavailable")
             self._check(row)
+            require(row.max_attempts is None, "runtime_protocol_changed")
             enrolled = projection["authority_snapshot"]["enrollment"]
             require(
                 row.owner == approval.owner
@@ -433,8 +464,8 @@ class Runtimes:
         self._check(row)
         return row
 
-    def _lock_host_attempt(self, db, row, supplied):
-        binding = self._binding(row)
+    def _lock_host_attempt(self, db, row, supplied, attempt=None):
+        binding = self.sequences.binding(row, attempt) if attempt else self._binding(row)
         require(binding is not None and binding == supplied, "host_attempt_binding")
         parent = db.query(ScanJob.program_id).filter_by(id=binding["job_id"]).scalar()
         require(parent is not None, "host_job_unavailable")
@@ -498,10 +529,11 @@ class Runtimes:
             == row.principal_sha256
             and enrollment.runner_id == execution.runner_id == row.runner_id
             and enrollment.origin == execution.origin == row.origin
-            and (contract.consumed or row.confirmed_at is None)
+            and (contract.consumed or (attempt.confirmed_at if attempt else row.confirmed_at) is None)
             and (contract.id, contract.attempt_id, contract.fence)
-            == (row.contract_id, row.attempt_id, row.fence)
-            and digest(contract.envelope) == row.contract_sha256,
+            == ((attempt.contract_id, attempt.attempt_id, attempt.fence) if attempt else
+                (row.contract_id, row.attempt_id, row.fence))
+            and digest(contract.envelope) == (attempt.contract_sha256 if attempt else row.contract_sha256),
             "host_retained_identity_required",
         )
         # Enrollment/API-key revocation blocks execution, not this independently
@@ -519,7 +551,12 @@ class Runtimes:
         finished_at,
         exit_code,
         observation_sha256,
+        runtime_sequence=None,
     ):
+        if runtime_sequence is not None:
+            return self.sequences.exit(db, request, runtime_id=runtime_id,
+                runtime_sha256=runtime_sha256, runtime_sequence=runtime_sequence, binding=binding,
+                finished_at=finished_at, exit_code=exit_code, observation_sha256=observation_sha256)
         fingerprint(runtime_sha256)
         fingerprint(observation_sha256)
         integer(exit_code, 0, 255)
@@ -535,6 +572,7 @@ class Runtimes:
         with self.issuer.operation(db) as now:
             self.issuer._begin_write(db)
             row = self._host(db, request, runtime_id)
+            require(row.max_attempts is None, "runtime_protocol_changed")
             require(row.runtime_sha256 == runtime_sha256, "host_runtime_binding")
             require(
                 finished >= normalized_start(row.identity["started_at"]),
@@ -624,7 +662,12 @@ class Runtimes:
         finished_at,
         exit_code,
         observation_sha256,
+        last_sequence=None,
     ):
+        if last_sequence is not None:
+            return self.sequences.exit(db, request, runtime_id=runtime_id,
+                runtime_sha256=runtime_sha256, last_sequence=last_sequence,
+                finished_at=finished_at, exit_code=exit_code, observation_sha256=observation_sha256)
         fingerprint(runtime_sha256)
         fingerprint(observation_sha256)
         integer(exit_code, 0, 255)
@@ -644,6 +687,7 @@ class Runtimes:
             # Runtime precedes Clock in claim preparation too. A retire winner
             # permanently refuses a late claim; a claim winner needs bound exit.
             row = self._host(db, request, runtime_id, locked=True)
+            require(row.max_attempts is None, "runtime_protocol_changed")
             require(row.runtime_sha256 == runtime_sha256, "host_runtime_binding")
             require(
                 finished >= normalized_start(row.identity["started_at"]),
@@ -675,6 +719,8 @@ class Runtimes:
         require(
             row.runtime_sha256 == fingerprint(runtime_sha256), "host_runtime_binding"
         )
+        if row.max_attempts is not None:
+            return self.sequences.receipt(db, row)
         binding, receipt = self._binding(row), None
         if binding is None and row.retired:
             receipt = self._unbound_receipt(row)
@@ -714,8 +760,17 @@ class Runtimes:
             "receipt": receipt,
         }
 
+    def release(self, db, request, **values):
+        return self.sequences.release(db, request, **values)
 
-def retired_host_stop(db, binding, stop):
+    def history(self, db, request, *, runtime_id, runtime_sha256, runtime_sequence):
+        row = self._host(db, request, runtime_id)
+        require(row.runtime_sha256 == fingerprint(runtime_sha256)
+                and row.max_attempts is not None, "runtime_protocol_changed")
+        return self.sequences.receipt(db, row, runtime_sequence)
+
+
+def retired_host_stop(db, binding, stop, results=None):
     """Narrow read-only proof of issued-but-unconsumed physical-exit retirement."""
     if stop.cause != "observed_exit" or stop.outcome != "failed":
         return False
@@ -725,7 +780,24 @@ def retired_host_stop(db, binding, stop):
         .first()
     )
     if row is None or row.report_sha256 is None:
-        return False
+        if results is None:
+            return False
+        from models import ManagedRuntimeAttempt
+        attempt = db.query(ManagedRuntimeAttempt).filter_by(contract_id=binding["contract_id"]).first()
+        if attempt is None:
+            return False
+        row = db.get(ManagedRuntime, attempt.runtime_id)
+        if row is None or not row.retired:
+            return False
+        runtimes = Runtimes(results)
+        runtimes.sequences.checked(db, row)
+        execution = db.get(JobExecution, binding["job_id"])
+        return (runtimes.sequences.binding(row, attempt) == binding
+                and row.active_sequence == attempt.runtime_sequence
+                and row.retirement_receipt["binding"] == binding
+                and row.retirement_receipt["attempt_receipt"] == runtimes.stops._receipt(binding, stop)
+                and attempt.confirmed_at is None and execution is not None
+                and execution.state == "failed" and execution.capacity_reserved is False)
     Runtimes._check(row)
     fingerprint(row.report_sha256)
     execution = db.get(JobExecution, binding["job_id"])
@@ -747,6 +819,8 @@ def observed_runtime_retirement(
     principal,
     owner,
     binding,
+    runtime_sequence=None,
+    results=None,
 ):
     """Original enrolled-key observation, not an execution/stop capability."""
     _uuid(runtime_id)
@@ -770,7 +844,19 @@ def observed_runtime_retirement(
         and row.owner == enrollment.owner
         and row.origin == enrollment.origin
         and row.runner_id == enrollment.runner_id
-        and Runtimes._binding(row) == binding,
+        and (Runtimes._binding(row) == binding if row.max_attempts is None else True),
         "original_runtime_association_required",
     )
+    if runtime_sequence is not None:
+        integer(runtime_sequence, 1, 32)
+        require(row.max_attempts is not None and results is not None, "runtime_protocol_changed")
+        sequence = Runtimes(results).sequences
+        attempts = sequence.checked(db, row)
+        if runtime_sequence <= len(attempts):
+            require(binding is not None and sequence.binding(row, attempts[runtime_sequence - 1]) == binding,
+                    "original_runtime_history_changed")
+        else:
+            require(binding is None, "original_runtime_history_changed")
+        return row.retirement_receipt if row.retired else None
+    require(row.max_attempts is None, "runtime_protocol_changed")
     return Runtimes._unbound_receipt(row) if binding is None and row.retired else None

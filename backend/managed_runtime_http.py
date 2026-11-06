@@ -6,7 +6,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 from starlette.concurrency import run_in_threadpool
 from starlette.requests import ClientDisconnect
 from sqlalchemy.exc import IntegrityError
@@ -43,11 +43,31 @@ class RegisterInput(BaseModel):
     identity: IdentityInput
     capability_sha256: Fingerprint
     expires_in_seconds: Annotated[int, Field(strict=True, ge=60, le=604800)]
+    max_attempts: Annotated[int, Field(strict=True, ge=1, le=32)] | None = None
+
+    @model_validator(mode="after")
+    def explicit_bound(self):
+        if "max_attempts" in self.model_fields_set and self.max_attempts is None:
+            raise ValueError("explicit_attempt_bound_required")
+        return self
 
 
 class RuntimeBindInput(ConsumeInput):
     runtime_id: UUID
     runtime_sha256: Fingerprint
+    runtime_sequence: Annotated[int, Field(strict=True, ge=1, le=32)] | None = None
+
+    @model_validator(mode="after")
+    def explicit_sequence(self):
+        if "runtime_sequence" in self.model_fields_set and self.runtime_sequence is None:
+            raise ValueError("explicit_sequence_required")
+        return self
+
+
+class ReleaseInput(RuntimeBindInput):
+    runtime_sequence: Annotated[int, Field(strict=True, ge=1, le=32)]
+    terminal_receipt_sha256: Fingerprint
+    native_done_sha256: Fingerprint
 
 
 class ExitInput(BaseModel):
@@ -63,6 +83,13 @@ class ExitInput(BaseModel):
     finished_at: Timestamp
     exit_code: Annotated[int, Field(strict=True, ge=0, le=255)]
     observation_sha256: Fingerprint
+    runtime_sequence: Annotated[int, Field(strict=True, ge=1, le=32)] | None = None
+
+    @model_validator(mode="after")
+    def explicit_sequence(self):
+        if "runtime_sequence" in self.model_fields_set and self.runtime_sequence is None:
+            raise ValueError("explicit_sequence_required")
+        return self
 
 
 class LookupInput(BaseModel):
@@ -76,19 +103,29 @@ class UnboundExitInput(BaseModel):
     finished_at: Timestamp
     exit_code: Annotated[int, Field(strict=True, ge=0, le=255)]
     observation_sha256: Fingerprint
+    last_sequence: Annotated[int, Field(strict=True, ge=0, le=32)] | None = None
+
+    @model_validator(mode="after")
+    def explicit_sequence(self):
+        if "last_sequence" in self.model_fields_set and self.last_sequence is None:
+            raise ValueError("explicit_sequence_required")
+        return self
 
 
 class RevokeInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
-def _operate(service, operation, db, request, runtime_id, body, job_id):
+def _operate(service, operation, db, request, runtime_id, body, job_id, runtime_sequence=None):
     values = body.model_dump(mode="json")
-    if operation == "bind":
+    if operation == "history":
+        return service.history(db, request, runtime_id=runtime_id,
+                               runtime_sequence=runtime_sequence, **values)
+    if operation in {"bind", "release"}:
         owned_fields = set(ControlRequest.model_fields)
         owned = ControlRequest(**{key: values[key] for key in owned_fields})
         extra = {key: value for key, value in values.items() if key not in owned_fields}
-        return service.bind(db, request, job_id=job_id, body=owned, **extra)
+        return getattr(service, operation)(db, request, job_id=job_id, body=owned, **extra)
     if operation == "observed_exit":
         binding = {key: values.pop(key) for key in BINDING_FIELDS}
         return service.observed_exit(
@@ -101,7 +138,7 @@ def build_runtime_router(service):
     """Explicit Runtimes injection only; registration/activation is separate."""
     router = APIRouter(tags=["managed-runtime-admission-prototype"])
 
-    async def dispatch(request, db, runtime_id, operation, model, job_id=None):
+    async def dispatch(request, db, runtime_id, operation, model, job_id=None, runtime_sequence=None):
         def refused(status):
             return JSONResponse(
                 {"detail": "managed_runtime_refused"},
@@ -112,12 +149,14 @@ def build_runtime_router(service):
         try:
             if request.url.scheme != "https":
                 return refused(403)
+            if runtime_sequence is not None and not 1 <= runtime_sequence <= 32:
+                return refused(422)
             try:
                 body = await _payload(request, model)
             except (WireRefused, ValidationError):
                 return refused(422)
             reply = await run_in_threadpool(
-                _operate, service, operation, db, request, runtime_id, body, job_id
+                _operate, service, operation, db, request, runtime_id, body, job_id, runtime_sequence
             )
             if len(canonical(reply)) > RESPONSE_MAX_BYTES:
                 return refused(503)
@@ -147,6 +186,10 @@ def build_runtime_router(service):
     async def bind(job_id: str, request: Request, db=Depends(get_db)):
         return await dispatch(request, db, None, "bind", RuntimeBindInput, job_id)
 
+    @router.post(JOB_PATH + "/runtime-idle-release")
+    async def release(job_id: str, request: Request, db=Depends(get_db)):
+        return await dispatch(request, db, None, "release", ReleaseInput, job_id)
+
     @router.post(RUNTIME_PATH + "/observed-exit")
     async def observed_exit(runtime_id: str, request: Request, db=Depends(get_db)):
         return await dispatch(request, db, runtime_id, "observed_exit", ExitInput)
@@ -154,6 +197,11 @@ def build_runtime_router(service):
     @router.post(RUNTIME_PATH + "/receipt")
     async def receipt(runtime_id: str, request: Request, db=Depends(get_db)):
         return await dispatch(request, db, runtime_id, "receipt", LookupInput)
+
+    @router.post(RUNTIME_PATH + "/attempts/{runtime_sequence}/receipt")
+    async def history(runtime_id: str, runtime_sequence: int, request: Request, db=Depends(get_db)):
+        return await dispatch(request, db, runtime_id, "history", LookupInput,
+                              runtime_sequence=runtime_sequence)
 
     @router.post(RUNTIME_PATH + "/observed-unbound-exit")
     async def observed_unbound_exit(
