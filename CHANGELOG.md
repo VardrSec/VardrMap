@@ -4,6 +4,9 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Give the truncated-response HTTPS fixture a bounded two-second read window;
+  retain the deliberate 100 ms slow-response timeout and every launch/lease assertion.
+
 - Raise existing PostgreSQL/browser CI job ceilings to 25/20 minutes after
   recorded 15/10-minute cancellations during complete verification. Preserve all
   tests, roles, assertions and integration steps.

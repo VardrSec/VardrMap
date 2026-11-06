@@ -449,7 +449,8 @@ def test_ambiguous_control_cannot_extend_local_permission(tls_harness, kind):
         p.reserve()
         t.h.ticks[0] = 2
         t.wire.mode = kind
-        transport.timeout = (1, 0.1)
+        # Distinguish the intended truncated-body fault from a scheduling delay.
+        transport.timeout = (1, 0.1 if kind == "slow_current" else 2.0)
         with pytest.raises(t.h.error, match="synthetic_transport_failed"):
             p.launch(lambda: pytest.fail("inert sentinel reached after ambiguous HTTPS control"))
         assert t.wire.seen["/fixture/current"] == 2
