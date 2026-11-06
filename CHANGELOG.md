@@ -4,6 +4,9 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Add bounded test-only TLS failure diagnostics for fixed exception classes,
+  route categories and status codes while re-raising the original exception.
+
 - Give the truncated-response HTTPS fixture a bounded two-second read window;
   retain the deliberate 100 ms slow-response timeout and every launch/lease assertion.
 

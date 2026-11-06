@@ -3,6 +3,7 @@
 import asyncio
 import copy
 import importlib.util
+import json as json_module
 import os
 import socket
 import ssl
@@ -159,11 +160,21 @@ class WireFaults:
         self.app, self.mode, self.location = app, "normal", ""
         self.seen, self.forwarded = {}, {}
         self.cached = []
+        self.response_statuses = {}
 
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http":
             return await self.app(scope, receive, send)
         path = scope["path"]
+        wire_send = send
+
+        async def status_only(message):
+            status = message.get("status")
+            if message["type"] == "http.response.start" and type(status) is int and 100 <= status <= 599:
+                self.response_statuses[path] = status
+            await wire_send(message)
+
+        send = status_only
         self.seen[path] = self.seen.get(path, 0) + 1
         if self.mode == "managed_raw" and path == "/fixture/claim":
             await send({"type": "http.response.start", "status": 200, "headers": self.raw_headers})
@@ -608,12 +619,38 @@ def test_verified_https_capability_free_claim_observation(tls_harness, kind):
     assert t.wire.forwarded["/fixture/observe"] == 2
 
 
+def transport_failure_diagnostic(t, path, error):
+    """Only fixed class/category names and a status, never request/error data."""
+    cause = error.__context__ if error.__context__ is not None else error
+    name = type(cause).__name__
+    if name not in {"ReadTimeout", "ConnectTimeout", "ConnectionError", "ChunkedEncodingError", "SSLError",
+                    "AuthorizationError", "HTTPError", "TooManyRedirects", "JSONDecodeError", "ValueError",
+                    "TypeError", "KeyError", "OverflowError", "RecursionError"}:
+        name = "other"
+    categories = {"/fixture/observe": "observation", "/jobs/job-1/managed/observation": "observation",
+                  "/fixture/current": "control", "/fixture/claim": "claim"}
+    route = categories.get(path, "other") if type(path) is str else "other"
+    statuses = getattr(getattr(t, "wire", None), "response_statuses", None)
+    status = statuses.get(path) if type(statuses) is dict and type(path) is str else None
+    if type(status) is not int or not 100 <= status <= 599:
+        status = None
+    return {"schema": "vardr.test-tls-diagnostic/1", "failure_kind": name,
+            "route_category": route, "http_status": status}
+
+
 def bounded_transport(t):
     """Test-only adapter to Runner's explicit production-code HTTP primitive."""
     transport = t.transport()
 
     def post(path, *, json):
-        payload = transport.client.managed_post(path, json, timeout=transport.timeout)
+        statuses = getattr(getattr(t, "wire", None), "response_statuses", None)
+        if type(statuses) is dict:
+            statuses.pop(path, None)
+        try:
+            payload = transport.client.managed_post(path, json, timeout=transport.timeout)
+        except Exception as error:
+            print(json_module.dumps(transport_failure_diagnostic(t, path, error), sort_keys=True))
+            raise
         return SimpleNamespace(status_code=200, json=lambda: payload)
 
     return SimpleNamespace(post=post, client=transport.client)
