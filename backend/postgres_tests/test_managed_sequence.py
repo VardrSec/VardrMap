@@ -71,7 +71,7 @@ def new_job(job):
         s['service'].register(db,s['owner'],job_id=job,enrollment_id='enrollment-1',authorization_id='auth-1',
             plan=s['plan'],approval=fixture.signed(review['context'],job))
 
-def race(functions,winner,table):
+def race(functions,winner,table,sql_kind='FOR UPDATE'):
     loser=next(name for name in functions if name!=winner)
     entered,release,querying=threading.Event(),threading.Event(),threading.Event()
     threads={};waiting={};holder={};original=s['service']._locked_time
@@ -81,7 +81,7 @@ def race(functions,winner,table):
             entered.set(); assert release.wait(10)
         return original(db,now)
     def tracing(conn,cursor,statement,parameters,context,executemany):
-        if threading.get_ident()==threads.get(loser) and table in statement and 'FOR UPDATE' in statement:
+        if threading.get_ident()==threads.get(loser) and table in statement and sql_kind in statement:
             waiting['pid']=conn.connection.driver_connection.info.backend_pid;querying.set()
     def invoke(name):
         threads[name]=threading.get_ident()
@@ -204,16 +204,16 @@ with Session(engine) as db:
             target_source='scope',authorization_contract_required=True,config={'test_case_id':'case-2'}),
     ]);db.commit()
 with Session(engine) as db:
-    context=s['review']['context']
+    permission_context=s['review']['context']
     review=s['service'].review(db,s['owner'],job_id='job-3',enrollment_id='enrollment-1',authorization_id='auth-2',
-        plan=s['plan'],**{key:context[key] for key in
+        plan=s['plan'],**{key:permission_context[key] for key in
         ('expires_at','max_executions','max_duration_seconds','max_artifact_bytes','credential_grants')})
     s['service'].register(db,s['owner'],job_id='job-3',enrollment_id='enrollment-1',authorization_id='auth-2',
         plan=s['plan'],approval=fixture.signed(review['context'],'job-3'))
-# Different engagement parents still share the admitted enrollment. Its existing
-# earlier lock serializes these contenders before the Runtime check; observe that
-# real wait rather than inventing a Runtime-only ordering that cannot occur.
-race({'first':lambda db:claim(db,'job-2',2),'second':lambda db:claim(db,'job-3',2)},'first','managed_enrollments')
+# Different engagement parents still share the admitted API key. The winner holds
+# that key FOR UPDATE, so the loser's earlier authentication metadata UPDATE waits
+# before Enrollment or Runtime locks. Observe the actual existing serialization.
+race({'first':lambda db:claim(db,'job-2',2),'second':lambda db:claim(db,'job-3',2)},'first','api_keys','UPDATE')
 with Session(engine) as db:
     row=db.get(ManagedRuntime,runtime_id)
     assert row.last_sequence==row.active_sequence==2

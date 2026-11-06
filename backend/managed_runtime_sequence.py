@@ -46,6 +46,7 @@ class Sequences:
             | {"schema", "outcome", "receipt_sha256", "capacity_reserved"}
             | ({"cause"} if stop else set()),
         )
+        integer(receipt["fence"], 1)
         require(
             all(receipt[key] == value for key, value in binding.items())
             and receipt["capacity_reserved"] is False
@@ -128,7 +129,8 @@ class Sequences:
                 )
                 fingerprint(attempt.native_done_sha256)
                 require(
-                    attempt.release_receipt == self.release_ack(row, attempt),
+                    canonical(attempt.release_receipt)
+                    == canonical(self.release_ack(row, attempt)),
                     "runtime_release_changed",
                 )
         if row.active_sequence is not None:
@@ -157,7 +159,9 @@ class Sequences:
                 attempts[-1] if row.active_sequence else None,
                 receipt.get("attempt_receipt"),
             )
-            require(receipt == expected, "runtime_retirement_changed")
+            require(
+                canonical(receipt) == canonical(expected), "runtime_retirement_changed"
+            )
         else:
             require(row.retirement_receipt is None, "runtime_retirement_changed")
         return attempts

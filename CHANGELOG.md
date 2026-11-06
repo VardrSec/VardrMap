@@ -4,6 +4,10 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Reject retained v2 proof documents whose numeric types or canonical contents
+  differ from their exact expected release/retirement receipts. Preserve the
+  original completed result and full-completion digest.
+
 - Add explicit bounded v2 healthy sequencing under additive `0040runtimesequence`:
   append-only attempt history, original-token idle release after confirmed
   completed work, conditional physical-incarnation retirement and exact historical

@@ -2,13 +2,14 @@
 
 import hashlib
 import json
+import copy
 from datetime import timedelta
 
 import pytest
 from managed_observation_http import build_observation_router
 from managed_observations import Observations
 from managed_runtime import BINDING_FIELDS
-from managed_wire import digest
+from managed_wire import canonical, digest
 from models import (
     Engagement,
     JobExecution,
@@ -660,3 +661,98 @@ def test_database_backstop_refuses_old_style_retirement_without_physical_receipt
             db.flush()
         db.rollback()
         assert db.get(ManagedRuntime, m.RUNTIME_ID).retired is False
+
+
+@pytest.mark.parametrize(
+    "poison",
+    [
+        "release_fence_bool",
+        "release_sequence_float",
+        "release_flag_int",
+        "retirement_idle_bool",
+        "retirement_fence_bool",
+        "retirement_terminal_bool",
+    ],
+)
+def test_retained_proof_requires_exact_integer_and_canonical_json_types(
+    sequence, poison
+):
+    h = sequence
+    m.register(h)
+    if poison == "retirement_idle_bool":
+        h.seq = 0
+        assert (
+            m.post(h, "/observed-unbound-exit", exit_body(h, idle=True)).status_code
+            == 200
+        )
+    else:
+        claim(h)
+        confirm(h)
+        terminal = complete(h)
+        if poison.startswith("release_"):
+            assert (
+                post(h, "runtime-idle-release", release_body(h, terminal)).status_code
+                == 200
+            )
+        else:
+            assert m.post(h, "/observed-exit", exit_body(h)).status_code == 200
+    with Session(h.s["engine"]) as db:
+        if poison.startswith("release_"):
+            row = db.query(ManagedRuntimeAttempt).one()
+            original = canonical(row.release_receipt)
+            receipt = copy.deepcopy(row.release_receipt)
+            if poison == "release_fence_bool":
+                receipt["binding"]["fence"] = True
+            elif poison == "release_sequence_float":
+                receipt["runtime_sequence"] = 1.0
+            else:
+                receipt["released"] = 1
+            # Borrow the original int/bool digest: Python equality alone must
+            # never substitute for canonical proof-byte equality.
+            # ORM JSON dirty equality has the same bool/int pitfall. Force an
+            # actual serialized database write, then prove its persisted bytes.
+            db.execute(
+                ManagedRuntimeAttempt.__table__.update()
+                .where(
+                    ManagedRuntimeAttempt.runtime_id == row.runtime_id,
+                    ManagedRuntimeAttempt.runtime_sequence == row.runtime_sequence,
+                )
+                .values(release_receipt=receipt)
+            )
+        else:
+            row = db.get(ManagedRuntime, m.RUNTIME_ID)
+            original = canonical(row.retirement_receipt)
+            receipt = copy.deepcopy(row.retirement_receipt)
+            if poison == "retirement_idle_bool":
+                receipt["last_sequence"] = False
+            elif poison == "retirement_fence_bool":
+                receipt["binding"]["fence"] = True
+            else:
+                receipt["attempt_receipt"]["fence"] = True
+                # Even a self-consistent outer digest cannot legitimize a
+                # non-integer fence inside the retained canonical job receipt.
+                receipt["receipt_sha256"] = digest(
+                    {
+                        key: value
+                        for key, value in receipt.items()
+                        if key != "receipt_sha256"
+                    }
+                )
+            db.execute(
+                ManagedRuntime.__table__.update()
+                .where(
+                    ManagedRuntime.id == m.RUNTIME_ID,
+                )
+                .values(retirement_receipt=receipt)
+            )
+        db.commit()
+    with Session(h.s["engine"]) as db:
+        persisted = (
+            db.query(ManagedRuntimeAttempt).one().release_receipt
+            if poison.startswith("release_")
+            else db.get(ManagedRuntime, m.RUNTIME_ID).retirement_receipt
+        )
+        assert canonical(persisted) == canonical(receipt) != original
+    response = m.lookup(h)
+    assert response.status_code == 409, poison
+    assert response.json() == {"detail": "managed_runtime_refused"}
