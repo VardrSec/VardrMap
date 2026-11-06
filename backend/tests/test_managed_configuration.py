@@ -79,6 +79,7 @@ def test_enabled_assembly_exposes_shared_factories_without_database_or_scan(
     runtime_factory = managed_runtime_http.build_runtime_router
 
     def controls(issuer, runtime):
+        assert runtime.persistent_enabled is True
         calls.append((issuer, runtime))
         return control_factory(issuer, runtime)
 
@@ -181,8 +182,17 @@ def test_actual_production_main_can_opt_in_without_database_bootstrap(
     script = """
 import sys
 sys.path.insert(0, sys.argv[1])
+import managed_runtime
+original = managed_runtime.Runtimes
+instances = []
+def runtimes(results, *, persistent_enabled=False):
+    service = original(results, persistent_enabled=persistent_enabled)
+    instances.append(service)
+    return service
+managed_runtime.Runtimes = runtimes
 from main import app
 assert app.state.managed_worker_enabled is True
+assert len(instances) == 1 and instances[0].persistent_enabled is True
 assert '/managed/runtimes/{runtime_id}/observed-exit' in app.openapi()['paths']
 print('managed_startup_configured')
 """

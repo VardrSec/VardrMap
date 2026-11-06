@@ -1,7 +1,8 @@
 # API Reference
 
-Persistent runtime v3 is an inactive additive candidate behind a default-false
-constructor opt-in; no production configuration activates it. New versioned
+Persistent runtime v3 is available for owner-approved isolated testing through
+the existing explicit `VARDRMAP_MANAGED_WORKER=1` configuration. Ordinary startup
+and the direct service constructor remain disabled by default. New versioned
 runtime wrappers preserve finite v1/v2 and generic job receipts. Host `/disable`
 blocks new claims while preserving bound control/terminal release and reporting.
 Exact DTOs, decimal counters, advisory presence and the separate reporting-lifetime

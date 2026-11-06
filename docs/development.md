@@ -1,9 +1,11 @@
 # Development
 
-The inactive persistent candidate adds single head `0041persistentruntime` while
-preserving finite rows. Production constructors keep v3 disabled. The proposed
-until-revoke/retirement STOP lifetime requires a live owner disposition; tests do
-not supply one. No new environment flag or service is introduced. SQLite/ASGI
+Persistent mode adds single head `0041persistentruntime` while preserving finite
+rows. The owner approved until-revoke/retirement STOP reporting for isolated
+testing only. Existing `VARDRMAP_MANAGED_WORKER=1` configures the shared persistent
+service; omission/`0` performs no managed key reads or route registration. Startup
+never registers an admission, approves work or starts a worker. No new environment
+flag or service is introduced. SQLite/ASGI
 component checks, migrated PostgreSQL roles and actual platform acceptance remain
 distinct. See [protocol, migration and rollback notes](nm2-persistent-runtime.md).
 

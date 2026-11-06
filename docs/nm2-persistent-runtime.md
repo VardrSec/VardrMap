@@ -1,8 +1,12 @@
-# Inactive persistent runtime protocol
+# Persistent runtime isolated-test protocol
 
-This is an implementation candidate, not accepted deployment or live authority.
-`Runtimes(results, persistent_enabled=False)` remains the production default;
-isolated tests inject the opt-in. The
+The owner approved purpose-limited STOP reporting until revocation or physical
+retirement for isolated testing on 2026-11-06. This is not release approval or
+runtime acceptance. Existing `VARDRMAP_MANAGED_WORKER=1` configures the shared
+`Runtimes(results, persistent_enabled=True)` service; omission/`0` leaves managed
+routes absent and performs no managed key reads. Configuration never registers
+an admission, approves work or starts a worker. The direct service constructor
+still defaults to `persistent_enabled=False`. The
 [frozen cross-component contract](https://github.com/VardrSec/VardrSec/blob/efd95bed5b0f254dca78f3f9d49a93576536014d/docs/nm2-persistent-worker-contract.md)
 records the availability requirement and separate reporting-lifetime decision.
 
@@ -26,10 +30,10 @@ six-field runtime hash stays unchanged. Stored snapshot/policy is immutable;
 re-registration cannot upgrade, repair, extend or revive an incarnation. A digest
 correlates bytes; it is not remote attestation.
 
-The proposed STOP grant lasts until explicit revocation or physical retirement.
+The isolated-test STOP grant lasts until explicit revocation or physical retirement.
 It cannot claim, consume, refresh, publish success or refund budgets. This extends
-ADR 0043's reporting lifetime and needs a concrete owner disposition before live
-activation. The trusted-host false-exit risk remains: a compromised host/secret
+ADR 0043's original reporting lifetime; the owner accepted this extension for
+isolated testing only. The trusted-host false-exit risk remains: a compromised host/secret
 holder could prematurely release concurrency. Component tests accept no risk or
 platform gate and create no default startup work.
 
@@ -94,6 +98,6 @@ original keys remain held.
 
 Long idle, more than 32 jobs, large exact counters, optional limits, disable/stop,
 migrated history constraints, real PostgreSQL races and the full original failure
-matrix need evidence. Actual Linux/Docker Desktop and the live owner disposition
-remain separate. No stopped adversarial experiment, release, component pin or
+matrix need actual platform evidence. Linux/Docker Desktop runtime acceptance
+remains separate from isolated-test approval. No stopped adversarial experiment, release, component pin or
 NM-3 continuation is authorized by this candidate.

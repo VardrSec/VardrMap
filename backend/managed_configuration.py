@@ -89,7 +89,8 @@ def configure_managed(app, *, environ=None):
         )
         issuer = Issuer(origin, wire)
         results = Results(issuer)
-        runtimes = Runtimes(results)
+        # Owner-approved isolated testing; ordinary startup remains disabled.
+        runtimes = Runtimes(results, persistent_enabled=True)
         # Construct and validate the whole graph before exposing any route.
         routers = [
             build_managed_router(issuer, runtimes),
