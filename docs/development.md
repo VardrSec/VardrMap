@@ -700,6 +700,13 @@ The current hosted PostgreSQL job checks development companion Runner
 `54536ea1d900d0e35adf93b4e026962c4d45d34a`. These are test inputs; distribution
 production pins and worker activation remain separate.
 
+`tests/test_nm2_distribution_queue.py` is an explicit cross-repository ASGI check.
+Set absolute `NM2_DISTRIBUTION_SOURCE` and `NM2_RUNNER_SOURCE` paths to exercise
+the actual fixture's public queue requests and pure reviewed-plan compiler.
+Stored jobs keep the supported flat case-reference/timeout config; execution
+settings stay in the separately reviewed plan. It invokes no Docker command,
+network target or Gate process, and does not certify TLS or owner provenance.
+
 PostgreSQL CI enables direct Runner HTTP/TLS probes in the Map test interpreter.
 Install the pinned companion with its authorization extra in that interpreter;
 the separate CLI virtual environment alone does not satisfy those imports. This
