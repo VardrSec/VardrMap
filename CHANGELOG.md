@@ -4,6 +4,14 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Prepare inactive persistent runtime v3 with immutable availability policy,
+  optional finite controls, signed64 decimal counters and retained predecessor/
+  head history in additive `0041persistentruntime`. Reuse per-job authorization,
+  budgets and receipts; separate disable-new-work from reporting and expose
+  advisory presence without lease renewal. The proposed longer STOP lifetime
+  needs an owner disposition before live use; production configuration does not
+  enable it. See [protocol notes](docs/nm2-persistent-runtime.md).
+
 - Reject retained v2 proof documents whose numeric types or canonical contents
   differ from their exact expected release/retirement receipts. Preserve the
   original completed result and full-completion digest.

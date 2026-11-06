@@ -394,7 +394,7 @@ class Issuer:
         self.wire.approval(approval.envelope, result["context"], approval.owner, now())
         return approval, result
 
-    def current(self, db, request, *, job_id, body, contract_id, attempt_id, fence):
+    def current(self, db, request, *, job_id, body, contract_id, attempt_id, fence, on_control=None):
         """Unregistered current-authority check; no lease renewal/consume/execute.
 
         A future control adapter must use this result before returning continue.
@@ -409,9 +409,10 @@ class Issuer:
             attempt_id=attempt_id,
             fence=fence,
             renew=False,
+            on_control=on_control,
         )
 
-    def refresh(self, db, request, *, job_id, body, contract_id, attempt_id, fence):
+    def refresh(self, db, request, *, job_id, body, contract_id, attempt_id, fence, on_control=None):
         """Unregistered adapter: validate authority and renew one bounded lease.
 
         This is not wired to production HTTP, Runner or queued execution.
@@ -425,6 +426,7 @@ class Issuer:
             attempt_id=attempt_id,
             fence=fence,
             renew=True,
+            on_control=on_control,
         )
 
     def consume(
@@ -438,6 +440,7 @@ class Issuer:
         attempt_id,
         fence,
         contract_sha256,
+        on_control=None,
     ):
         """One-shot unregistered launch acknowledgement; no lease renewal/release.
 
@@ -461,6 +464,7 @@ class Issuer:
             fence=fence,
             renew=False,
             consume_sha256=contract_sha256,
+            on_control=on_control,
         )
 
     def _current(
@@ -475,6 +479,7 @@ class Issuer:
         fence,
         renew,
         consume_sha256=None,
+        on_control=None,
     ):
         with self.operation(db) as now:
             user = get_current_user(
@@ -499,6 +504,11 @@ class Issuer:
             approval, result = self._claim_permission(
                 db, request, job, body, now, job_statuses=("running",)
             )
+            if on_control is not None:
+                # Trusted graph hook only. Runtime must precede ManagedClock;
+                # the shared projection remains the execution authority.
+                on_control(db=db, now=now, job=job, execution=execution,
+                           contract=contract, approval=approval, projection=result)
             self._locked_time(db, now)
             require(
                 execution.state == "active" and execution.expires_at > control.now(),

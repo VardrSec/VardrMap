@@ -16,6 +16,7 @@ import execution_control as control
 from db import get_db
 from deps import accessible_engagement_ids, get_current_user
 from managed_wire import WireRefused, canonical, parse, require
+from managed_persistent_http import Attempt, CursorInput, Fingerprint, paired_admission
 from models import AuthorizationTestCase, ManagedApproval, ManagedEnrollment, ScanJob
 from nm1_authorization import IssuanceRefused
 
@@ -33,6 +34,17 @@ class PendingInput(BaseModel):
     runner_id: UUID
     limit: Annotated[int, Field(strict=True, ge=1, le=20)] = 20
     after: Identifier | None = None
+    runtime_id: UUID | None = None
+    runtime_sha256: Fingerprint | None = None
+    admission_sha256: Fingerprint | None = None
+    cursor: CursorInput | None = None
+
+    @model_validator(mode="after")
+    def persistent_presence(self):
+        supplied = self.model_fields_set & {"runtime_id", "runtime_sha256", "admission_sha256", "cursor"}
+        if supplied and (len(supplied) != 4 or any(getattr(self, name) is None for name in supplied)):
+            raise ValueError("persistent_presence_required")
+        return self
 
 
 class ManagedControlInput(control.ControlRequest):
@@ -50,7 +62,8 @@ class ClaimInput(control.ClaimControl):
     runtime_sha256: (
         Annotated[str, Field(strict=True, pattern=r"^[a-f0-9]{64}$")] | None
     ) = None
-    runtime_sequence: Annotated[int, Field(strict=True, ge=1, le=32)] | None = None
+    runtime_sequence: Attempt | None = None
+    admission_sha256: Fingerprint | None = None
 
     @model_validator(mode="after")
     def paired_runtime(self):
@@ -60,7 +73,7 @@ class ClaimInput(control.ClaimControl):
             self.runtime_sequence is None or self.runtime_id is None or self.runtime_sha256 is None
         ):
             raise ValueError("sequence_runtime_required")
-        return self
+        return paired_admission(self)
 
 
 async def _payload(request, model):
@@ -91,7 +104,7 @@ async def _payload(request, model):
     return model.model_validate(parse(raw, BODY_MAX_BYTES))
 
 
-def _pending(service, db, request, body):
+def _pending(service, db, request, body, runtimes=None):
     """Bounded discovery only: listing neither reserves nor grants execution."""
     with service.operation(db) as now:
         user = get_current_user(
@@ -118,6 +131,10 @@ def _pending(service, db, request, body):
             == key.key_hash,
             "enrollment_key_unavailable",
         )
+        presence = None
+        if body.admission_sha256 is not None:
+            require(runtimes is not None, "runtime_admission_unavailable")
+            presence = runtimes.persistent.pending(db, enrollment, body, now)
         query = (
             db.query(ScanJob, ManagedApproval)
             .join(
@@ -170,14 +187,19 @@ def _pending(service, db, request, body):
             if len(rows) > body.limit
             else None,
         }
-        db.rollback()  # No lease, claim, counter, reservation or approval mutation.
+        if presence is not None:
+            service._locked_time(db, now)  # Runtime is already locked; no permission renewal.
+            reply["availability"] = runtimes.persistent.availability(presence, now().replace(tzinfo=None))
+            db.commit()
+        else:
+            db.rollback()  # Legacy listing has no presence/lease/accounting mutation.
         return reply
 
 
 def _operate(service, operation, db, request, job_id, body, runtimes=None):
     if operation == "claim":
         claim = control.ClaimControl(
-            **body.model_dump(exclude={"runtime_id", "runtime_sha256", "runtime_sequence"})
+            **body.model_dump(exclude={"runtime_id", "runtime_sha256", "runtime_sequence", "admission_sha256"})
         )
         if body.runtime_id is not None:
             require(runtimes is not None, "runtime_admission_unavailable")
@@ -189,6 +211,7 @@ def _operate(service, operation, db, request, job_id, body, runtimes=None):
                 runtime_id=str(body.runtime_id),
                 runtime_sha256=body.runtime_sha256,
                 runtime_sequence=body.runtime_sequence,
+                admission_sha256=body.admission_sha256,
             )
         else:
             reply = service.claim(db, request, job_id=job_id, body=claim)
@@ -205,7 +228,9 @@ def _operate(service, operation, db, request, job_id, body, runtimes=None):
     if operation == "consume":
         args["contract_sha256"] = body.contract_sha256
     owned = control.ControlRequest(**body.model_dump(exclude=set(args)))
-    return getattr(service, operation)(db, request, job_id=job_id, body=owned, **args)
+    hooks = ({"on_control": runtimes.persistent.control_guard}
+             if runtimes is not None else {})
+    return getattr(service, operation)(db, request, job_id=job_id, body=owned, **args, **hooks)
 
 
 def build_managed_router(service, runtimes=None):
@@ -237,7 +262,7 @@ def build_managed_router(service, runtimes=None):
             except (WireRefused, ValidationError):
                 return refused(422)
             if operation == "pending":
-                reply = await run_in_threadpool(_pending, service, db, request, body)
+                reply = await run_in_threadpool(_pending, service, db, request, body, runtimes)
             else:
                 reply = await run_in_threadpool(
                     _operate, service, operation, db, request, job_id, body, runtimes

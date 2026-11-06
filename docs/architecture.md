@@ -1,5 +1,12 @@
 # Architecture
 
+Inactive `0041persistentruntime` adds explicit persistent mode and immutable
+admission snapshots to the existing database. Optional finite controls are not
+execution authority. Composite parent/predecessor and head/active foreign keys
+retain all history while normal paths select indexed exact rows. Runtime precedes
+ManagedClock; existing issuer/budget/result/stop services remain authoritative.
+See [persistent protocol and acceptance boundaries](nm2-persistent-runtime.md).
+
 Additive schema `0040runtimesequence` keeps v1 runtime rows intact and adds nullable
 `max_attempts`, monotone `last_sequence`, one active pointer and an immutable
 retirement snapshot. `ManagedRuntimeAttempt` retains each exact seven-field

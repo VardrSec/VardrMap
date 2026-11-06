@@ -81,6 +81,7 @@ class Sequences:
         """At most 32 immutable entries; incomplete or inconsistent history refuses."""
         from managed_runtime import fingerprint
 
+        require(getattr(row, "mode", None) is None, "runtime_protocol_changed")
         self.r._check(row)
         integer(row.max_attempts, 1, 32)
         integer(row.last_sequence, 0, row.max_attempts)

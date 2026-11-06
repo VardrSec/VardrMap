@@ -246,7 +246,11 @@ with engine.connect() as conn:
     # Require the retained head's explicit preservation/recovery refusal, not
     # an unrelated migration failure. The schema/data checks still follow.
     refusal = downgrade.stderr.lower()
-    if retained_head in {"0039managedruntime", "0040runtimesequence"}:
+    if retained_head == "0041persistentruntime":
+        assert "retain persistent identity, predecessor history, terminal/release and retirement proofs" in refusal
+        assert "code-only rollback over v3 state is unsupported" in refusal
+        assert "reconcile ownership before restoring an independently verified backup" in refusal
+    elif retained_head in {"0039managedruntime", "0040runtimesequence"}:
         assert ("retain runtime incarnations, bound attempts and stop-grant hashes"
                 if retained_head == "0039managedruntime" else
                 "retain runtime sequence history, release acknowledgments and physical retirement receipts") in refusal

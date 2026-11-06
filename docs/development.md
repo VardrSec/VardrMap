@@ -1,5 +1,12 @@
 # Development
 
+The inactive persistent candidate adds single head `0041persistentruntime` while
+preserving finite rows. Production constructors keep v3 disabled. The proposed
+until-revoke/retirement STOP lifetime requires a live owner disposition; tests do
+not supply one. No new environment flag or service is introduced. SQLite/ASGI
+component checks, migrated PostgreSQL roles and actual platform acceptance remain
+distinct. See [protocol, migration and rollback notes](nm2-persistent-runtime.md).
+
 The bounded [runtime protocol](managed-runtime-protocol.md) requires additive head
 `0040runtimesequence` before enabled requests. Focused SQLite/ASGI tests are
 `test_managed_runtime.py` and `test_managed_runtime_http.py`; existing native

@@ -14,6 +14,7 @@ from starlette.requests import ClientDisconnect
 from db import get_db
 from execution_control import ClaimControl
 from managed_wire import WireRefused, canonical, parse
+from managed_persistent_http import Attempt, paired_admission
 from nm1_authorization import IssuanceRefused
 
 OBSERVATION_PATH = "/jobs/{job_id}/managed/observation"
@@ -31,7 +32,8 @@ class ObservationInput(BaseModel):
     association_sha256: Fingerprint
     runtime_id: UUID | None = None
     runtime_sha256: Fingerprint | None = None
-    runtime_sequence: Annotated[int, Field(strict=True, ge=1, le=32)] | None = None
+    runtime_sequence: Attempt | None = None
+    admission_sha256: Fingerprint | None = None
 
     @model_validator(mode="after")
     def paired_runtime(self):
@@ -42,7 +44,7 @@ class ObservationInput(BaseModel):
             self.runtime_sequence is None or self.runtime_id is None or self.runtime_sha256 is None
         ):
             raise ValueError("sequence_runtime_required")
-        return self
+        return paired_admission(self)
 
 
 async def _payload(request):
@@ -119,6 +121,7 @@ def build_observation_router(service):
                     if body.runtime_id is not None else {}
                 ),
                 **({"runtime_sequence": body.runtime_sequence} if body.runtime_sequence is not None else {}),
+                **({"admission_sha256": body.admission_sha256} if body.admission_sha256 is not None else {}),
             )
             if len(canonical(reply)) > 16384:
                 return _refused(503)

@@ -1,5 +1,12 @@
 # API Reference
 
+Persistent runtime v3 is an inactive additive candidate behind a default-false
+constructor opt-in; no production configuration activates it. New versioned
+runtime wrappers preserve finite v1/v2 and generic job receipts. Host `/disable`
+blocks new claims while preserving bound control/terminal release and reporting.
+Exact DTOs, decimal counters, advisory presence and the separate reporting-lifetime
+decision are in [persistent runtime notes](nm2-persistent-runtime.md).
+
 Explicit `max_attempts` in runtime registration opts into bounded
 [healthy sequencing](managed-runtime-protocol.md#bounded-healthy-sequencing-v2)
 under `0040runtimesequence`; omission preserves the existing v1 API. V2 claim and
