@@ -6,7 +6,6 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
-from requests.exceptions import ReadTimeout
 
 from tests.test_managed_tls import (
     WireFaults,
@@ -16,6 +15,10 @@ from tests.test_managed_tls import (
 
 ROUTE = "/jobs/job-1/managed/observation"
 CANARY = "private-error-body-header-url-token-canary"
+
+
+class ReadTimeout(TimeoutError):
+    """Fixed-name diagnostic vector; no Runner-only requests dependency."""
 
 
 def test_diagnostic_reveals_only_fixed_class_category_and_status():
