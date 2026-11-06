@@ -693,6 +693,11 @@ Run PostgreSQL test collection from `backend`: `python -m pytest postgres_tests 
 These modules share fixtures through the `postgres_tests` package; invoking that
 directory from the repository root does not establish its parent import path.
 
+The current hosted PostgreSQL job checks development companion Runner
+`6ebaefdbf961008978e175bae180fd9e7f653cad` and corrected Gate
+`54536ea1d900d0e35adf93b4e026962c4d45d34a`. These are test inputs; distribution
+production pins and worker activation remain separate.
+
 PostgreSQL CI enables direct Runner HTTP/TLS probes in the Map test interpreter.
 Install the pinned companion with its authorization extra in that interpreter;
 the separate CLI virtual environment alone does not satisfy those imports. This
