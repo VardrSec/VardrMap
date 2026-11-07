@@ -4,6 +4,9 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Carry forward the two exact historical secret-scan fingerprints for
+  verified public runtime test vectors.
+
 - Add an unregistered, explicitly injected managed HTTP router factory for
   enrolled-key discovery, one-shot claim and current/refresh/consume operations.
   Claims return the retained case snapshot; bounded strict requests and fixed

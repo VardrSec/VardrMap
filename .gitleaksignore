@@ -3,3 +3,7 @@
 f6c26eae5232672b3aed85a8f2ba34200bfd3edd:backend/postgres_tests/test_local_auth_concurrency.py:generic-api-key:35
 # Independently reviewed immutable synthetic-test/plain-prose false positives only.
 275b37e2ed237f7dfa7aa0ae54bce8868f8058c0:docs/development.md:generic-api-key:557
+# Public deterministic ASCII/decoded-byte protocol vectors, never provisioned keys.
+# Both literals are the hexadecimal alphabet repeated in disposable unit/ASGI tests.
+58cab2df5b122a53aa750482ca4603cd22b76bcc:backend/tests/test_managed_runtime.py:generic-api-key:22
+58cab2df5b122a53aa750482ca4603cd22b76bcc:backend/tests/test_managed_runtime_http.py:generic-api-key:37
