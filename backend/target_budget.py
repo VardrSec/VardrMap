@@ -5,6 +5,11 @@ from assessments import case_hash
 from routers.test_cases import _case_identities, _preflight_origin
 
 
+class TargetBudgetExhausted(HTTPException):
+    def __init__(self):
+        super().__init__(409, "engagement target allowance exhausted")
+
+
 def binding(case):
     try:
         requests = [case["request"]]
@@ -43,6 +48,6 @@ def charge(engagement, job, case, body):
         raise HTTPException(409, "target binding mismatch")
     count = len(expected["origins"])
     if engagement.targets_spent + count > engagement.target_limit:
-        raise HTTPException(409, "engagement target allowance exhausted")
+        raise TargetBudgetExhausted()
     engagement.targets_spent += count
     return {"binding": expected, "charged": count, "spent": engagement.targets_spent, "limit": engagement.target_limit}

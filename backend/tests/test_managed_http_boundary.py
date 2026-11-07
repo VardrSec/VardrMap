@@ -586,23 +586,55 @@ def test_duration_exhaustion_marker_requires_exact_managed_allocator_refusal(htt
     ] == [("managed_claim_duration_exhausted", (), None)]
 
 
-@pytest.mark.parametrize("denial", ["target", "same_detail_generic"])
-def test_duration_exhaustion_marker_excludes_other_managed_conflicts(
+def test_target_exhaustion_marker_requires_exact_managed_allocator_refusal(http, caplog):
+    with Session(http.s["engine"]) as db:
+        engagement = db.get(Engagement, "eng-1")
+        engagement.targets_spent = engagement.target_limit
+        db.commit()
+    before = facts(http)
+    assert before == ("pending", None, 10, 0, 0, 0, 0)
+    with caplog.at_level(logging.WARNING, logger=boundary.__name__):
+        reply = post(http, "/claim")
+    assert reply.status_code == 409
+    assert reply.json() == {"detail": "managed_request_refused"}
+    assert reply.headers["Cache-Control"] == "no-store"
+    assert facts(http) == before
+    assert [
+        (record.msg, record.args, record.exc_info)
+        for record in caplog.records
+        if record.name == boundary.__name__
+    ] == [("managed_claim_target_exhausted", (), None)]
+
+
+@pytest.mark.parametrize("denial", ["same_duration_detail", "same_target_detail", "binding", "capacity"])
+def test_budget_exhaustion_markers_exclude_other_managed_conflicts(
     http, caplog, monkeypatch, denial
 ):
-    if denial == "target":
+    body = copy.deepcopy(http.body)
+    if denial in {"binding", "capacity"}:
         with Session(http.s["engine"]) as db:
             engagement = db.get(Engagement, "eng-1")
             engagement.targets_spent = engagement.target_limit
             db.commit()
+        if denial == "binding":
+            body["target_binding"]["case_sha256"] = "0" * 64
+        else:
+            monkeypatch.setattr("concurrency_budget.reserved", lambda db, engagement_id: 1)
     else:
-        def generic(*args, **kwargs):
-            raise HTTPException(409, "engagement duration allocation exhausted")
+        if denial == "same_duration_detail":
+            allocator = "duration_budget.allocate"
+            detail = "engagement duration allocation exhausted"
+        else:
+            allocator = "target_budget.charge"
+            detail = "engagement target allowance exhausted"
 
-        monkeypatch.setattr("duration_budget.allocate", generic)
+        def generic(*args, **kwargs):
+            raise HTTPException(409, detail)
+
+        monkeypatch.setattr(allocator, generic)
     before = facts(http)
     with caplog.at_level(logging.WARNING, logger=boundary.__name__):
-        reply = post(http, "/claim")
+        reply = post(http, "/claim", body=body)
     assert reply.status_code == 409
     assert reply.json() == {"detail": "managed_request_refused"}
     assert reply.headers["Cache-Control"] == "no-store"

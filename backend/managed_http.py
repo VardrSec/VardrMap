@@ -21,6 +21,7 @@ from managed_wire import WireRefused, canonical, parse, require
 from managed_persistent_http import Attempt, CursorInput, Fingerprint, paired_admission
 from models import AuthorizationTestCase, Engagement, ManagedApproval, ManagedEnrollment, ScanJob
 from nm1_authorization import IssuanceRefused
+from target_budget import TargetBudgetExhausted
 
 logger = logging.getLogger(__name__)
 
@@ -281,6 +282,11 @@ def build_managed_router(service, runtimes=None):
             # Issuer.operation has rolled back before the refusal reaches HTTP.
             if operation == "claim":
                 logger.warning("managed_claim_duration_exhausted")
+            return refused(error.status_code)
+        except TargetBudgetExhausted as error:
+            # The issuer has rolled back the claim before reporting refusal.
+            if operation == "claim":
+                logger.warning("managed_claim_target_exhausted")
             return refused(error.status_code)
         except HTTPException as error:
             return refused(error.status_code)
