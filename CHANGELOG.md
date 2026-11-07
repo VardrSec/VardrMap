@@ -5,6 +5,9 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 ## Unreleased
 
 - Record a fixed diagnostic after a managed claim rolls back for exhausted
+  engagement concurrency. Preserve existing HTTP refusals and budget accounting.
+
+- Record a fixed diagnostic after a managed claim rolls back for exhausted
   engagement target allowance. Preserve existing HTTP refusals and budget accounting.
 
 - Record a fixed diagnostic after a managed claim rolls back for exhausted

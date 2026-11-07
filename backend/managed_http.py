@@ -14,6 +14,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.requests import ClientDisconnect
 
 import execution_control as control
+from concurrency_budget import ConcurrencyBudgetExhausted
 from db import get_db
 from deps import accessible_engagement_ids, get_current_user
 from duration_budget import DurationBudgetExhausted
@@ -287,6 +288,11 @@ def build_managed_router(service, runtimes=None):
             # The issuer has rolled back the claim before reporting refusal.
             if operation == "claim":
                 logger.warning("managed_claim_target_exhausted")
+            return refused(error.status_code)
+        except ConcurrencyBudgetExhausted as error:
+            # The issuer has rolled back the claim before reporting refusal.
+            if operation == "claim":
+                logger.warning("managed_claim_concurrency_exhausted")
             return refused(error.status_code)
         except HTTPException as error:
             return refused(error.status_code)
