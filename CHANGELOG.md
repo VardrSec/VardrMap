@@ -4,6 +4,9 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Keep stopped engagements and stale approval revisions out of managed worker
+  discovery. Claims still enforce current authority and budgets.
+
 - Add bounded test-only TLS failure diagnostics for fixed exception classes,
   route categories and status codes while re-raising the original exception.
 

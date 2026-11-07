@@ -217,6 +217,46 @@ def test_known_terminal_releases_exact_slot_without_refund(persistent, outcome):
         assert db.query(ManagedStop).count() == 0
 
 
+def test_discovery_excludes_stopped_and_stale_approved_jobs(persistent):
+    from routers import engagements
+
+    h = persistent
+    register(h)
+    runtime = {
+        "runtime_id": m.RUNTIME_ID,
+        "runtime_sha256": h.sha,
+        "admission_sha256": h.admission_sha,
+    }
+    pending = {**h.pending, **runtime, "cursor": {"last_sequence": "0", "phase": "idle"}}
+
+    def jobs():
+        response = h.client.post("/jobs/managed/pending", json=pending, headers=h.headers)
+        assert response.status_code == 200
+        assert response.json()["availability"]["state"] == "idle-ready"
+        return [job["id"] for job in response.json()["jobs"]]
+
+    assert jobs() == ["job-1"]
+    before = m.state(h)
+    owner = {"github_id": "owner-1", "scope": "full"}
+    with Session(h.s["engine"]) as db:
+        engagements.engage_stop_work(
+            "eng-1", engagements.StopWorkRequest(reason="synthetic"), owner, db
+        )
+    assert jobs() == []
+    refused = h.client.post(
+        "/jobs/job-1/managed/claim",
+        json={**h.body, **runtime, "runtime_sequence": "1"},
+        headers=h.headers,
+    )
+    assert refused.status_code == 409
+    assert m.state(h) == before
+
+    with Session(h.s["engine"]) as db:
+        engagements.release_stop_work("eng-1", owner, db)
+    assert jobs() == []
+    assert m.state(h) == before
+
+
 def test_presence_is_advisory_fresh_cursor_only_and_disable_preserves_reporting(
     persistent,
 ):

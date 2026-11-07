@@ -17,7 +17,7 @@ from db import get_db
 from deps import accessible_engagement_ids, get_current_user
 from managed_wire import WireRefused, canonical, parse, require
 from managed_persistent_http import Attempt, CursorInput, Fingerprint, paired_admission
-from models import AuthorizationTestCase, ManagedApproval, ManagedEnrollment, ScanJob
+from models import AuthorizationTestCase, Engagement, ManagedApproval, ManagedEnrollment, ScanJob
 from nm1_authorization import IssuanceRefused
 
 PENDING_PATH = "/jobs/managed/pending"
@@ -141,6 +141,7 @@ def _pending(service, db, request, body, runtimes=None):
                 ManagedApproval,
                 ScanJob.managed_approval_id == ManagedApproval.id,
             )
+            .join(Engagement, ScanJob.program_id == Engagement.id)
             .filter(
                 ScanJob.status == "pending",
                 ScanJob.authorization_contract_required.is_(True),
@@ -153,6 +154,8 @@ def _pending(service, db, request, body, runtimes=None):
                 ManagedApproval.owner == user["github_id"],
                 ManagedApproval.enrollment_id == enrollment.id,
                 ManagedApproval.revoked.is_(False),
+                Engagement.stop_work_at.is_(None),
+                ManagedApproval.revision == Engagement.managed_authority_revision,
             )
         )
         if body.after is not None:
@@ -160,8 +163,8 @@ def _pending(service, db, request, body, runtimes=None):
         rows = query.order_by(ScanJob.id).limit(body.limit + 1).all()
         jobs = []
         for job, approval in rows[: body.limit]:
-            # Verify the stored human signature/window, not current authority or
-            # capacity. Claim reprojects authority and atomically charges budgets.
+            # Verify the stored human signature/window. Claim still reprojects
+            # all current authority and atomically charges budgets.
             try:
                 service.wire.approval(
                     approval.envelope, approval.context, approval.owner, now()

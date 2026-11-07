@@ -77,7 +77,7 @@ through explicit service configuration or isolated adapters:
 
 | Method and path | Contract |
 |---|---|
-| `POST /jobs/managed/pending` | Existing API key plus `{origin, runner_id, limit?:1..20, after?:job_id}` discovers that enrollment's registered, non-revoked pending Gate jobs. Returns unresolved current cases, approved plans and `next_after`; no token, lease or reservation. Discovery is advisory: claim rechecks current authority and budgets. |
+| `POST /jobs/managed/pending` | Existing API key plus `{origin, runner_id, limit?:1..20, after?:job_id}` discovers that enrollment's registered, non-revoked pending Gate jobs. It excludes stopped engagements and approvals from earlier authority revisions. Returns unresolved current cases, approved plans and `next_after` without a token, lease or reservation. Claim still rechecks current authority and budgets. |
 | `POST /jobs/{job_id}/managed/claim` | Existing `ClaimControl` fields require the enrolled key, exact configured origin/Runner UUID, concurrency/target binding and finite duration. Returns existing issuer contracts/control plus `config.test_case` from the retained `ScanJob.case_snapshot`. No automatic retry. |
 | `POST /jobs/{job_id}/managed/current` | Existing `ControlRequest` fields plus `contract_id`, `attempt_id`, `fence` check owned current authority without renewing. |
 | `POST /jobs/{job_id}/managed/refresh` | Same exact binding rechecks current authority and renews the existing bounded lease; expired attempts cannot renew. |
