@@ -4,6 +4,9 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Record a fixed diagnostic after a managed claim rolls back for exhausted
+  engagement duration. Keep the existing client refusal and budget semantics.
+
 - Keep stopped engagements and stale approval revisions out of managed worker
   discovery. Claims still enforce current authority and budgets.
 

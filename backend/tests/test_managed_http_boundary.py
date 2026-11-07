@@ -4,6 +4,7 @@ import asyncio
 import copy
 import hashlib
 import json
+import logging
 from datetime import timedelta
 from types import SimpleNamespace
 
@@ -12,7 +13,7 @@ import local_auth
 import managed_http as boundary
 import pytest
 from db import get_db
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from managed_issuance import Issuer
 from managed_wire import digest
@@ -563,3 +564,47 @@ def test_transport_and_failure_responses_are_bounded_and_secret_free(
         # never refunded/replayed as a second physical attempt.
         assert facts(h)[2:] == (1, 30, 1, 1, 1)
         assert post(h, "/claim").status_code == 409
+
+
+def test_duration_exhaustion_marker_requires_exact_managed_allocator_refusal(http, caplog):
+    with Session(http.s["engine"]) as db:
+        engagement = db.get(Engagement, "eng-1")
+        engagement.duration_allocated = engagement.duration_limit
+        db.commit()
+    before = facts(http)
+    assert before == ("pending", None, 0, 120, 0, 0, 0)
+    with caplog.at_level(logging.WARNING, logger=boundary.__name__):
+        reply = post(http, "/claim")
+    assert reply.status_code == 409
+    assert reply.json() == {"detail": "managed_request_refused"}
+    assert reply.headers["Cache-Control"] == "no-store"
+    assert facts(http) == before
+    assert [
+        (record.msg, record.args, record.exc_info)
+        for record in caplog.records
+        if record.name == boundary.__name__
+    ] == [("managed_claim_duration_exhausted", (), None)]
+
+
+@pytest.mark.parametrize("denial", ["target", "same_detail_generic"])
+def test_duration_exhaustion_marker_excludes_other_managed_conflicts(
+    http, caplog, monkeypatch, denial
+):
+    if denial == "target":
+        with Session(http.s["engine"]) as db:
+            engagement = db.get(Engagement, "eng-1")
+            engagement.targets_spent = engagement.target_limit
+            db.commit()
+    else:
+        def generic(*args, **kwargs):
+            raise HTTPException(409, "engagement duration allocation exhausted")
+
+        monkeypatch.setattr("duration_budget.allocate", generic)
+    before = facts(http)
+    with caplog.at_level(logging.WARNING, logger=boundary.__name__):
+        reply = post(http, "/claim")
+    assert reply.status_code == 409
+    assert reply.json() == {"detail": "managed_request_refused"}
+    assert reply.headers["Cache-Control"] == "no-store"
+    assert facts(http) == before
+    assert not any(record.name == boundary.__name__ for record in caplog.records)

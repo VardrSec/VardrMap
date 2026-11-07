@@ -2,6 +2,7 @@
 
 import asyncio
 import hashlib
+import logging
 import re
 from typing import Annotated
 from uuid import UUID
@@ -15,10 +16,13 @@ from starlette.requests import ClientDisconnect
 import execution_control as control
 from db import get_db
 from deps import accessible_engagement_ids, get_current_user
+from duration_budget import DurationBudgetExhausted
 from managed_wire import WireRefused, canonical, parse, require
 from managed_persistent_http import Attempt, CursorInput, Fingerprint, paired_admission
 from models import AuthorizationTestCase, Engagement, ManagedApproval, ManagedEnrollment, ScanJob
 from nm1_authorization import IssuanceRefused
+
+logger = logging.getLogger(__name__)
 
 PENDING_PATH = "/jobs/managed/pending"
 JOB_PATH = "/jobs/{job_id}/managed"
@@ -273,6 +277,11 @@ def build_managed_router(service, runtimes=None):
             if len(canonical(reply)) > RESPONSE_MAX_BYTES:
                 return refused(503)
             return JSONResponse(reply, headers={"Cache-Control": "no-store"})
+        except DurationBudgetExhausted as error:
+            # Issuer.operation has rolled back before the refusal reaches HTTP.
+            if operation == "claim":
+                logger.warning("managed_claim_duration_exhausted")
+            return refused(error.status_code)
         except HTTPException as error:
             return refused(error.status_code)
         except (WireRefused, IssuanceRefused):
