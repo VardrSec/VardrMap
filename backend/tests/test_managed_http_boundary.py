@@ -16,7 +16,7 @@ from db import get_db
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from managed_issuance import Issuer
-from managed_wire import digest
+from managed_wire import WireRefused, digest
 from models import (
     ApiKey,
     AuthorizationTestCase,
@@ -696,3 +696,60 @@ def test_budget_exhaustion_markers_exclude_other_managed_conflicts(
     assert reply.headers["Cache-Control"] == "no-store"
     assert facts(http) == before
     assert not any(record.name == boundary.__name__ for record in caplog.records)
+
+
+@pytest.mark.parametrize(
+    ("route", "denial", "marker"),
+    [
+        ("/claim", "stale_approval", True),
+        ("/claim", "wrong_runner", False),
+        ("/claim", "generic_same_reason", False),
+        ("/current", "stale_approval", False),
+    ],
+)
+def test_authority_revision_marker_is_exact_and_claim_only(http, caplog, monkeypatch, route, denial, marker):
+    body = copy.deepcopy(http.body)
+    if route == "/current":
+        _, body = claimed(http)
+    with Session(http.s["engine"]) as db:
+        db.get(Engagement, "eng-1").managed_authority_revision += 1
+        db.commit()
+
+    if denial == "wrong_runner":
+        body["runner_id"] = "11111111-1111-4111-8111-111111111111"
+        assert body["runner_id"] != RUNNER
+    elif denial == "generic_same_reason":
+        def generic(*args, **kwargs):
+            raise WireRefused("authority_revision_changed")
+
+        monkeypatch.setattr(http.s["service"], "_projection", generic)
+
+    def retained():
+        with Session(http.s["engine"]) as db:
+            approval = db.get(ManagedApproval, "managed-fixture:fixture-approval")
+            assert db.get(Engagement, "eng-1").managed_authority_revision == approval.revision + 1
+            execution = db.get(JobExecution, "job-1")
+            return (
+                approval.id, approval.revision, approval.issued, approval.revoked,
+                digest(approval.envelope), digest(approval.context), digest(approval.authority_snapshot),
+                execution.capacity_reserved if execution is not None else None,
+            )
+
+    before = facts(http), retained()
+    if route == "/claim":
+        assert before[0] == ("pending", None, 0, 0, 0, 0, 0)
+        assert before[1][2:4] == (0, False) and before[1][-1] is None
+    else:
+        assert before[0][2:] == (1, 30, 1, 1, 1) and before[1][-1] is True
+    with caplog.at_level(logging.WARNING, logger=boundary.__name__):
+        reply = post(http, route, body=body)
+    assert reply.status_code == 409
+    assert reply.json() == {"detail": "managed_request_refused"}
+    assert reply.headers["Cache-Control"] == "no-store"
+    assert (facts(http), retained()) == before
+    expected = [("managed_claim_authority_revision_changed", (), None)] if marker else []
+    assert [
+        (record.msg, record.args, record.exc_info)
+        for record in caplog.records
+        if record.name == boundary.__name__
+    ] == expected

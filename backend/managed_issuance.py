@@ -43,6 +43,11 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 
+class AuthorityRevisionChanged(WireRefused):
+    def __init__(self):
+        super().__init__("authority_revision_changed")
+
+
 class Issuer:
     def __init__(self, origin, wire, *, clock=None, monotonic=time.monotonic):
         # Reuse the existing configured-origin restrictions; no payload-directed lookup.
@@ -164,10 +169,8 @@ class Issuer:
         job_statuses=("pending",),
     ):
         engagement = db.get(Engagement, job.program_id)
-        require(
-            revision == engagement.managed_authority_revision,
-            "authority_revision_changed",
-        )
+        if revision != engagement.managed_authority_revision:
+            raise AuthorityRevisionChanged()
         for name, maximum in (
             ("max_executions", 1000),
             ("max_duration_seconds", 86400),

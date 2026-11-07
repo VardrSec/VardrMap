@@ -4,6 +4,9 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Record a fixed diagnostic after a managed claim rolls back because the stored
+  approval's authority revision is stale. Preserve existing HTTP refusals.
+
 - Record a fixed diagnostic after a managed claim rolls back for exhausted
   engagement concurrency. Preserve existing HTTP refusals and budget accounting.
 

@@ -18,6 +18,7 @@ from concurrency_budget import ConcurrencyBudgetExhausted
 from db import get_db
 from deps import accessible_engagement_ids, get_current_user
 from duration_budget import DurationBudgetExhausted
+from managed_issuance import AuthorityRevisionChanged
 from managed_wire import WireRefused, canonical, parse, require
 from managed_persistent_http import Attempt, CursorInput, Fingerprint, paired_admission
 from models import AuthorizationTestCase, Engagement, ManagedApproval, ManagedEnrollment, ScanJob
@@ -296,6 +297,11 @@ def build_managed_router(service, runtimes=None):
             return refused(error.status_code)
         except HTTPException as error:
             return refused(error.status_code)
+        except AuthorityRevisionChanged:
+            # The issuer has rolled back before this refusal reaches HTTP.
+            if operation == "claim":
+                logger.warning("managed_claim_authority_revision_changed")
+            return refused(409)
         except (WireRefused, IssuanceRefused):
             return refused(409)
         except asyncio.TimeoutError:
