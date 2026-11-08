@@ -10,7 +10,18 @@ from sqlalchemy.orm import Session
 from managed_results import Results
 from managed_stops import CANCEL_CAUSES, CAUSES, Stops
 from managed_wire import WireRefused
-from models import Engagement, JobExecution, ManagedApproval, ManagedContract, ManagedStop, ScanJob
+from models import (
+    Engagement,
+    Evidence,
+    JobExecution,
+    JobResultReceipt,
+    ManagedApproval,
+    ManagedContract,
+    ManagedResult,
+    ManagedStop,
+    ScanItem,
+    ScanJob,
+)
 from tests.test_managed_consumption import consume
 from tests.test_managed_consumption import consumption as consumption
 from tests.test_managed_issuance import specimen as specimen
@@ -23,7 +34,15 @@ def stops(consumption):
     return s, args, Stops(Results(s["service"]))
 
 
-def report(pair, *, cause="local_emergency_stop", outcome=None, confirmed=True, db=None, args=None):
+def report(
+    pair,
+    *,
+    cause="local_emergency_stop",
+    outcome=None,
+    confirmed=True,
+    db=None,
+    args=None,
+):
     s, original, service = pair
     return service.report(
         db or s["db"],
@@ -74,7 +93,9 @@ def test_explicit_known_stop_receipt_is_immutable_and_spent(stops, cause):
         (True, "local_emergency_stop", "completed"),
     ],
 )
-def test_uncertain_or_wrong_stop_reports_never_release(stops, confirmed, cause, outcome):
+def test_uncertain_or_wrong_stop_reports_never_release(
+    stops, confirmed, cause, outcome
+):
     s, _, _ = stops
     with pytest.raises(WireRefused, match="known_stop_report_required"):
         report(stops, cause=cause, outcome=outcome, confirmed=confirmed)
@@ -115,7 +136,9 @@ def test_missing_consumption_or_foreign_terminal_state_cannot_be_adopted(stops):
         assert db.query(ManagedStop).count() == 0
 
 
-def test_evidence_protocol_cannot_be_overwritten_by_stop(stops):
+@pytest.mark.parametrize("first", ["result", "stop"])
+@pytest.mark.parametrize("permission", ["active", "expired", "approval_revoked"])
+def test_result_and_stop_receipts_are_mutually_exclusive(stops, first, permission):
     import hashlib
     import json
 
@@ -124,24 +147,55 @@ def test_evidence_protocol_cannot_be_overwritten_by_stop(stops):
     s, args, service = stops
     with Session(s["engine"]) as db:
         case = db.get(ScanJob, "job-1").case_snapshot
+        if permission == "approval_revoked":
+            db.query(ManagedApproval).one().revoked = True
+            db.commit()
+    if permission == "expired":
+        s["wall"][0] += timedelta(minutes=2)
     artifact = json.dumps(
         {
             "case_hash": assessments.case_hash(case),
             "test_case_id": case["id"],
-            "executions": [],
-            "findings": [],
+            "executions": [
+                {
+                    "identity_id": case["identities"][0]["id"],
+                    "status_code": 200,
+                    "observed_outcome": "allow",
+                }
+            ],
+            "findings": [{"severity": "high", "message": "synthetic candidate"}],
         }
     )
-    service.results.submit(
-        s["db"],
-        s["runner"],
-        **args,
-        artifact=artifact,
-        artifact_sha256=hashlib.sha256(artifact.encode()).hexdigest(),
-    )
-    with pytest.raises(WireRefused, match="result_protocol_already_started"):
-        report(stops)
-    facts(s)
+
+    def upload():
+        return service.results.submit(
+            s["db"],
+            s["runner"],
+            **args,
+            artifact=artifact,
+            artifact_sha256=hashlib.sha256(artifact.encode()).hexdigest(),
+        )
+
+    if first == "result":
+        result_ack = upload()
+        with pytest.raises(WireRefused, match="result_protocol_already_started"):
+            report(stops)
+        assert upload() == result_ack
+    else:
+        stop_ack = report(stops)
+        with pytest.raises(WireRefused, match="stop_protocol_already_started"):
+            upload()
+        assert report(stops) == stop_ack
+    facts(s, terminal=first == "stop")
+    with Session(s["engine"]) as db:
+        expected = int(first == "result")
+        assert (
+            db.query(ManagedResult).count()
+            == db.query(JobResultReceipt).count()
+            == db.query(Evidence).count()
+            == db.query(ScanItem).count()
+            == expected
+        )
 
 
 def test_receipt_write_failure_rolls_back_release(stops):

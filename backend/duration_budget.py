@@ -2,6 +2,11 @@
 from fastapi import HTTPException
 
 
+class DurationBudgetExhausted(HTTPException):
+    def __init__(self):
+        super().__init__(409, "engagement duration allocation exhausted")
+
+
 def allocate(engagement, body):
     seconds = body.duration_seconds if body is not None else None
     if engagement.duration_limit is None:
@@ -12,7 +17,7 @@ def allocate(engagement, body):
         raise HTTPException(409, "duration policy requires a finite owned allocation")
     total = engagement.duration_allocated + seconds
     if total > engagement.duration_limit:
-        raise HTTPException(409, "engagement duration allocation exhausted")
+        raise DurationBudgetExhausted()
     engagement.duration_allocated = total
     return {"allocated_seconds": seconds, "total_allocated_seconds": total,
             "limit_seconds": engagement.duration_limit}

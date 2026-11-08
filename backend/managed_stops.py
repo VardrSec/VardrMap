@@ -14,6 +14,7 @@ FAIL_CAUSES = frozenset(
     }
 )
 CAUSES = CANCEL_CAUSES | FAIL_CAUSES
+RECEIPT_CAUSES = CAUSES | frozenset({"observed_exit"})
 
 
 def stop_hash(binding, outcome, cause):
@@ -51,7 +52,7 @@ class Stops:
                     binding["fence"],
                     binding["contract_sha256"],
                 )
-                and row.cause in CAUSES
+                and row.cause in RECEIPT_CAUSES
                 and row.outcome == ("cancelled" if row.cause in CANCEL_CAUSES else "failed")
                 and row.receipt_sha256 == stop_hash(binding, row.outcome, row.cause),
                 "retained_stop_binding",
@@ -64,6 +65,11 @@ class Stops:
             execution.state == row.outcome and execution.capacity_reserved is False,
             "retained_stop_inconsistent",
         )
+        return Stops._receipt(binding, row)
+
+    @staticmethod
+    def _receipt(binding, row):
+        """Immutable receipt fields, also retained after the live job is deleted."""
         return {
             "schema": "vardr.managed-stop-receipt/1",
             **binding,
@@ -98,38 +104,74 @@ class Stops:
         )
         with self.issuer.operation(db) as now:
             _, job, execution, _, binding = self.results._owned(
-                db, request, job_id, body, contract_id, attempt_id, fence, contract_sha256
+                db,
+                request,
+                job_id,
+                body,
+                contract_id,
+                attempt_id,
+                fence,
+                contract_sha256,
             )
-            row = self._row(db, binding)
-            if row is not None:
-                require((row.outcome, row.cause) == (outcome, cause), "different_stop_receipt")
-                ack = self._ack(binding, row, execution)
-                db.commit()
-                return ack
-            require(self.results._result(db, binding) is None, "result_protocol_already_started")
-            require(
-                execution.state not in {"completed", "failed", "cancelled"}
-                and execution.capacity_reserved is True,
-                "owned_reservation_required",
+            ack = self._stop_locked(
+                db, now, job, execution, binding, outcome=outcome, cause=cause
             )
-            row = ManagedStop(
-                contract_id=contract_id,
-                job_id=job_id,
-                attempt_id=attempt_id,
-                fence=fence,
-                contract_sha256=contract_sha256,
-                outcome=outcome,
-                cause=cause,
-                receipt_sha256=stop_hash(binding, outcome, cause),
-                finished_at=now().replace(tzinfo=None),
-            )
-            db.add(row)
-            execution.state, execution.capacity_reserved = outcome, False
-            job.status, job.completed_at, job.error_message = "failed", row.finished_at, cause
-            db.flush()
-            self.issuer._locked_time(db, now)
             db.commit()
+            return ack
+
+    def _stop_locked(self, db, now, job, execution, binding, *, outcome, cause):
+        """Internal terminal mutation after caller authentication and attempt locks.
+
+        Native report() retains its original CAUSES guard. The independently
+        authenticated host producer can supply only its fixed observed_exit.
+        Both producers serialize the same result/stop exclusion and reservation.
+        """
+        require(
+            type(cause) is str and cause in RECEIPT_CAUSES
+            and type(outcome) is str
+            and outcome == ("cancelled" if cause in CANCEL_CAUSES else "failed"),
+            "known_stop_report_required",
+        )
+        row = self._row(db, binding)
+        if row is not None:
+            require(
+                (row.outcome, row.cause) == (outcome, cause), "different_stop_receipt"
+            )
             return self._ack(binding, row, execution)
+        require(
+            self.results._result(db, binding) is None, "result_protocol_already_started"
+        )
+        require(
+            execution.state not in {"completed", "failed", "cancelled"}
+            and execution.capacity_reserved is True,
+            "owned_reservation_required",
+        )
+        row = ManagedStop(
+            **{
+                key: binding[key]
+                for key in (
+                    "contract_id",
+                    "job_id",
+                    "attempt_id",
+                    "fence",
+                    "contract_sha256",
+                )
+            },
+            outcome=outcome,
+            cause=cause,
+            receipt_sha256=stop_hash(binding, outcome, cause),
+            finished_at=now().replace(tzinfo=None),
+        )
+        db.add(row)
+        execution.state, execution.capacity_reserved = outcome, False
+        job.status, job.completed_at, job.error_message = (
+            "failed",
+            row.finished_at,
+            cause,
+        )
+        db.flush()
+        self.issuer._locked_time(db, now)
+        return self._ack(binding, row, execution)
 
     def inspect(
         self, db, request, *, job_id, body, contract_id, attempt_id, fence, contract_sha256

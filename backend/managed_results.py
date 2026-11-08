@@ -9,7 +9,14 @@ import assessments
 import execution_control as control
 from deps import get_current_user
 from managed_wire import digest, integer, parse, require, timestamp
-from models import JobResultReceipt, ManagedApproval, ManagedContract, ManagedResult, ScanJob
+from models import (
+    JobResultReceipt,
+    ManagedApproval,
+    ManagedContract,
+    ManagedResult,
+    ManagedStop,
+    ScanJob,
+)
 from routers.jobs import VardrGateUpload, _writable_engagement, store_gate_result
 
 
@@ -17,9 +24,13 @@ class Results:
     def __init__(self, issuer):
         self.issuer = issuer
 
-    def _owned(self, db, request, job_id, body, contract_id, attempt_id, fence, contract_sha256):
+    def _owned(
+        self, db, request, job_id, body, contract_id, attempt_id, fence, contract_sha256
+    ):
         integer(fence, 1)
-        user = get_current_user(request, authorization=request.headers.get("authorization"), db=db)
+        user = get_current_user(
+            request, authorization=request.headers.get("authorization"), db=db
+        )
         self.issuer._begin_write(db)
         execution = control.owned(db, job_id, user, request, body)
         job = db.get(ScanJob, job_id)
@@ -137,24 +148,48 @@ class Results:
         """Retain redacted case-bound evidence, including after expiry; no release."""
         with self.issuer.operation(db) as now:
             user, job, execution, approval, binding = self._owned(
-                db, request, job_id, body, contract_id, attempt_id, fence, contract_sha256
+                db,
+                request,
+                job_id,
+                body,
+                contract_id,
+                attempt_id,
+                fence,
+                contract_sha256,
             )
-            require(type(artifact) is str and len(artifact) <= 512000, "result_document_required")
+            require(
+                db.query(ManagedStop)
+                .filter_by(contract_id=contract_id)
+                .with_for_update()
+                .first()
+                is None,
+                "stop_protocol_already_started",
+            )
+            require(
+                type(artifact) is str and len(artifact) <= 512000,
+                "result_document_required",
+            )
             try:
                 data = artifact.encode("utf-8")
             except UnicodeError:
                 require(False, "invalid_result_encoding")
             require(
-                0 < len(data) <= min(512000, approval.context["max_artifact_bytes"]), "result_size"
+                0 < len(data) <= min(512000, approval.context["max_artifact_bytes"]),
+                "result_size",
             )
-            require(hashlib.sha256(data).hexdigest() == artifact_sha256, "artifact_hash_mismatch")
+            require(
+                hashlib.sha256(data).hexdigest() == artifact_sha256,
+                "artifact_hash_mismatch",
+            )
             raw = parse(data, 512000)
             require(type(raw) is dict, "result_document_required")
             try:
                 result = VardrGateUpload.model_validate(raw)
             except ValidationError:
                 require(False, "invalid_gate_result")
-            case_hash = assessments.case_hash(job.case_snapshot) if job.case_snapshot else None
+            case_hash = (
+                assessments.case_hash(job.case_snapshot) if job.case_snapshot else None
+            )
             require(
                 case_hash
                 and result.case_hash == case_hash == approval.plan["case_hash"]
@@ -164,7 +199,8 @@ class Results:
             row = self._result(db, binding)
             if row is not None:
                 require(
-                    row.artifact_sha256 == artifact_sha256 and row.case_sha256 == case_hash,
+                    row.artifact_sha256 == artifact_sha256
+                    and row.case_sha256 == case_hash,
                     "different_managed_result",
                 )
                 db.commit()
@@ -224,19 +260,31 @@ class Results:
         )
         with self.issuer.operation(db) as now:
             user, job, execution, approval, binding = self._owned(
-                db, request, job_id, body, contract_id, attempt_id, fence, contract_sha256
+                db,
+                request,
+                job_id,
+                body,
+                contract_id,
+                attempt_id,
+                fence,
+                contract_sha256,
             )
             row = self._result(db, binding)
             require(
                 row is not None and row.receipt_sha256 == receipt_sha256,
                 "owned_result_receipt_required",
             )
+            if outcome == "failed":
+                receipt = self._fail_locked(db, now, job, execution, binding, row)
+                db.commit()
+                return receipt
             if row.outcome is not None:
                 require(row.outcome == outcome, "different_completion")
                 db.commit()
                 return self._completion(binding, row, execution)
             require(
-                execution.state not in {"completed", "failed", "cancelled"}, "foreign_completion"
+                execution.state not in {"completed", "failed", "cancelled"},
+                "foreign_completion",
             )
             require(execution.capacity_reserved is True, "owned_reservation_required")
             if outcome == "completed":
@@ -264,7 +312,8 @@ class Results:
                         job.started_at
                         + timedelta(
                             seconds=min(
-                                execution.duration_seconds, permission["max_duration_seconds"]
+                                execution.duration_seconds,
+                                permission["max_duration_seconds"],
                             )
                         )
                     )
@@ -274,7 +323,9 @@ class Results:
                         and min(ends) > instant,
                         "completion_permission_not_live",
                     )
-                    self.issuer.wire.approval(approval.envelope, permission, approval.owner, now())
+                    self.issuer.wire.approval(
+                        approval.envelope, permission, approval.owner, now()
+                    )
 
                 live()
             row.outcome = outcome
@@ -290,13 +341,60 @@ class Results:
             db.commit()
             return self._completion(binding, row, execution)
 
+    def _fail_locked(self, db, now, job, execution, binding, row):
+        """Failed-only terminalization after producer auth and exact attempt locks.
+
+        Native failed finish and trusted host recovery share immutable result
+        identity, exclusion and capacity mutation; successful permission checks
+        remain exclusively in finish(). This never creates a second stop row.
+        """
+        require(self._result(db, binding) is row, "owned_result_receipt_required")
+        require(
+            db.query(ManagedStop)
+            .filter_by(contract_id=binding["contract_id"])
+            .with_for_update()
+            .first()
+            is None,
+            "stop_protocol_already_started",
+        )
+        if row.outcome is not None:
+            require(row.outcome == "failed", "different_completion")
+            return self._completion(binding, row, execution)
+        require(
+            execution.state not in {"completed", "failed", "cancelled"},
+            "foreign_completion",
+        )
+        require(execution.capacity_reserved is True, "owned_reservation_required")
+        row.outcome, row.finished_at = "failed", now().replace(tzinfo=None)
+        execution.state, execution.capacity_reserved = "failed", False
+        job.status, job.completed_at, job.error_message = "failed", row.finished_at, "failed"
+        db.flush()
+        self.issuer._locked_time(db, now)
+        return self._completion(binding, row, execution)
+
     def inspect(
-        self, db, request, *, job_id, body, contract_id, attempt_id, fence, contract_sha256
+        self,
+        db,
+        request,
+        *,
+        job_id,
+        body,
+        contract_id,
+        attempt_id,
+        fence,
+        contract_sha256,
     ):
         """Authenticated observation only; no renew, completion, release or replay."""
         with self.issuer.operation(db):
             _, _, execution, _, binding = self._owned(
-                db, request, job_id, body, contract_id, attempt_id, fence, contract_sha256
+                db,
+                request,
+                job_id,
+                body,
+                contract_id,
+                attempt_id,
+                fence,
+                contract_sha256,
             )
             row = self._result(db, binding)
             result = {

@@ -2,22 +2,29 @@
 
 import asyncio
 import hashlib
+import logging
 import re
 from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 from starlette.concurrency import run_in_threadpool
 from starlette.requests import ClientDisconnect
 
 import execution_control as control
+from concurrency_budget import ConcurrencyBudgetExhausted
 from db import get_db
 from deps import accessible_engagement_ids, get_current_user
+from duration_budget import DurationBudgetExhausted
 from managed_wire import WireRefused, canonical, parse, require
-from models import AuthorizationTestCase, ManagedApproval, ManagedEnrollment, ScanJob
+from managed_persistent_http import Attempt, CursorInput, Fingerprint, paired_admission
+from models import AuthorizationTestCase, Engagement, ManagedApproval, ManagedEnrollment, ScanJob
 from nm1_authorization import IssuanceRefused
+from target_budget import TargetBudgetExhausted
+
+logger = logging.getLogger(__name__)
 
 PENDING_PATH = "/jobs/managed/pending"
 JOB_PATH = "/jobs/{job_id}/managed"
@@ -33,6 +40,17 @@ class PendingInput(BaseModel):
     runner_id: UUID
     limit: Annotated[int, Field(strict=True, ge=1, le=20)] = 20
     after: Identifier | None = None
+    runtime_id: UUID | None = None
+    runtime_sha256: Fingerprint | None = None
+    admission_sha256: Fingerprint | None = None
+    cursor: CursorInput | None = None
+
+    @model_validator(mode="after")
+    def persistent_presence(self):
+        supplied = self.model_fields_set & {"runtime_id", "runtime_sha256", "admission_sha256", "cursor"}
+        if supplied and (len(supplied) != 4 or any(getattr(self, name) is None for name in supplied)):
+            raise ValueError("persistent_presence_required")
+        return self
 
 
 class ManagedControlInput(control.ControlRequest):
@@ -43,6 +61,25 @@ class ManagedControlInput(control.ControlRequest):
 
 class ConsumeInput(ManagedControlInput):
     contract_sha256: Annotated[str, Field(strict=True, pattern=r"^[a-f0-9]{64}$")]
+
+
+class ClaimInput(control.ClaimControl):
+    runtime_id: UUID | None = None
+    runtime_sha256: (
+        Annotated[str, Field(strict=True, pattern=r"^[a-f0-9]{64}$")] | None
+    ) = None
+    runtime_sequence: Attempt | None = None
+    admission_sha256: Fingerprint | None = None
+
+    @model_validator(mode="after")
+    def paired_runtime(self):
+        if (self.runtime_id is None) != (self.runtime_sha256 is None):
+            raise ValueError("paired_runtime_required")
+        if "runtime_sequence" in self.model_fields_set and (
+            self.runtime_sequence is None or self.runtime_id is None or self.runtime_sha256 is None
+        ):
+            raise ValueError("sequence_runtime_required")
+        return paired_admission(self)
 
 
 async def _payload(request, model):
@@ -73,7 +110,7 @@ async def _payload(request, model):
     return model.model_validate(parse(raw, BODY_MAX_BYTES))
 
 
-def _pending(service, db, request, body):
+def _pending(service, db, request, body, runtimes=None):
     """Bounded discovery only: listing neither reserves nor grants execution."""
     with service.operation(db) as now:
         user = get_current_user(
@@ -100,12 +137,17 @@ def _pending(service, db, request, body):
             == key.key_hash,
             "enrollment_key_unavailable",
         )
+        presence = None
+        if body.admission_sha256 is not None:
+            require(runtimes is not None, "runtime_admission_unavailable")
+            presence = runtimes.persistent.pending(db, enrollment, body, now)
         query = (
             db.query(ScanJob, ManagedApproval)
             .join(
                 ManagedApproval,
                 ScanJob.managed_approval_id == ManagedApproval.id,
             )
+            .join(Engagement, ScanJob.program_id == Engagement.id)
             .filter(
                 ScanJob.status == "pending",
                 ScanJob.authorization_contract_required.is_(True),
@@ -118,6 +160,8 @@ def _pending(service, db, request, body):
                 ManagedApproval.owner == user["github_id"],
                 ManagedApproval.enrollment_id == enrollment.id,
                 ManagedApproval.revoked.is_(False),
+                Engagement.stop_work_at.is_(None),
+                ManagedApproval.revision == Engagement.managed_authority_revision,
             )
         )
         if body.after is not None:
@@ -125,8 +169,8 @@ def _pending(service, db, request, body):
         rows = query.order_by(ScanJob.id).limit(body.limit + 1).all()
         jobs = []
         for job, approval in rows[: body.limit]:
-            # Verify the stored human signature/window, not current authority or
-            # capacity. Claim reprojects authority and atomically charges budgets.
+            # Verify the stored human signature/window. Claim still reprojects
+            # all current authority and atomically charges budgets.
             try:
                 service.wire.approval(
                     approval.envelope, approval.context, approval.owner, now()
@@ -152,13 +196,34 @@ def _pending(service, db, request, body):
             if len(rows) > body.limit
             else None,
         }
-        db.rollback()  # No lease, claim, counter, reservation or approval mutation.
+        if presence is not None:
+            service._locked_time(db, now)  # Runtime is already locked; no permission renewal.
+            reply["availability"] = runtimes.persistent.availability(presence, now().replace(tzinfo=None))
+            db.commit()
+        else:
+            db.rollback()  # Legacy listing has no presence/lease/accounting mutation.
         return reply
 
 
-def _operate(service, operation, db, request, job_id, body):
+def _operate(service, operation, db, request, job_id, body, runtimes=None):
     if operation == "claim":
-        reply = service.claim(db, request, job_id=job_id, body=body)
+        claim = control.ClaimControl(
+            **body.model_dump(exclude={"runtime_id", "runtime_sha256", "runtime_sequence", "admission_sha256"})
+        )
+        if body.runtime_id is not None:
+            require(runtimes is not None, "runtime_admission_unavailable")
+            reply = runtimes.claim(
+                db,
+                request,
+                job_id=job_id,
+                body=claim,
+                runtime_id=str(body.runtime_id),
+                runtime_sha256=body.runtime_sha256,
+                runtime_sequence=body.runtime_sequence,
+                admission_sha256=body.admission_sha256,
+            )
+        else:
+            reply = service.claim(db, request, job_id=job_id, body=claim)
         # This is the retained claim snapshot, never the polled or later live case.
         snapshot = db.get(ScanJob, job_id).case_snapshot
         require(type(snapshot) is dict, "frozen_case_required")
@@ -172,10 +237,12 @@ def _operate(service, operation, db, request, job_id, body):
     if operation == "consume":
         args["contract_sha256"] = body.contract_sha256
     owned = control.ControlRequest(**body.model_dump(exclude=set(args)))
-    return getattr(service, operation)(db, request, job_id=job_id, body=owned, **args)
+    hooks = ({"on_control": runtimes.persistent.control_guard}
+             if runtimes is not None else {})
+    return getattr(service, operation)(db, request, job_id=job_id, body=owned, **args, **hooks)
 
 
-def build_managed_router(service):
+def build_managed_router(service, runtimes=None):
     """Explicitly injected Issuer only; main never constructs or registers it.
 
     No keys, environment settings or enrollment state are created/read implicitly.
@@ -204,14 +271,29 @@ def build_managed_router(service):
             except (WireRefused, ValidationError):
                 return refused(422)
             if operation == "pending":
-                reply = await run_in_threadpool(_pending, service, db, request, body)
+                reply = await run_in_threadpool(_pending, service, db, request, body, runtimes)
             else:
                 reply = await run_in_threadpool(
-                    _operate, service, operation, db, request, job_id, body
+                    _operate, service, operation, db, request, job_id, body, runtimes
                 )
             if len(canonical(reply)) > RESPONSE_MAX_BYTES:
                 return refused(503)
             return JSONResponse(reply, headers={"Cache-Control": "no-store"})
+        except DurationBudgetExhausted as error:
+            # Issuer.operation has rolled back before the refusal reaches HTTP.
+            if operation == "claim":
+                logger.warning("managed_claim_duration_exhausted")
+            return refused(error.status_code)
+        except TargetBudgetExhausted as error:
+            # The issuer has rolled back the claim before reporting refusal.
+            if operation == "claim":
+                logger.warning("managed_claim_target_exhausted")
+            return refused(error.status_code)
+        except ConcurrencyBudgetExhausted as error:
+            # The issuer has rolled back the claim before reporting refusal.
+            if operation == "claim":
+                logger.warning("managed_claim_concurrency_exhausted")
+            return refused(error.status_code)
         except HTTPException as error:
             return refused(error.status_code)
         except (WireRefused, IssuanceRefused):
@@ -229,7 +311,7 @@ def build_managed_router(service):
 
     @router.post(JOB_PATH + "/claim")
     async def claim(job_id: str, request: Request, db=Depends(get_db)):
-        return await dispatch(request, db, "claim", control.ClaimControl, job_id)
+        return await dispatch(request, db, "claim", ClaimInput, job_id)
 
     @router.post(JOB_PATH + "/current")
     async def current(job_id: str, request: Request, db=Depends(get_db)):

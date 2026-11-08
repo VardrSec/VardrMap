@@ -1,6 +1,14 @@
-# NM-2 worker decisions — pending review
+# NM-2 worker decisions — historical options
 
-Status: options and unresolved choices only. **No containment, bootstrap or lifecycle option is selected or implemented.**
+Status: historical options preceding the owner's 2026-11-05 design approval.
+The current bounded selection is recorded in
+[Runner ADR 0043](https://github.com/VardrSec/VardrRunner/blob/ff3f4d81834acf1a46afc08312a1536c82a8fa19/docs/adr/0043-proposed-linux-worker-lifecycle-owner.md).
+Its worker-only UID-0/SETUID/SETGID/SETPCAP bootstrap drops all five capability
+sets before work; host STOP custody remains separate. Implementation/testing is
+authorized, default startup remains inert, and platform acceptance is open.
+Use [the current exit matrix](nm2-canonical-exit-status.md) for remaining gates.
+The unresolved choices below describe the earlier review snapshot, not a request
+to repeat an approval already received.
 Basis: the canonical `VardrSec_New_Moon_Roadmap.md`, read through Library, and later
 owner instructions. The roadmap is approved direction, not implementation authority.
 
@@ -19,7 +27,7 @@ exposure, TLS weakening or uncontrolled execution fallback is authorized. Window
 checks may wait for Papachin; their gates remain open. Publication needs independent
 review and required CI/security; migration review remains. Backup is waived.
 
-Current baseline: Runner's controlled engine uses Windows Job Objects and refuses
+Baseline when this options document was drafted: Runner used Windows Job Objects and refused
 Linux before managed claim. Compose's Runner is a manual tools service. Map's
 issuer/services and read-only observation router are unregistered. Existing ADR
 0016 removed startup workers; the D11 target requires an explicit reviewed amendment,

@@ -42,7 +42,9 @@ pytestmark = pytest.mark.skipif(
     os.name != "nt" or os.environ.get("NM2_NATIVE_GATE") != "1",
     reason="explicit Windows real Gate/loopback fixture only",
 )
-GATE_SHA = "2a89debd92eb30385da0b2949061cdd02cb5399cf5435adecc98e214eb6f55c0"
+# Corrected Gate 54536ea1d900d0e35adf93b4e026962c4d45d34a, Windows Go 1.26.3.
+# Keep the binary and independent five-phase receipt bound to the same artifact.
+GATE_SHA = "28ad13758063a5541a904a30608fff84d8abe3759e65b54dec5ca67bb9684094"
 
 
 @pytest.fixture

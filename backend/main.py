@@ -17,6 +17,7 @@ from auth_methods import auth_methods
 from deps import get_current_user, require_full_scope
 from limiter import limiter
 from logging_config import configure_logging
+from managed_configuration import configure_managed
 from routers import api_surface, apikeys, assets, authorizations, clients, engagements, evidence, findings, imports, jobs, manual_tests, members, radar, recon, reports, runner, scan_profiles, scans, scope, services, settings, test_cases
 from routers import api_coverage, api_relationships, case_authoring, deliverables, finding_activity, playbooks, proposals
 from routers import local_auth
@@ -214,6 +215,10 @@ app.include_router(deliverables.router, dependencies=_full)
 app.include_router(finding_activity.router, dependencies=_full)
 app.include_router(settings.router,     dependencies=_full)
 app.include_router(local_auth.router)
+
+# Opt-in assembly only. Omission preserves today's routes and inert startup;
+# enabled configuration requires separately provisioned public trust/contract key.
+configure_managed(app)
 
 
 @app.exception_handler(RequestValidationError)

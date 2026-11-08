@@ -41,7 +41,7 @@ from models import (
     User,
 )
 from nm1_authorization import IssuanceRefused
-from sqlalchemy import create_engine, event
+from sqlalchemy import MetaData, create_engine, event
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 from starlette.requests import Request
@@ -99,13 +99,22 @@ def signed(context, approval_id="fixture-approval"):
     }
 
 
+def create_fixture_schema(engine, *, metadata=None):
+    # PostgreSQL AddConstraint DDL mutates shared constraint create rules.
+    # Each SQLite fixture needs fresh objects so every FK is emitted inline.
+    fresh = MetaData()
+    for table in (Base.metadata if metadata is None else metadata).tables.values():
+        table.to_metadata(fresh)
+    fresh.create_all(engine)
+
+
 @pytest.fixture
 def specimen(tmp_path):
     engine = create_engine(
         "sqlite:///" + (tmp_path / "fixture.db").as_posix(),
         connect_args={"check_same_thread": False},
     )
-    Base.metadata.create_all(engine)
+    create_fixture_schema(engine)
     vector = json.loads((Path(__file__).parent / "fixtures" / "managed-wire-v1.json").read_text())
     wall = [NOW]
     ticks = [0.0]
