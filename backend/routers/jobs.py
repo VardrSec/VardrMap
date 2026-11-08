@@ -481,6 +481,8 @@ def create_job(
     current_user: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    engagement = get_engagement_or_404(program_id, current_user, db)
+    require_member_write(engagement, current_user, db)
     job, decision = enqueue_job(program_id, body, current_user, db)
     db.commit()
     db.refresh(job)
@@ -578,6 +580,8 @@ def create_pipeline(
     parent completes. Validation is per-stage and identical to single-job creation,
     so a bad stage rejects the whole pipeline before anything is written.
     """
+    engagement = get_engagement_or_404(program_id, current_user, db)
+    require_member_write(engagement, current_user, db)
     created = enqueue_pipeline(program_id, body, current_user, db)
     db.commit()
     for job in created:
