@@ -138,6 +138,8 @@ export type RelationshipHypothesis = {
   question: string; basis: string[];
 };
 export type AuthorizationRelationships = {
+  boundary_matrix?: BoundaryCoverageCell[];
+  matrix_total?: number;
   identities: { identity_id: string; role: string | null; tenant_id: string | null; anonymous: boolean; conflicts?: string[] }[];
   tenants: string[];
   askable_boundaries: Record<string, boolean>;
@@ -146,6 +148,14 @@ export type AuthorizationRelationships = {
   hypotheses: RelationshipHypothesis[];
   summary: Record<string, number>;
   filtered_total?: number;
+};
+export type BoundaryCoverageCell = {
+  id: string; endpoint_id: string; operation: string; identity_id: string; boundary: string; state: string;
+  scheme?: string; host?: string; port?: number | null;
+  observations: {
+    case_id: string; case_name: string; job_id: string | null; state: string; reason: string;
+    expected: string; observed: string; owner_identity: string | null; basis: string[];
+  }[];
 };
 export type ApiEndpoint = {
   id: string; program_id: string; method: string; scheme: string; host: string;

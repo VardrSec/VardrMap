@@ -376,8 +376,10 @@ def _operation(
                         "state": str(item.get("state") or "missing"),
                         "reason": str(item.get("reason") or ""),
                         "expected": str(item.get("expected_decision") or "unknown"),
+                        "observed": str(item.get("observed_outcome") or "unknown"),
                     }
         case_entries[-1]["identity_states"] = {i: rows[i]["state"] for i in identities if i in rows}
+        case_entries[-1]["identity_results"] = {i: rows[i] for i in identities if i in rows}
         for identity in identities:
             declared[identity].append(case.id)
             per_case_identity[identity][case.id] = (

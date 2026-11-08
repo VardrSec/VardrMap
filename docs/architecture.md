@@ -746,3 +746,14 @@ wait limit, non-cacheable fixed errors and a reply-size ceiling while preserving
 service authentication, membership and receipt semantics. No claim, renewal,
 accounting or execution route is registered. See
 [ADR 0012](adr/0012-unregistered-observation-http.md).
+
+### Authorization boundary coverage
+
+The existing read-only relationship projection now retains operation × identity ×
+boundary cells from reviewed case declarations and current case-bound coverage.
+Each cell carries case/job references, expected and observed outcomes, and explicit
+missing, stale, conflicting or mixed context. A result for one identity cannot
+complete another identity's boundary. The UI pages these cells through the existing
+engagement-authorized endpoint and displays the origin to distinguish equal paths
+on different targets. Grounded drafts never invent an identity or access decision.
+No execution, authorization, storage schema or installation contract changes.

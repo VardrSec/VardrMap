@@ -22,4 +22,6 @@ def authorization_relationships(
     data = build_relationships(db, program_id)
     data["filtered_total"] = len(data["hypotheses"])
     data["hypotheses"] = data["hypotheses"][offset : offset + limit]
+    data["matrix_total"] = len(data["boundary_matrix"])
+    data["boundary_matrix"] = data["boundary_matrix"][offset : offset + limit]
     return data

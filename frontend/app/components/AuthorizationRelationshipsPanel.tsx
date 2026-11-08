@@ -12,6 +12,7 @@ import { Panel } from "./ui";
  */
 
 const BOUNDARY_LABEL: Record<string, string> = {
+  resource_owner: "Resource owner", unknown: "Context not established",
   cross_tenant: "Different tenant",
   same_tenant_peer: "Same-tenant peer",
   higher_privilege: "Higher role than owner",
@@ -27,11 +28,19 @@ const STATUS_COLOR: Record<string, string> = {
   untested: "#6b7280", owner_context_missing: "#c084fc", reviewed_not_run: "#89b4fa", inconclusive: "#f59e0b",
 };
 const SHOWN = 12;
+const CELL_LABEL: Record<string, string> = {
+  evaluated: "Evaluated", mixed: "Mixed / incomplete", inconclusive: "Inconclusive",
+  missing: "No result", skipped: "No reviewed expectation", reviewed_not_run: "Reviewed, not run",
+  stale: "Case changed since last run", not_reviewed: "Not reviewed",
+  context_missing: "Missing context", context_conflict: "Conflicting context",
+};
 
 export default function AuthorizationRelationshipsPanel({ engagementId, onDraft }: { engagementId: string; onDraft?: (endpointId: string, boundary: string) => void }) {
   const { authFetch, setMessage } = useAppContext();
   const [result, setResult] = useState<{ key: string; data: AuthorizationRelationships | null }>({ key: "", data: null });
   const [all, setAll] = useState(false);
+  const [matrixExpanded, setMatrixExpanded] = useState(false);
+  const [matrixBusy, setMatrixBusy] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -40,7 +49,7 @@ export default function AuthorizationRelationshipsPanel({ engagementId, onDraft 
         const res = await authFetch(`/engagements/${engagementId}/api/relationships?limit=500`);
         if (!res.ok) throw new Error();
         const body = (await res.json()) as AuthorizationRelationships;
-        if (!cancelled) setResult({ key: engagementId, data: body });
+        if (!cancelled) { setResult({ key: engagementId, data: body }); setMatrixExpanded(false); }
       } catch {
         if (!cancelled) { setMessage("Failed to load boundary questions."); setResult({ key: engagementId, data: null }); }
       }
@@ -50,6 +59,19 @@ export default function AuthorizationRelationshipsPanel({ engagementId, onDraft 
 
   const data = result.key === engagementId ? result.data : null;
   const hypotheses = data?.hypotheses ?? [];
+  const matrix = data?.boundary_matrix ?? [];
+  async function moreMatrix() {
+    setMatrixBusy(true);
+    try {
+      const res = await authFetch(`/engagements/${engagementId}/api/relationships?limit=500&offset=${matrix.length}`);
+      if (!res.ok) throw new Error();
+      const body = (await res.json()) as AuthorizationRelationships;
+      setResult(old => old.key !== engagementId || old.data !== data || !old.data ? old : {
+        ...old, data: { ...old.data, boundary_matrix: [...matrix, ...(body.boundary_matrix ?? [])], matrix_total: body.matrix_total },
+      });
+    } catch { setMessage("Failed to load more boundary results."); }
+    finally { setMatrixBusy(false); }
+  }
   if (!data || (hypotheses.length === 0 && (data.identities ?? []).length === 0)) return null;
   const shown = all ? hypotheses : hypotheses.slice(0, SHOWN);
   const askable = Object.entries(data.askable_boundaries ?? {}).filter(([, on]) => on).map(([key]) => BOUNDARY_LABEL[key] ?? key);
@@ -71,7 +93,29 @@ export default function AuthorizationRelationshipsPanel({ engagementId, onDraft 
         <span className="font-mono">{c.identity_id}</span> {c.attribute.replace("_", " ")}: {c.values.join(" vs ")}</li>)}</ul></div>}
     {(data.identities_without_tenant ?? []).length > 0 && <p className="mb-3 rounded border border-[#3f2f12] bg-[#1a1408] p-2 text-[11px] text-[#fbbf24]">
       No tenant is declared for {data.identities_without_tenant.join(", ")}, so their cross-tenant relationships cannot be established.</p>}
-    {hypotheses.length === 0 && <p className="py-4 text-center text-sm text-muted">Every testable boundary has a current, evaluated result on the operations that matter.</p>}
+    {matrix.length > 0 && <section aria-label="Operation identity boundary matrix" className="mb-4">
+      <h3 className="mb-1 text-sm font-semibold text-[#e2e8f0]">Operation × identity × boundary</h3>
+      <p className="mb-2 text-xs text-muted">Every associated reviewed case needs a current evaluated result. Missing context, skipped, stale and mixed results remain gaps; evaluated does not mean secure.</p>
+      <div className="overflow-x-auto"><table className="w-full text-left text-xs">
+        <thead className="text-muted"><tr><th>Operation</th><th>Identity</th><th>Boundary</th><th>Coverage</th><th>Reviewed observations</th></tr></thead>
+        <tbody>{(matrixExpanded ? matrix : matrix.slice(0, SHOWN)).map(cell => <tr key={cell.id} className="border-t border-[#2e2e2e] align-top">
+          <td className="py-2 pr-2 font-mono">{cell.operation}{cell.host && <div className="text-muted">{cell.scheme}://{cell.host.includes(":") ? `[${cell.host}]` : cell.host}:{cell.port ?? (cell.scheme === "http" ? 80 : 443)}</div>}</td><td className="py-2 pr-2 font-mono">{cell.identity_id}</td>
+          <td className="py-2 pr-2">{BOUNDARY_LABEL[cell.boundary] ?? cell.boundary}</td>
+          <td className="py-2 pr-2 text-[#cbd5e1]">{CELL_LABEL[cell.state] ?? cell.state}</td>
+          <td className="py-2">{cell.observations.length === 0 ? "No reviewed case for this operation and identity" : <details>
+            <summary className="cursor-pointer">{cell.observations.length} case{cell.observations.length === 1 ? "" : "s"}</summary>
+            <ul className="mt-1 space-y-2">{cell.observations.map(item => <li key={item.case_id}>
+              <div>{item.case_name}: expected {item.expected}, observed {item.observed}</div>
+              <div className="text-muted">{CELL_LABEL[item.state] ?? item.state} · {item.reason.replace(/_/g, " ")}</div>
+              {item.basis.map(line => <div key={line} className="text-muted">{line}</div>)}
+              {item.job_id && <div className="font-mono text-[10px] text-muted">job {item.job_id}</div>}
+            </li>)}</ul></details>}</td>
+        </tr>)}</tbody>
+      </table></div>
+      {matrix.length > SHOWN && <button type="button" className="mt-2 text-xs text-[#89b4fa]" onClick={() => setMatrixExpanded(!matrixExpanded)}>{matrixExpanded ? "Show fewer matrix rows" : `Show ${matrix.length} matrix rows`}</button>}
+      {matrixExpanded && matrix.length < (data.matrix_total ?? matrix.length) && <button type="button" disabled={matrixBusy} className="ml-3 mt-2 text-xs text-[#89b4fa]" onClick={() => void moreMatrix()}>{matrixBusy ? "Loading…" : `Load more (${matrix.length} of ${data.matrix_total})`}</button>}
+    </section>}
+    {hypotheses.length === 0 && <p className="py-4 text-center text-sm text-muted">No additional boundary questions follow from the declared context.{matrix.length > 0 && " Inspect the matrix for individual results and gaps."}</p>}
     <ul className="space-y-2">{shown.map((h) => <li key={h.id} className="rounded border border-[#2e2e2e] bg-[#111] p-3 text-xs">
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-mono text-[#f1f5f9]">{h.operation}</span>
