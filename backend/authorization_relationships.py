@@ -178,6 +178,67 @@ def _askable(table: dict[str, dict], hierarchies: list[list[str]]) -> tuple[dict
     return askable, basis
 
 
+def boundary_cells(operation: dict, cases: dict, identities: dict) -> list[dict]:
+    """Case-backed cells; one result never fills another identity's missing test."""
+    grouped: dict[tuple[str, str], list[dict]] = defaultdict(list)
+    declared = set()
+    for entry in operation["cases"]:
+        spec = cases.get(entry["case_id"], {})
+        local = _local_table(spec)
+        resource = spec.get("resource") if isinstance(spec.get("resource"), dict) else {}
+        owner_id = str(resource.get("owner_identity") or "")
+        owner = local.get(owner_id)
+        for identity_id in entry["identities"]:
+            subject = local.get(identity_id)
+            if subject is None:
+                continue
+            declared.add(identity_id)
+            basis = []
+            if identity_id == owner_id and owner is not None:
+                boundaries, basis = ["resource_owner"], ["The reviewed case names this identity as resource owner."]
+            elif subject["anonymous"]:
+                boundaries, basis = ["anonymous"], ["The reviewed case declares no credentials."]
+            elif owner is not None:
+                boundaries, basis = classify(spec, subject, owner, resource)
+            else:
+                boundaries = []
+            conflicts = sorted({attribute for who in (identity_id, owner_id)
+                                for attribute in identities.get(who, {}).get("conflicts", [])})
+            result = entry.get("identity_results", {}).get(identity_id, {})
+            state = result.get("state", "missing") if entry["executed"] else (
+                "stale" if entry["stale_runs"] else "reviewed_not_run")
+            reason = result.get("reason", "execution_missing" if entry["executed"] else "no_current_execution")
+            if conflicts:
+                state, reason = "context_conflict", "Conflicting declarations: " + ", ".join(conflicts)
+            elif not boundaries:
+                state, reason = "context_missing", (
+                    "No resource owner is declared in this case." if owner is None
+                    else "Tenant or role context does not establish a boundary.")
+            for boundary in boundaries or ["unknown"]:
+                grouped[identity_id, boundary].append({
+                    "case_id": entry["case_id"], "case_name": entry["name"],
+                    "job_id": entry["latest_job_id"], "state": state, "reason": reason,
+                    "expected": entry["expected"].get(identity_id, "unknown"),
+                    "observed": result.get("observed", "unknown"),
+                    "owner_identity": owner_id or None, "basis": basis,
+                })
+    # Engagement identities absent from this operation are gaps, not inferred peers.
+    for identity_id in identities.keys() - declared:
+        grouped[identity_id, "unknown"] = []
+    rows = []
+    for (identity_id, boundary), observations in sorted(grouped.items()):
+        states = {item["state"] for item in observations}
+        state = next(iter(states)) if len(states) == 1 else "mixed" if states else "not_reviewed"
+        rows.append({
+            "id": hashlib.sha256(f"{operation['endpoint_id']}|{identity_id}|{boundary}".encode()).hexdigest()[:16],
+            "endpoint_id": operation["endpoint_id"], "operation": f"{operation['method']} {operation['path_template']}",
+            "scheme": operation["scheme"], "host": operation["host"], "port": operation["port"],
+            "identity_id": identity_id, "boundary": boundary, "state": state,
+            "observations": observations,
+        })
+    return rows
+
+
 def build_relationships(db: Session, program_id: str) -> dict:
     coverage = build_coverage(db, program_id)
     cases = {
@@ -191,8 +252,10 @@ def build_relationships(db: Session, program_id: str) -> dict:
     people = [i for i in table.values() if not i["anonymous"]]
     undeclared = sorted(i["identity_id"] for i in people if not i["tenant_id"] and "tenant_id" not in i["conflicts"] and tenants)
 
-    hypotheses, evidence = [], []
+    hypotheses, evidence, matrix = [], [], []
     for op in coverage["operations"]:
+        cells = boundary_cells(op, cases, table)
+        matrix.extend(cells)
         evaluated: dict[str, list[str]] = defaultdict(list)
         pending: dict[str, str] = {}
         has_owner_context = False
@@ -226,7 +289,11 @@ def build_relationships(db: Session, program_id: str) -> dict:
             continue
         label = f"{op['method']} {op['path_template']}"
         for klass in CLASSES:
-            if not askable[klass] or evaluated.get(klass):
+            relevant = [cell for cell in cells if cell["boundary"] == klass]
+            unresolved_context = any(cell["boundary"] == "unknown" and cell["observations"] for cell in cells)
+            if not askable[klass] or (evaluated.get(klass) and relevant
+                                     and all(cell["state"] == "evaluated" for cell in relevant)
+                                     and (klass == "anonymous" or not unresolved_context)):
                 continue
             status = pending.get(klass, "untested")
             basis = [askable_basis[klass]] + [r["detail"] for r in op["priority_reasons"]][:2]
@@ -251,6 +318,7 @@ def build_relationships(db: Session, program_id: str) -> dict:
         "askable_boundaries": {k: askable[k] for k in CLASSES},
         "identities_without_tenant": undeclared,
         "boundary_evidence": evidence,
+        "boundary_matrix": matrix,
         "hypotheses": hypotheses,
         "summary": {
             "hypotheses": len(hypotheses),

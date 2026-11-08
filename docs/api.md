@@ -2245,6 +2245,23 @@ Declarations are never silently reconciled. If stored cases disagree about an id
 A case is classified only from its own declarations: an identity id that matches in another case lends it no
 tenant or role. `boundary_evidence` lists, per operation, the boundary classes with a current, evaluated result.
 
+The additive `boundary_matrix` lists operation × identity × boundary cells. Each
+cell retains the endpoint ID, method/path label, scheme, host and port, identity ID,
+boundary and aggregate state. `observations` links each reviewed case and latest
+job to expected/observed outcomes, state, reason, owner identity and declared basis.
+The underlying coverage case entry also exposes `identity_results` alongside
+`identity_states`; only a current case-bound result counts. Missing owner/tenant
+context and conflicting declarations remain explicit; an identity absent from an
+operation is `not_reviewed`, never an inferred peer. Differing case states produce
+`mixed`. Evaluated describes an observation, not security or independent proof.
+
+`matrix_total` is the full cell count. The same `limit`/`offset` bounds matrix rows
+and hypotheses independently; their totals differ. One evaluated identity no
+longer suppresses a boundary question while another relevant identity remains
+inconclusive, missing, stale or without reviewed context. Grounded boundary drafts
+with no declared identities retain empty identities and expectations and report
+missing context; generic ungrounded authoring keeps its existing scaffolding.
+
 ### `DELETE /engagements/{program_id}/api/exchanges/{exchange_id}`
 
 Delete one retained exchange and decrement its operation's observation count.

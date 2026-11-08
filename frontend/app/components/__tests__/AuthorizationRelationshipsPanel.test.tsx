@@ -24,12 +24,20 @@ const route = (body: unknown) => ({ "GET /engagements/eng-1/api/relationships?li
 describe("AuthorizationRelationshipsPanel", () => {
   it("presents hypotheses with their basis and says they are not findings", async () => {
     renderWithApp(<AuthorizationRelationshipsPanel engagementId="eng-1" />, {
-      routes: route({ ...base, hypotheses: [hypothesis("a")] }),
+      routes: route({ ...base, hypotheses: [hypothesis("a")], boundary_matrix: [{
+        id: "cell-owner", endpoint_id: "e-a", operation: "GET /orders/{id}", identity_id: "owner",
+        boundary: "resource_owner", state: "reviewed_not_run", observations: [{
+          case_id: "case-owner", case_name: "Owner baseline", job_id: null, state: "reviewed_not_run",
+          reason: "no_current_execution", expected: "allow", observed: "unknown", owner_identity: "owner", basis: [],
+        }],
+      }], matrix_total: 1 }),
     });
     expect(await screen.findByText(/Has a caller from a different tenant/)).toBeInTheDocument();
     expect(screen.getByText(/Identities are declared in tenants: tenant-a, tenant-b/)).toBeInTheDocument();
     expect(screen.getByText(/hypotheses, not findings/)).toBeInTheDocument();
     expect(screen.getByText("No evaluated test")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Operation identity boundary matrix" })).toBeInTheDocument();
+    expect(screen.getByText("Reviewed, not run")).toBeInTheDocument();
     expect(screen.getAllByText("Different tenant").length).toBeGreaterThanOrEqual(2); // the testable-boundary chip and this question
   });
 
@@ -48,7 +56,7 @@ describe("AuthorizationRelationshipsPanel", () => {
       routes: route({ ...base, identities_without_tenant: ["contractor"], hypotheses: [] }),
     });
     expect(await screen.findByText(/No tenant is declared for contractor/)).toBeInTheDocument();
-    expect(screen.getByText(/Every testable boundary has a current, evaluated result/)).toBeInTheDocument();
+    expect(screen.getByText(/No additional boundary questions follow from the declared context/)).toBeInTheDocument();
   });
 
   it("collapses a long list until asked", async () => {

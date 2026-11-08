@@ -480,3 +480,29 @@ def test_numeric_case_does_not_suppress_literal_route_boundary_questions(client,
         assert any("no reviewed case" in gap for gap in draft["missing_context"])
     finally:
         db.close()
+
+
+def test_matrix_keeps_other_identities_visible_after_one_boundary_result(client, auth_headers, program_id):
+    capture(client, auth_headers, program_id, "GET", "/orders/7")
+    people = [OWNER_A, OTHER_B, person("outsider", "tenant-c")]
+    value = case("matrix", "/orders/42", people, expect={"owner": "allow", "tenant-b": "deny", "outsider": "deny"})
+    case_id = store(client, auth_headers, program_id, value)
+    execute(client, auth_headers, program_id, case_id, value,
+            [run("allow", 200, "owner"), run("deny", 403, "tenant-b"), run("server_error", 503, "outsider")])
+    data = relationships(client, auth_headers, program_id)
+    cells = {row["identity_id"]: row for row in data["boundary_matrix"] if row["boundary"] == "cross_tenant"}
+    assert cells["tenant-b"]["state"] == "evaluated" and cells["outsider"]["state"] == "inconclusive"
+    assert cells["tenant-b"]["host"] == "api.example.com"
+    assert cells["tenant-b"]["observations"][0]["case_id"] == case_id
+    assert cells["tenant-b"]["observations"][0]["observed"] == "deny"
+    assert hypotheses(data)[("GET /orders/{id}", "cross_tenant")]["status"] == "inconclusive"
+    page = client.get(f"/engagements/{program_id}/api/relationships?limit=1", headers=auth_headers).json()
+    assert len(page["boundary_matrix"]) == 1 and page["matrix_total"] == 3
+
+
+def test_boundary_draft_with_no_declared_identity_stays_empty(client, auth_headers, program_id):
+    capture(client, auth_headers, program_id, "GET", "/orders/7")
+    data = boundary_draft(client, auth_headers, program_id, "anonymous").json()
+    assert data["drafts"][0]["spec"]["identities"] == []
+    assert data["drafts"][0]["spec"]["expected_access"] == []
+    assert data["boundary_context"]["missing_context"] and data["boundary_context"]["ready_to_run"] is False

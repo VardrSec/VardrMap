@@ -119,7 +119,7 @@ def _known_identities(db, program_id, wanted):
 
 
 def _draft(method, url, source, identities=None, context=None):
-    identities = identities or [
+    identities = identities if identities is not None else [
         {"id": "anonymous", "credential": {"type": "static_header", "header": "", "value": ""}},
         {"id": "member", "credential": {"type": "bearer", "value_env": "VARDRGATE_MEMBER_TOKEN"}},
     ]
@@ -160,7 +160,7 @@ def preview_cases(program_id: str, body: DraftRequest, current_user: dict = Depe
         if body.openapi is not None or len(body.endpoint_ids) != 1 or body.identity_ids:
             raise HTTPException(400, "A boundary draft needs exactly one observed operation and no separate identity_ids")
         context = draft_for_boundary(db, program_id, body.endpoint_ids[0], body.boundary)
-        reuse = context["identities"] or None
+        reuse = context["identities"]
     boundary_context = None if context is None else {
         "boundary": body.boundary,
         "missing_context": context["missing_context"],
@@ -168,7 +168,7 @@ def preview_cases(program_id: str, body: DraftRequest, current_user: dict = Depe
         # Every expected decision is skip until a person reviews it, so a draft is never ready to run.
         "ready_to_run": False,
     }
-    return {"drafts": [_draft(*op, copy.deepcopy(reuse) if reuse else None, context) for op in page],
+    return {"drafts": [_draft(*op, copy.deepcopy(reuse), context) for op in page],
             "boundary_context": boundary_context, "total": len(operations), "offset": body.offset, "limit": body.limit, "next_offset": end if end < len(operations) else None,
             "review_notes": ["No cases have been stored or queued.", "Replace path variables and review request bodies for mutating operations.", "Set identity secret references and decide expected access; observed responses do not determine authorization policy."]}
 

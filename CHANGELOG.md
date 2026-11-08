@@ -4,6 +4,11 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Show an operation × identity × boundary matrix with current, stale, missing,
+  conflicting and inconclusive case-backed results. Keep boundary questions open
+  while any relevant identity lacks a result. Grounded drafts with no declared
+  identities remain empty instead of receiving generic identities.
+
 - Carry forward the two exact historical secret-scan fingerprints for
   verified public runtime test vectors.
 
