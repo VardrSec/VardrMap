@@ -4,6 +4,7 @@ import asyncio
 import copy
 import hashlib
 import json
+import logging
 from datetime import timedelta
 from types import SimpleNamespace
 
@@ -12,7 +13,7 @@ import local_auth
 import managed_http as boundary
 import pytest
 from db import get_db
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from managed_issuance import Issuer
 from managed_wire import digest
@@ -563,3 +564,135 @@ def test_transport_and_failure_responses_are_bounded_and_secret_free(
         # never refunded/replayed as a second physical attempt.
         assert facts(h)[2:] == (1, 30, 1, 1, 1)
         assert post(h, "/claim").status_code == 409
+
+
+def test_duration_exhaustion_marker_requires_exact_managed_allocator_refusal(http, caplog):
+    with Session(http.s["engine"]) as db:
+        engagement = db.get(Engagement, "eng-1")
+        engagement.duration_allocated = engagement.duration_limit
+        db.commit()
+    before = facts(http)
+    assert before == ("pending", None, 0, 120, 0, 0, 0)
+    with caplog.at_level(logging.WARNING, logger=boundary.__name__):
+        reply = post(http, "/claim")
+    assert reply.status_code == 409
+    assert reply.json() == {"detail": "managed_request_refused"}
+    assert reply.headers["Cache-Control"] == "no-store"
+    assert facts(http) == before
+    assert [
+        (record.msg, record.args, record.exc_info)
+        for record in caplog.records
+        if record.name == boundary.__name__
+    ] == [("managed_claim_duration_exhausted", (), None)]
+
+
+def test_target_exhaustion_marker_requires_exact_managed_allocator_refusal(http, caplog):
+    with Session(http.s["engine"]) as db:
+        engagement = db.get(Engagement, "eng-1")
+        engagement.targets_spent = engagement.target_limit
+        db.commit()
+    before = facts(http)
+    assert before == ("pending", None, 10, 0, 0, 0, 0)
+    with caplog.at_level(logging.WARNING, logger=boundary.__name__):
+        reply = post(http, "/claim")
+    assert reply.status_code == 409
+    assert reply.json() == {"detail": "managed_request_refused"}
+    assert reply.headers["Cache-Control"] == "no-store"
+    assert facts(http) == before
+    assert [
+        (record.msg, record.args, record.exc_info)
+        for record in caplog.records
+        if record.name == boundary.__name__
+    ] == [("managed_claim_target_exhausted", (), None)]
+
+
+@pytest.mark.parametrize("target_full", [False, True])
+def test_concurrency_exhaustion_marker_requires_exact_managed_allocator_refusal(
+    http, caplog, target_full
+):
+    with Session(http.s["engine"]) as db:
+        engagement = db.get(Engagement, "eng-1")
+        if target_full:
+            engagement.targets_spent = engagement.target_limit
+        db.add(
+            ScanJob(
+                id="reserved-fixture-job",
+                program_id=engagement.id,
+                owner_github_id="owner-1",
+                tool_type="httpx",
+                target_source="scope",
+                status="running",
+            )
+        )
+        db.flush()
+        db.add(
+            JobExecution(
+                job_id="reserved-fixture-job",
+                runner_id=RUNNER,
+                origin=ORIGIN,
+                owner="owner-1",
+                principal_hash="a" * 64,
+                token_hash="b" * 64,
+                expires_at=NOW.replace(tzinfo=None) + timedelta(seconds=10),
+                state="active",
+                capacity_reserved=True,
+            )
+        )
+        db.commit()
+
+    before = facts(http)
+    assert before == ("pending", None, 10 if target_full else 0, 0, 0, 1, 0)
+    with caplog.at_level(logging.WARNING, logger=boundary.__name__):
+        reply = post(http, "/claim")
+    assert reply.status_code == 409
+    assert reply.json() == {"detail": "managed_request_refused"}
+    assert reply.headers["Cache-Control"] == "no-store"
+    assert facts(http) == before
+    with Session(http.s["engine"]) as db:
+        reservation = db.get(JobExecution, "reserved-fixture-job")
+        assert reservation.state == "active" and reservation.capacity_reserved is True
+    assert [
+        (record.msg, record.args, record.exc_info)
+        for record in caplog.records
+        if record.name == boundary.__name__
+    ] == [("managed_claim_concurrency_exhausted", (), None)]
+
+
+@pytest.mark.parametrize(
+    "denial", ["same_duration_detail", "same_target_detail", "same_concurrency_detail", "binding"]
+)
+def test_budget_exhaustion_markers_exclude_other_managed_conflicts(
+    http, caplog, monkeypatch, denial
+):
+    body = copy.deepcopy(http.body)
+    if denial == "binding":
+        with Session(http.s["engine"]) as db:
+            engagement = db.get(Engagement, "eng-1")
+            engagement.targets_spent = engagement.target_limit
+            db.commit()
+        body["target_binding"]["case_sha256"] = "0" * 64
+    else:
+        allocator, detail = {
+            "same_duration_detail": (
+                "duration_budget.allocate", "engagement duration allocation exhausted",
+            ),
+            "same_target_detail": (
+                "target_budget.charge", "engagement target allowance exhausted",
+            ),
+            "same_concurrency_detail": (
+                "concurrency_budget.before_claim", "engagement execution capacity exhausted",
+            ),
+        }[denial]
+
+        def generic(*args, **kwargs):
+            raise HTTPException(409, detail)
+
+        monkeypatch.setattr(allocator, generic)
+    before = facts(http)
+    with caplog.at_level(logging.WARNING, logger=boundary.__name__):
+        reply = post(http, "/claim", body=body)
+    assert reply.status_code == 409
+    assert reply.json() == {"detail": "managed_request_refused"}
+    assert reply.headers["Cache-Control"] == "no-store"
+    assert facts(http) == before
+    assert not any(record.name == boundary.__name__ for record in caplog.records)

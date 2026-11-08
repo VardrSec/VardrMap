@@ -1,5 +1,127 @@
 # Development
 
+Persistent mode adds single head `0041persistentruntime` while preserving finite
+rows. The owner approved until-revoke/retirement STOP reporting for isolated
+testing only. Existing `VARDRMAP_MANAGED_WORKER=1` configures the shared persistent
+service; omission/`0` performs no managed key reads or route registration. Startup
+never registers an admission, approves work or starts a worker. No new environment
+flag or service is introduced. SQLite/ASGI
+component checks, migrated PostgreSQL roles and actual platform acceptance remain
+distinct. See [protocol, migration and rollback notes](nm2-persistent-runtime.md).
+
+The bounded [runtime protocol](managed-runtime-protocol.md) requires additive head
+`0040runtimesequence` before enabled requests. Focused SQLite/ASGI tests are
+`test_managed_runtime.py` and `test_managed_runtime_http.py`; existing native
+result/stop/consumption/observation regressions must also pass. Those tests verify
+protocol/state invariants, not PostgreSQL lock behavior, Docker namespace exit,
+Windows/WSL timing or full worker acceptance. No enabled default or alternative
+runtime is inferred from passing fixtures.
+
+V2 sequencing adds `test_managed_runtime_sequence.py` and the additive SQLite
+preservation check `test_runtime_sequence_migration.py`. PostgreSQL
+`postgres_tests/test_managed_sequence.py` runs both existing roles and observes real
+blocked backends for release/retirement, idle/next-claim and cross-engagement
+same-sequence races; the Runtime holder must also acquire Clock with NOWAIT.
+Collection or SQLite success does not satisfy those PostgreSQL checks. V2 remains
+explicitly selected by owner registration; ordinary startup and v1 are unchanged.
+
+The opt-in Windows native fallback fixtures now require the corrected Gate commit
+`54536ea1d900d0e35adf93b4e026962c4d45d34a`, built with Windows Go 1.26.3, binary
+SHA-256 `28ad13758063a5541a904a30608fff84d8abe3759e65b54dec5ca67bb9684094`.
+`NM2_NATIVE_GATE_BINARY` and the independent five-phase guarded execution receipt
+at `NM2_NATIVE_GATE_RECEIPT` must both match that hash. Enable `NM2_NATIVE_GATE=1`,
+`NM2_PRECLAIM_ENTRY=1` and `NM2_TLS_LOOPBACK=1`, supply the matching
+`NM2_RUNNER_SOURCE` and `NM2_GUARDED_FIXTURE_SOURCE`, and set `NM2_NATIVE_RESULTS`
+inside the disposable test `TEMP` directory. Run `tests/test_managed_native.py`
+and `tests/test_managed_entry.py` with the Map test interpreter. This rerun writes
+new evidence; older milestone receipts keep their original hashes and limits.
+
+`postgres_tests/test_managed_runtime.py` uses the existing disposable administrator
+and restricted application-role schemas. It observes an actual claim blocked on a
+runtime row, then requires the holder to acquire the operation clock with NOWAIT;
+this detects the reversed Runtime/Clock order without assuming an event means a
+database lock wait. The full SQL trace and exact holder PID in `pg_blocking_pids`
+establish the wait even when PostgreSQL truncates its long activity-query text.
+Its PostgreSQL execution belongs to the existing PostgreSQL CI
+job, separately from SQLite/ASGI protocol evidence.
+
+## Explicit managed service configuration
+
+This development candidate exposes managed factories only when
+`VARDRMAP_MANAGED_WORKER=1`. Omission or `0` preserves default startup. Other flag
+values and incomplete enabled configuration refuse startup with a fixed error.
+Apply additive schema `0040runtimesequence` through the existing migration procedure;
+configuration never applies migrations or repairs state.
+
+Supply these values explicitly in the API's reviewed worker-enabled profile:
+
+| Variable | Required value |
+| --- | --- |
+| `VARDRMAP_MANAGED_ORIGIN` | Exact configured HTTPS issuer URL including API prefix; must match enrollment and Runner configuration. |
+| `VARDRMAP_MANAGED_ISSUER_ID` | Existing trusted issuer identifier. |
+| `VARDRMAP_MANAGED_CONTRACT_KEY_ID` | Distinct contract-signing key identifier. |
+| `VARDRMAP_MANAGED_CONTRACT_KEY_FILE` | Absolute path to an existing regular raw 32-byte Map contract key, supplied only to the API. |
+| `VARDRMAP_MANAGED_OPERATOR_TRUST_FILE` | Absolute path to existing public operator anchor JSON, capped at 32 KiB. |
+
+The public anchor file is a list of 1–100 exact objects containing `issuer_id`,
+`key_id`, `approver_id`, unpadded base64url `public_key`, and boolean `revoked`.
+`approver_id` names the existing owner. Existing `ContractWire` checks distinct
+approval/contract keys, duplicate anchors and signature purpose. Private operator
+approval keys remain outside Map and the worker. This loader generates no key,
+creates no user/enrollment/approval and runs no database operation or target work.
+Keep private key custody and mounts scoped to the API; do not put raw keys in
+arguments, public trust, Runner state or logs. Ordinary startup stays disabled.
+
+Configuration checks use disposable keys without database access. Actual managed
+worker, stop, disconnected/restart and recovery acceptance remains required before
+calling the configured distribution supported. Historical ADRs describing
+unregistered prototypes retain their original scope; this opt-in supplies the
+explicit assembly seam.
+
+`tests/test_managed_stops.py` exercises both result/stop receipt orderings with
+active, expired and approval-revoked permission, including retained evidence,
+immutable replay, capacity release and conservative spent allowances.
+
+## Explicit managed key binding
+
+An installation operator can invoke `python -m managed_enrollment` from the
+configured backend environment after the existing managed schema is installed.
+The command uses that environment's existing database credential; it creates no
+account, API key, signing key, authority or approval. Development checks use only
+disposable databases and synthetic keys.
+
+Select the existing owner ID from the authenticated `/me` response, an existing
+API-key ID from `/auth/apikeys`, and the intended installation's stable UUID from
+`vardrrunner identity show`. The API key must already belong to that owner with
+runner or full scope. The origin must exactly match the trusted Map issuer URL.
+Replace the non-secret placeholders below:
+
+```text
+python -m managed_enrollment bind --owner OWNER_ID --api-key-id KEY_ID --runner-id RUNNER_UUID --origin https://vardrsec.localhost:8443/backend
+python -m managed_enrollment revoke --owner OWNER_ID --enrollment-id ENROLLMENT_ID
+```
+
+Binding prompts for the existing key through hidden TTY input. Without a TTY it
+refuses unless automation explicitly selects `--key-stdin`; that mode reads at
+most 259 bytes and accepts one ASCII key of at most 256 bytes plus optional LF or
+CRLF. The input pipe must close after that key. The raw key is never printed,
+written or accepted as an argument; no environment or plaintext-file fallback is
+added. Successful output contains association metadata only. Revocation needs no
+recovered key and retains its tombstone/revision. Repeating an exact active bind
+or revocation is idempotent. Rebinding a revoked association, changing bound
+metadata, revision overflow and missing schema are refused without repair or
+migration. A unique-constraint
+race refuses safely; a later exact invocation can observe its retained winner.
+
+Binding is separate from approval and creates no execution permission. An owner
+session must obtain an unsigned context through the default-unregistered approval factory,
+the operator signs it outside Map using existing separately provisioned signing
+material, and the owner registers that exact receipt. Existing public operator
+trust and Map's distinct contract-signing key must already be configured in the
+injected issuer. No private approval key is sent to Map or the worker. The HTTP
+factories remain absent by default; explicit service configuration and worker
+activation are separately controlled.
+
 Managed issuance checks use `tests/test_managed_issuance.py` and
 `postgres_tests/test_managed_issuance.py`. Keep synthetic association/key records,
 independent signing purposes, real administrator/restricted-role lock races,
@@ -589,6 +711,18 @@ constraints and unresolved containment/bootstrap/lifecycle choices; none is chos
 Run PostgreSQL test collection from `backend`: `python -m pytest postgres_tests -v`.
 These modules share fixtures through the `postgres_tests` package; invoking that
 directory from the repository root does not establish its parent import path.
+
+The current hosted PostgreSQL job checks development companion Runner
+`6ebaefdbf961008978e175bae180fd9e7f653cad` and corrected Gate
+`54536ea1d900d0e35adf93b4e026962c4d45d34a`. These are test inputs; distribution
+production pins and worker activation remain separate.
+
+`tests/test_nm2_distribution_queue.py` is an explicit cross-repository ASGI check.
+Set absolute `NM2_DISTRIBUTION_SOURCE` and `NM2_RUNNER_SOURCE` paths to exercise
+the actual fixture's public queue requests and pure reviewed-plan compiler.
+Stored jobs keep the supported flat case-reference/timeout config; execution
+settings stay in the separately reviewed plan. It invokes no Docker command,
+network target or Gate process, and does not certify TLS or owner provenance.
 
 PostgreSQL CI enables direct Runner HTTP/TLS probes in the Map test interpreter.
 Install the pinned companion with its authorization extra in that interpreter;

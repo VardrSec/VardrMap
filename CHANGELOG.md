@@ -7,6 +7,100 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 - Carry forward the two exact historical secret-scan fingerprints for
   verified public runtime test vectors.
 
+- Record a fixed diagnostic after a managed claim rolls back for exhausted
+  engagement concurrency. Preserve existing HTTP refusals and budget accounting.
+
+- Record a fixed diagnostic after a managed claim rolls back for exhausted
+  engagement target allowance. Preserve existing HTTP refusals and budget accounting.
+
+- Record a fixed diagnostic after a managed claim rolls back for exhausted
+  engagement duration. Keep the existing client refusal and budget semantics.
+
+- Keep stopped engagements and stale approval revisions out of managed worker
+  discovery. Claims still enforce current authority and budgets.
+
+- Add bounded test-only TLS failure diagnostics for fixed exception classes,
+  route categories and status codes while re-raising the original exception.
+
+- Give the truncated-response HTTPS fixture a bounded two-second read window;
+  retain the deliberate 100 ms slow-response timeout and every launch/lease assertion.
+
+- Raise existing PostgreSQL/browser CI job ceilings to 25/20 minutes after
+  recorded 15/10-minute cancellations during complete verification. Preserve all
+  tests, roles, assertions and integration steps.
+
+- Preserve all SQLite fixture foreign keys after PostgreSQL DDL generation by
+  cloning schema metadata per fixture engine; production migrations are unchanged.
+
+- Add persistent runtime v3 with immutable availability policy,
+  optional finite controls, signed64 decimal counters and retained predecessor/
+  head history in additive `0041persistentruntime`. Reuse per-job authorization,
+  budgets and receipts; separate disable-new-work from reporting and expose
+  advisory presence without lease renewal. The owner approved until-revoke/
+  retirement STOP reporting for isolated testing only. The existing explicit
+  managed-worker configuration enables this path; ordinary startup remains off.
+  Runtime/platform and release acceptance remain open. See
+  [protocol notes](docs/nm2-persistent-runtime.md).
+
+- Reject retained v2 proof documents whose numeric types or canonical contents
+  differ from their exact expected release/retirement receipts. Preserve the
+  original completed result and full-completion digest.
+
+- Add explicit bounded v2 healthy sequencing under additive `0040runtimesequence`:
+  append-only attempt history, original-token idle release after confirmed
+  completed work, conditional physical-incarnation retirement and exact historical
+  receipt lookup. Preserve v1 shapes, per-job signed contracts and spent charges.
+  Original-key observation `/3` echoes the durable sequence without retry rights.
+  Native drain, installed sequence acceptance and PostgreSQL interleavings require
+  their separate verification; a DONE digest is correlation, not attestation.
+  Preserve SQLite v1 rows/uniqueness through batch CHECK installation, reject
+  unsupported old writers without spending allowances, and refuse orphan same-job
+  runtime history rather than returning an unclaimed observation.
+
+- Record two exact historical secret-scan false positives for deterministic
+  public runtime-protocol test vectors; keep scan rules and future findings active.
+
+- Retain an immutable host-authorized unbound-runtime retirement under the existing
+  Runtime-before-Clock lock order, fencing late associated claims without job or
+  budget writes. Add opt-in v2 original-key observation with exact runtime proof;
+  omitted runtime fields preserve v1. Reuse schema 0039 without migration.
+
+- Bind opt-in Windows native fallback fixtures to the independently verified
+  corrected Gate binary and its matching five-phase receipt.
+
+- Close the uploaded-result/before-finish runtime-exit window through the existing
+  failed-result receipt lane. Atomically retain the original result/evidence,
+  retire its runtime and release capacity without a second stop receipt, success
+  or allowance refund. Add a real PostgreSQL Runtime-before-Clock lock regression.
+
+- Align human-session classification with existing bearer-token normalization so
+  whitespace variants of full API keys cannot acquire owner-session provenance.
+
+- Add explicit runtime admission, atomic claim association and purpose-separated
+  host stop/receipt protocols under additive `0039managedruntime`. Preserve
+  unconsumed retirement without inventing acknowledgement or refunding spent
+  allowances. Runtime/platform acceptance remains separate.
+
+- Add explicit, default-disabled assembly of the managed HTTP services. Enabled
+  configuration requires exact HTTPS origin, existing operator public trust and
+  a distinct Map contract key; invalid configuration refuses startup. It creates
+  no keys, enrollment, approval or worker and performs no database operation.
+- Refuse a managed result after an accepted known-stop receipt under the existing
+  engagement/job transaction locks. Either receipt lane now preserves its immutable
+  winner, including late historical uploads after expiry or approval revocation.
+- Add an unregistered human-owner review/register/revoke HTTP factory that
+  verifies separately signed approval receipts through the existing issuer.
+  Add explicit terminal association/revocation of existing Map API keys, with
+  hidden input or bounded opt-in stdin, immutable bindings and retained revisioned
+  tombstones. Binding grants no execution approval and creates no account,
+  API key, signing key or authority record.
+
+- Add a separate unregistered result/completion and known-stop HTTP router
+  factory over existing owned receipt services. Bound requests and responses,
+  preserve historical evidence and exact termination receipts, and retain
+  all existing authority, reservation and nonrefundable-budget behavior. No
+  receipt endpoint or execution worker is activated.
+
 - Add an unregistered, explicitly injected managed HTTP router factory for
   enrolled-key discovery, one-shot claim and current/refresh/consume operations.
   Claims return the retained case snapshot; bounded strict requests and fixed

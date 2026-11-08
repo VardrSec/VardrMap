@@ -104,7 +104,10 @@ class Issuer:
 
     def _operator(self, db, request):
         header = request.headers.get("authorization", "")
-        require(not header.startswith("Bearer vmap_"), "operator_session_required")
+        # Match get_current_user's token normalization before classifying the
+        # credential; extra bearer whitespace must not turn a key into a session.
+        bearer = header.split(" ", 1)[1].strip() if header.startswith("Bearer ") else ""
+        require(not bearer.startswith("vmap_"), "operator_session_required")
         user = get_current_user(request, authorization=header or None, db=db)
         require(user.get("scope") == "full", "operator_session_required")
         method = "local_session" if user.get("auth_method") == "local" else "github_session"
@@ -391,7 +394,7 @@ class Issuer:
         self.wire.approval(approval.envelope, result["context"], approval.owner, now())
         return approval, result
 
-    def current(self, db, request, *, job_id, body, contract_id, attempt_id, fence):
+    def current(self, db, request, *, job_id, body, contract_id, attempt_id, fence, on_control=None):
         """Unregistered current-authority check; no lease renewal/consume/execute.
 
         A future control adapter must use this result before returning continue.
@@ -406,9 +409,10 @@ class Issuer:
             attempt_id=attempt_id,
             fence=fence,
             renew=False,
+            on_control=on_control,
         )
 
-    def refresh(self, db, request, *, job_id, body, contract_id, attempt_id, fence):
+    def refresh(self, db, request, *, job_id, body, contract_id, attempt_id, fence, on_control=None):
         """Unregistered adapter: validate authority and renew one bounded lease.
 
         This is not wired to production HTTP, Runner or queued execution.
@@ -422,6 +426,7 @@ class Issuer:
             attempt_id=attempt_id,
             fence=fence,
             renew=True,
+            on_control=on_control,
         )
 
     def consume(
@@ -435,6 +440,7 @@ class Issuer:
         attempt_id,
         fence,
         contract_sha256,
+        on_control=None,
     ):
         """One-shot unregistered launch acknowledgement; no lease renewal/release.
 
@@ -458,6 +464,7 @@ class Issuer:
             fence=fence,
             renew=False,
             consume_sha256=contract_sha256,
+            on_control=on_control,
         )
 
     def _current(
@@ -472,6 +479,7 @@ class Issuer:
         fence,
         renew,
         consume_sha256=None,
+        on_control=None,
     ):
         with self.operation(db) as now:
             user = get_current_user(
@@ -496,6 +504,11 @@ class Issuer:
             approval, result = self._claim_permission(
                 db, request, job, body, now, job_statuses=("running",)
             )
+            if on_control is not None:
+                # Trusted graph hook only. Runtime must precede ManagedClock;
+                # the shared projection remains the execution authority.
+                on_control(db=db, now=now, job=job, execution=execution,
+                           contract=contract, approval=approval, projection=result)
             self._locked_time(db, now)
             require(
                 execution.state == "active" and execution.expires_at > control.now(),
@@ -593,7 +606,7 @@ class Issuer:
             "managed_budget_controls_required",
         )
 
-    def claim(self, db, request, *, job_id, body):
+    def claim(self, db, request, *, job_id, body, on_claim=None):
         """Unregistered one-shot prototype; all ownership/fees/issuance commit together.
 
         Existing ScanJob/JobExecution permit one physical attempt per job. N is an
@@ -610,6 +623,10 @@ class Issuer:
             require(job.status == "pending", "pending_job_required")
             approval, result = self._claim_permission(db, request, job, body, now)
             self._budgets(body, approval)
+            # Trusted in-process preparation acquires runtime locks before the
+            # clock lock; it returns the atomic issued-contract association.
+            associate = on_claim(db=db, now=now, job=job, approval=approval,
+                                 projection=result) if on_claim is not None else None
             self._locked_time(db, now)
             engagement = db.get(Engagement, job.program_id)
             concurrency_budget.before_claim(db, engagement, body)
@@ -663,6 +680,8 @@ class Issuer:
                 )
             )
             db.flush()
+            if associate is not None:
+                associate(db.query(ManagedContract).filter_by(id=contract_id).one())
             # Signing/flush/lock delays consume permission; denial rolls all fees,
             # ownership, ordinal and case snapshot back, preserving only clock.
             self._locked_time(db, now)

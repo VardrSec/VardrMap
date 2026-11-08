@@ -1,8 +1,83 @@
 # Architecture
 
-`managed_http.build_managed_router(issuer)` is an unregistered discovery and runtime
+Additive `0041persistentruntime` adds explicit persistent mode and immutable
+admission snapshots to the existing database. Optional finite controls are not
+execution authority. Composite parent/predecessor and head/active foreign keys
+retain all history while normal paths select indexed exact rows. Runtime precedes
+ManagedClock; existing issuer/budget/result/stop services remain authoritative.
+Owner-approved isolated testing uses the existing explicit managed-worker
+configuration; ordinary startup remains disabled.
+See [persistent protocol and acceptance boundaries](nm2-persistent-runtime.md).
+
+Additive schema `0040runtimesequence` keeps v1 runtime rows intact and adds nullable
+`max_attempts`, monotone `last_sequence`, one active pointer and an immutable
+retirement snapshot. `ManagedRuntimeAttempt` retains each exact seven-field
+job/contract binding; completed release metadata and its full canonical completion
+snapshot are written once. Runtime locking serializes all cursor changes before
+Clock. Host writes lock the preselected job parents before Runtime and recheck the
+exact cursor before changing any job; they never retarget after waiting. Receipt
+lookup refuses a changed monotone projection. No existing receipt or allocation is
+overwritten, refunded or reused for a later attempt.
+Schema CHECKs also reject legacy binding writes into v2 rows and retirement without
+a physical receipt; they preserve v1 data and do not authorize old-code rollback.
+
+Additive `ManagedRuntime` storage retains owner-approved Docker incarnation,
+purpose-separated stop-capability hash, immutable issued-attempt association and
+retirement marker. It is required because existing execution tokens and signed
+contract JSON cannot safely hold this independent authority. An optional trusted
+issuer hook locks admission before the clock and associates the issued contract
+within the existing claim transaction, including lost first replies. Native stop
+mutation is shared after producer authentication; native allowed causes remain
+unchanged. Pending uploaded results use the same failed-only terminal helper as
+native failed finish, under existing attempt locks; retirement and capacity release
+commit with that completion, preserving evidence and spent allowances without a
+second stop row. [The protocol](managed-runtime-protocol.md) specifies exact
+retirement, revocation and immutable lookup. Installed recovery acceptance remains
+required.
+
+An unbound exited runtime can instead retain a purpose-separated retirement
+receipt in the same schema 0039 row. Claim preparation and retirement serialize on
+Runtime before Clock, so an irreversible retirement cannot coexist with a later
+runtime-associated claim. Original-key v2 observation keeps existing job/principal
+checks and proves exact runtime association; it supplies no execution capability.
+
+The explicit `managed_configuration.configure_managed(app)` assembly is inert when
+`VARDRMAP_MANAGED_WORKER` is omitted or `0`. Exact `1` requires reviewed HTTPS
+origin/issuer configuration, existing public operator anchors and a separate raw
+32-byte Map contract key. Invalid enabled configuration refuses startup with a
+fixed error. One Wire/Issuer/Results/Runtimes graph is injected into all managed
+factories; runtime-aware claims cannot fall back to unbound issuance. This assembly
+does not migrate, provision authority or launch queue work. Default routes and
+ordinary authentication remain unchanged.
+
+Managed result submission checks for an existing known-stop receipt while holding
+the same engagement/job ownership locks used by stop reporting. The reciprocal
+checks serialize both receipt orderings without relying on locking an absent row;
+only the retained winning lane may continue its existing receipt protocol.
+
+`managed_approval_http.build_approval_router(issuer)` is a default-unregistered boundary
+over existing owner-session review, separately signed receipt registration and
+approval revocation. Existing local CSRF/Origin and GitHub session checks remain
+authoritative; API-key authentication cannot become human provenance. The factory
+accepts neither operator private keys nor arbitrary signing requests. Current
+authority projection and signature validation remain in the existing issuer/wire
+services, with no second policy validator.
+
+`python -m managed_enrollment` is an explicit terminal administration operation
+using the installation's existing database credential. It verifies an existing
+owner/API-key row and raw-key possession, then retains the existing schema's
+association with a stable Runner UUID and exact HTTPS issuer origin. It stores
+only the derived Bearer-principal hash, not the raw key. An exact active binding is
+idempotent; conflicting metadata or a revoked binding is refused. Revocation
+increments the retained revision once and never deletes, revives or resets the
+association. Binding requires an existing owner/key and creates no trust,
+authority or approval record; managed execution still requires those separately.
+Heartbeat and ordinary startup never call this operation; no enrollment HTTP
+service or migration is introduced.
+
+`managed_http.build_managed_router(issuer)` is a default-unregistered discovery and runtime
 adapter over the existing transactional issuer. It constructs no keys, enrollment,
-authority or worker. Main never registers it. Inventory is bounded, authenticated
+authority or worker. Explicit configuration supplies registration. Inventory is bounded, authenticated
 against an existing API key/enrollment and restricted to accessible engagements;
 it exposes only assigned registered pending Gate work. It verifies stored approval
 signatures/windows but grants no execution permission. The claim transaction still
@@ -10,8 +85,20 @@ reprojects authority and charges the existing budgets. Its response adds only th
 retained claim case snapshot, preserving the Runner's polled-versus-claimed check.
 Current/refresh/consume retain existing owned token, principal, contract, attempt
 and fence checks. This boundary reuses schema 0038 and changes no ordinary/manual
-job behavior. Human approval, explicit provisioning, result/stop adapters, worker
+job behavior. Human approval, explicit provisioning, worker
 activation and proven container process containment remain separate increments.
+
+`managed_receipt_http.build_receipt_router(results)` is a separate default-unregistered
+boundary over existing `Results` and `Stops`. It adds no signing, authority,
+execution or renewal logic. The same owned API key/control capability and consumed
+contract bind result submission, completion, known-stop reporting and observation.
+Evidence retention after approval expiry/revocation stays distinct from successful
+completion's live-authority checks. A known terminal receipt may release existing
+concurrency capacity but refunds no target/duration/issuance charge; uncertainty
+retains the reservation. The adapter bounds outer JSON, artifact fields and receipt
+size, sanitizes failures, and treats termination confirmation as the owning
+Runner's assertion. The default unregistered state is unchanged; the opt-in runtime
+binding uses additive schema 0039 without downgrading existing receipt rules.
 
 The legacy execution-finish route refuses every outcome for managed jobs. Only
 the existing exact managed result or known-stop receipt protocol can release their

@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, Boolean, CheckConstraint, Column, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import JSON, BigInteger, Boolean, CheckConstraint, Column, DateTime, ForeignKey, ForeignKeyConstraint, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from db import Base
@@ -951,3 +951,135 @@ class ManagedStop(Base):
     cause = Column(String(64), nullable=False)
     receipt_sha256 = Column(String(64), nullable=False)
     finished_at = Column(DateTime, nullable=False)
+
+
+class ManagedRuntime(Base):
+    """Owner-approved immutable incarnation and separate host stop-only grant."""
+
+    __tablename__ = "managed_runtimes"
+    __table_args__ = (
+        UniqueConstraint("id", "mode", name="uq_managed_runtime_mode"),
+        CheckConstraint(
+            "mode IS NULL OR mode = 'persistent'", name="ck_managed_runtime_mode",
+        ),
+        CheckConstraint(
+            "mode IS NULL OR (ttl_seconds IS NULL AND expires_at IS NULL "
+            "AND admission_snapshot IS NOT NULL AND admission_sha256 IS NOT NULL "
+            "AND ((last_sequence = 0 AND head_sequence IS NULL) "
+            "OR (last_sequence > 0 AND head_sequence IS NOT NULL AND head_sequence = last_sequence)) "
+            "AND last_sequence BETWEEN 0 AND 9223372036854775807 "
+            "AND (active_sequence IS NULL OR (head_sequence IS NOT NULL AND active_sequence = head_sequence)) "
+            "AND (max_attempts IS NULL OR max_attempts BETWEEN 1 AND 9223372036854775807) "
+            "AND (idle_timeout_seconds IS NULL OR idle_timeout_seconds BETWEEN 1 AND 86400))",
+            name="ck_managed_runtime_persistent",
+        ),
+        CheckConstraint(
+            "mode IS NOT NULL OR (ttl_seconds IS NOT NULL AND expires_at IS NOT NULL "
+            "AND head_sequence IS NULL AND admission_snapshot IS NULL "
+            "AND admission_sha256 IS NULL AND idle_timeout_seconds IS NULL)",
+            name="ck_managed_runtime_legacy",
+        ),
+        CheckConstraint(
+            "(mode IS NULL AND max_attempts IS NULL) OR (job_id IS NULL AND contract_id IS NULL "
+            "AND attempt_id IS NULL AND fence IS NULL AND contract_sha256 IS NULL "
+            "AND bound_at IS NULL AND confirmed_at IS NULL)",
+            name="ck_managed_runtime_v2_binding",
+        ),
+        CheckConstraint(
+            "(mode IS NULL AND max_attempts IS NULL) OR NOT retired OR (retirement_receipt IS NOT NULL "
+            "AND trim(CAST(retirement_receipt AS TEXT)) <> 'null')",
+            name="ck_managed_runtime_v2_retirement",
+        ),
+        ForeignKeyConstraint(
+            ["id", "head_sequence", "mode"],
+            ["managed_runtime_attempts.runtime_id", "managed_runtime_attempts.runtime_sequence", "managed_runtime_attempts.runtime_mode"],
+            name="fk_managed_runtime_head", deferrable=True, initially="DEFERRED", use_alter=True,
+        ),
+        ForeignKeyConstraint(
+            ["id", "active_sequence", "mode"],
+            ["managed_runtime_attempts.runtime_id", "managed_runtime_attempts.runtime_sequence", "managed_runtime_attempts.runtime_mode"],
+            name="fk_managed_runtime_active", deferrable=True, initially="DEFERRED", use_alter=True,
+        ),
+    )
+    id = Column(String(36), primary_key=True)
+    owner = Column(String(128), nullable=False)
+    enrollment_id = Column(String(128), nullable=False)
+    enrollment_revision = Column(Integer, nullable=False)
+    api_key_id = Column(String(128), nullable=False)
+    principal_sha256 = Column(String(64), nullable=False)
+    runner_id = Column(String(36), nullable=False)
+    origin = Column(String(500), nullable=False)
+    identity = Column(JSON, nullable=False)
+    runtime_sha256 = Column(String(64), nullable=False)
+    physical_sha256 = Column(String(64), nullable=False, unique=True)
+    owner_nonce = Column(String(64), nullable=False, unique=True)
+    capability_sha256 = Column(String(64), nullable=False, unique=True)
+    ttl_seconds = Column(Integer, nullable=True)
+    registered_at = Column(DateTime, nullable=False)
+    expires_at = Column(DateTime, nullable=True)
+    revoked = Column(Boolean, nullable=False, default=False)
+    retired = Column(Boolean, nullable=False, default=False)
+    job_id = Column(String(128), nullable=True)
+    contract_id = Column(String(36), nullable=True, unique=True)
+    attempt_id = Column(String(36), nullable=True)
+    fence = Column(Integer, nullable=True)
+    contract_sha256 = Column(String(64), nullable=True)
+    bound_at = Column(DateTime, nullable=True)
+    confirmed_at = Column(DateTime, nullable=True)
+    report_sha256 = Column(String(64), nullable=True)
+    # NULL preserves the original one-attempt protocol. Explicit bounds opt in.
+    max_attempts = Column(BigInteger, nullable=True)
+    last_sequence = Column(BigInteger, nullable=False, default=0)
+    active_sequence = Column(BigInteger, nullable=True)
+    retirement_receipt = Column(JSON, nullable=True)
+    # NULL is immutable legacy v1/v2. Persistent admission is never inferred from
+    # an absent finite attempt limit and is not execution permission.
+    mode = Column(String(16), nullable=True)
+    head_sequence = Column(BigInteger, nullable=True)
+    idle_timeout_seconds = Column(Integer, nullable=True)
+    admission_snapshot = Column(JSON, nullable=True)
+    admission_sha256 = Column(String(64), nullable=True)
+    new_work_disabled = Column(Boolean, nullable=False, default=False)
+    presence_at = Column(DateTime, nullable=True)
+    presence = Column(JSON, nullable=True)
+
+
+class ManagedRuntimeAttempt(Base):
+    """Append-only v2 runtime history; release metadata is written once."""
+
+    __tablename__ = "managed_runtime_attempts"
+    __table_args__ = (
+        UniqueConstraint("runtime_id", "runtime_sequence", "runtime_mode", name="uq_managed_runtime_attempt_mode"),
+        CheckConstraint(
+            "runtime_mode IS NULL OR (runtime_mode = 'persistent' "
+            "AND runtime_sequence BETWEEN 1 AND 9223372036854775807 "
+            "AND ((runtime_sequence = 1 AND previous_sequence IS NULL) "
+            "OR (runtime_sequence > 1 AND previous_sequence IS NOT NULL AND previous_sequence = runtime_sequence - 1)))",
+            name="ck_managed_runtime_predecessor",
+        ),
+        ForeignKeyConstraint(
+            ["runtime_id", "runtime_mode"], ["managed_runtimes.id", "managed_runtimes.mode"],
+            name="fk_managed_runtime_attempt_parent", deferrable=True, initially="DEFERRED",
+        ),
+        ForeignKeyConstraint(
+            ["runtime_id", "previous_sequence", "runtime_mode"],
+            ["managed_runtime_attempts.runtime_id", "managed_runtime_attempts.runtime_sequence", "managed_runtime_attempts.runtime_mode"],
+            name="fk_managed_runtime_predecessor", deferrable=True, initially="DEFERRED",
+        ),
+    )
+    runtime_id = Column(String(36), primary_key=True)
+    runtime_sequence = Column(BigInteger, primary_key=True)
+    runtime_mode = Column(String(16), nullable=True)
+    previous_sequence = Column(BigInteger, nullable=True)
+    job_id = Column(String(128), nullable=False, unique=True)
+    contract_id = Column(String(36), nullable=False, unique=True)
+    attempt_id = Column(String(36), nullable=False)
+    fence = Column(Integer, nullable=False)
+    contract_sha256 = Column(String(64), nullable=False)
+    bound_at = Column(DateTime, nullable=False)
+    confirmed_at = Column(DateTime, nullable=True)
+    released_at = Column(DateTime, nullable=True)
+    terminal_receipt = Column(JSON, nullable=True)
+    terminal_receipt_sha256 = Column(String(64), nullable=True)
+    native_done_sha256 = Column(String(64), nullable=True)
+    release_receipt = Column(JSON, nullable=True)

@@ -1,12 +1,83 @@
 # API Reference
 
-`backend/managed_http.py` provides an **unregistered** router factory requiring an
-explicitly constructed existing `Issuer`. `main.py` does not call it. The following
-paths describe an isolated adapter contract, not enabled deployment endpoints:
+Persistent runtime v3 is available for owner-approved isolated testing through
+the existing explicit `VARDRMAP_MANAGED_WORKER=1` configuration. Ordinary startup
+and the direct service constructor remain disabled by default. New versioned
+runtime wrappers preserve finite v1/v2 and generic job receipts. Host `/disable`
+blocks new claims while preserving bound control/terminal release and reporting.
+Exact DTOs, decimal counters, advisory presence and the separate reporting-lifetime
+decision are in [persistent runtime notes](nm2-persistent-runtime.md).
+
+Explicit `max_attempts` in runtime registration opts into bounded
+[healthy sequencing](managed-runtime-protocol.md#bounded-healthy-sequencing-v2)
+under `0040runtimesequence`; omission preserves the existing v1 API. V2 claim and
+runtime-bind require the exact `runtime_sequence`. Original-token
+`POST /jobs/{job_id}/managed/runtime-idle-release` records a completed/drained
+attempt before another may claim. Host lookup separates active job receipt from
+whole-incarnation retirement; exact historical lookup uses
+`POST /managed/runtimes/{runtime_id}/attempts/{runtime_sequence}/receipt`.
+Explicit sequence on original-key job observation selects `/3`, echoing runtime
+ID/hash/sequence; prior `/1` and `/2` shapes remain unchanged.
+
+The explicit managed-worker profile adds [runtime admission and host receipt
+contracts](managed-runtime-protocol.md) under `0039managedruntime`. Optional paired
+`runtime_id`/`runtime_sha256` on managed claim are associated atomically before its
+first response; the post-consumption runtime acknowledgement confirms that exact
+tuple. Host-only `VardrStop` authentication cannot authorize execution. Defaults and
+native/manual calls without runtime fields retain their existing behavior.
+
+An authenticated active host stop grant can close the uploaded-result/before-finish
+window by failing that same immutable result receipt. It creates no second stop
+receipt, successful outcome or refund. Exact host lookup remains available after
+grant expiry/revocation; those states still refuse new terminal reports.
+
+The same capability may irreversibly retire an exactly observed exited runtime
+whose claim association is still absent, through `observed-unbound-exit`. Runtime
+locking serializes this with late claims; pending jobs and allowances are unchanged.
+Original-key job observation accepts paired runtime ID/hash for an explicit v2
+retirement proof; omitted fields keep v1 unchanged. An absent binding alone never
+closes an unknown local claim. See the [exact protocol](managed-runtime-protocol.md#physical-exit-before-a-runtime-claim-is-bound).
+
+Managed HTTP factories remain absent from default startup. Explicit
+`VARDRMAP_MANAGED_WORKER=1` uses the reviewed
+[configuration](development.md#explicit-managed-service-configuration) to assemble
+one shared issuer/result/runtime graph. This is a development candidate; installed
+worker acceptance and release remain open. The opt-in does not approve queued work
+or start an execution process.
+
+Managed result and known-stop receipts are mutually exclusive. Once either lane
+has retained its first receipt, the other is refused without evidence writes,
+reservation changes or replacement. Expiry and approval revocation do not erase
+the winning historical receipt or authorize conflicting publication.
+
+`backend/managed_approval_http.py` supplies a **default-unregistered** human-owner factory
+over the existing configured `Issuer`. Existing local
+owner sessions require CSRF and allowed Origin, and existing GitHub owner sessions
+retain their JWT checks. Neither runner-scope nor full-scope API keys can supply
+human approval provenance. No private operator signing key is accepted:
 
 | Method and path | Contract |
 |---|---|
-| `POST /jobs/managed/pending` | Existing API key plus `{origin, runner_id, limit?:1..20, after?:job_id}` discovers that enrollment's registered, non-revoked pending Gate jobs. Returns unresolved current cases, approved plans and `next_after`; no token, lease or reservation. Discovery is advisory: claim rechecks current authority and budgets. |
+| `POST /jobs/{job_id}/managed/approval/review` | `{enrollment_id, authorization_id, plan, expires_at, max_executions, max_duration_seconds, max_artifact_bytes, credential_grants}` projects current authoritative facts into an unsigned review context. It creates no approval or reservation. The issuer origin comes from trusted configuration, never the request body. |
+| `POST /jobs/{job_id}/managed/approval/register` | `{enrollment_id, authorization_id, plan, approval}` verifies the separately signed v1 approval envelope against existing operator public trust and the exact current projection. Returns `approval_record_id`; exact receipt replay cannot reset issuance counters. |
+| `POST /jobs/{job_id}/managed/approval/revoke` | Empty `{}` owner-session request retains the approval as permanently revoked without resetting counters or inferring process termination. There is no un-revoke operation. |
+
+These paths require HTTPS and strict, identity-encoded JSON capped at 1 MiB with
+a three-second total body-read deadline. Replies are capped at 256 KiB, use
+`Cache-Control: no-store`, and expose only the fixed error
+`managed_approval_refused` on failure. Modified signatures, stale case/authority
+bindings and expired receipts do not become permission. Operator signing remains
+outside Map and the worker; Map's separately provisioned contract key remains
+distinct. [Terminal binding](development.md#explicit-managed-key-binding) selects
+existing API-key/Runner associations and grants no human approval.
+
+`backend/managed_http.py` provides a **default-unregistered** router factory requiring an
+explicitly constructed existing `Issuer`. The following paths are exposed only
+through explicit service configuration or isolated adapters:
+
+| Method and path | Contract |
+|---|---|
+| `POST /jobs/managed/pending` | Existing API key plus `{origin, runner_id, limit?:1..20, after?:job_id}` discovers that enrollment's registered, non-revoked pending Gate jobs. It excludes stopped engagements and approvals from earlier authority revisions. Returns unresolved current cases, approved plans and `next_after` without a token, lease or reservation. Claim still rechecks current authority and budgets. |
 | `POST /jobs/{job_id}/managed/claim` | Existing `ClaimControl` fields require the enrolled key, exact configured origin/Runner UUID, concurrency/target binding and finite duration. Returns existing issuer contracts/control plus `config.test_case` from the retained `ScanJob.case_snapshot`. No automatic retry. |
 | `POST /jobs/{job_id}/managed/current` | Existing `ControlRequest` fields plus `contract_id`, `attempt_id`, `fence` check owned current authority without renewing. |
 | `POST /jobs/{job_id}/managed/refresh` | Same exact binding rechecks current authority and renews the existing bounded lease; expired attempts cannot renew. |
@@ -17,8 +88,32 @@ three-second total body-read limit. Duplicate keys, nonfinite numbers and extra
 fields are refused. Responses are capped at 256 KiB, carry `Cache-Control: no-store`
 and use the fixed error `managed_request_refused` without input/exception details.
 Existing sessions retain their CSRF checks and cannot substitute for the execution
-API key. No approval, finalization, enrollment, signing or worker route is added;
+API key. The control factory adds no approval, finalization, enrollment, signing or worker route;
 schema `0038managedstops` is reused without migration or implicit configuration.
+
+`backend/managed_receipt_http.py` adds a separate **default-unregistered** factory injected
+with existing `Results`. It shares that service's issuer/ownership protocol with
+`Stops`. Explicit service configuration is required for these paths:
+
+| Method and path | Contract |
+|---|---|
+| `POST /jobs/{job_id}/managed/result` | Original owned control binding, contract/attempt/fence/hash plus UTF-8 `artifact` string and `artifact_sha256`. Requires acknowledged consumption; stores existing redacted, frozen-case-bound evidence and returns its immutable receipt. |
+| `POST /jobs/{job_id}/managed/finish` | Same binding plus `receipt_sha256`, `outcome` and strict boolean `termination_confirmed`. Requires an owned result receipt and confirmed termination; successful completion also requires live authority. |
+| `POST /jobs/{job_id}/managed/stopped` | Same binding plus `outcome`, fixed known `cause` and strict boolean `termination_confirmed`. Delegates the existing known-stop protocol; uncertainty and unrecognized causes cannot release capacity. |
+| `POST /jobs/{job_id}/managed/stop-status` | Same original owned binding observes a retained stop receipt without renewal, replay, inferred termination or reservation release. No control token is returned. |
+
+All four require HTTPS and the original authenticated API key/control capability.
+Local sessions retain CSRF validation and cannot replace that key. A result request
+is capped at 1 MiB of outer JSON; other requests at 8 KiB. The existing artifact
+limit remains 512,000 UTF-8 bytes and the smaller approved artifact ceiling. Each
+body read has a three-second total deadline; strict JSON rejects duplicate keys,
+nonfinite numbers and extra fields. Receipts are capped at 16 KiB, never echo
+artifacts/credentials, and use `Cache-Control: no-store` with the fixed failure
+`managed_receipt_refused`. Owned historical evidence and known-stop reporting stay
+available after approval expiry/revocation under the existing service policy.
+Terminal confirmation remains the owning Runner's assertion, not independent OS
+attestation. No budget refund, automatic retry, authority creation or route
+activation is introduced.
 
 Local managed-issuance builds (`0036managedauth`) accept the optional strict
 boolean `authorization_contract_required` on single fixed Gate job creation.
@@ -2322,8 +2417,8 @@ cannot replace the exact managed contract/fence, consumption acknowledgment or
 result/known-stop receipt. Refusal leaves execution ownership and all reservations
 unchanged; legacy jobs retain their existing finish behavior.
 
-`Issuer.consume` is an unregistered library operation, not an available HTTP API.
-Only explicit disposable fixtures expose it. It validates current owned permission
+`Issuer.consume` is a library operation exposed only by the explicit configured
+managed factory or disposable adapters. It validates current owned permission
 and the signed-contract hash, then atomically consumes once without renewing the
 lease, completing the job or releasing reservations. Exact ACK and unknown-reply
 rules are in [ADR 0008](adr/0008-managed-consumption-ack.md). Existing marked-job
@@ -2331,22 +2426,22 @@ legacy claim/control/upload/completion refusals remain in force.
 
 ### Managed result prototype
 
-`managed_results.Results.submit`, `finish` and `inspect` are unregistered library
-operations, exposed only by explicit disposable test adapters. They require the
+`managed_results.Results.submit`, `finish` and `inspect` are library
+operations behind explicit configured factories or disposable adapters. They require the
 existing owned capability and exact consumed contract. Evidence receipt alone
 never completes work; terminal receipts and inspection rules are documented in
 [ADR 0009](adr/0009-managed-result-receipts.md). No production endpoint is added.
 
 ### Managed known-stop prototype
 
-`managed_stops.Stops.report` and `inspect` are unregistered library operations.
+`managed_stops.Stops.report` and `inspect` are default-unregistered library operations.
 They require the original consumed owned contract and fixed known-termination
 report; neither expiry nor a PID establishes a release right. Stop receipts remain
 separate from result receipts. See [ADR 0010](adr/0010-managed-known-stop-receipts.md).
 
 ### Managed claim observation prototype
 
-`managed_observations.Observations.inspect` is an unregistered library operation.
+`managed_observations.Observations.inspect` is a default-unregistered library operation.
 Its fixture-only adapter accepts original origin/Runner and plan/case/association
 hashes with the original enrolled API key; no control token is accepted or returned.
 It returns bounded metadata and existing immutable receipts without renewing,
@@ -2357,7 +2452,8 @@ releasing or retrying work. Absence is only a snapshot. See
 
 `managed_observation_http.build_observation_router(existing_service)` reserves
 `POST /jobs/{job_id}/managed/observation` for isolated integration. **It is not
-registered by the production app.** It accepts origin, Runner UUID and exact
+registered during default startup.** Explicit service configuration enables it.
+It accepts origin, Runner UUID and exact
 plan/case/association fingerprints using the original enrolled API key. It rejects
 control tokens and other extra fields, returns no capability, and changes no
 business state. Successful observations use the existing v1 metadata/receipt shape.

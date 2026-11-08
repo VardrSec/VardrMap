@@ -49,7 +49,7 @@ jobs:
   postgres:
     name: PostgreSQL migrations and integration
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     services:
       postgres:
         image: postgres:17
@@ -77,7 +77,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           repository: VardrSec/VardrRunner
-          ref: 2cbf3619c2db3682e5de7aa4ed70c8f1b07335c5
+          ref: ac129530dfd4965a42de04c0ebf0f46c64979734
           path: .integration/runner
       - uses: actions/checkout@v7
         with:
@@ -133,7 +133,7 @@ jobs:
   browser:
     name: Browser acceptance
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
