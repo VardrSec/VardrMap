@@ -100,6 +100,15 @@ export type CoverageState =
 export type CoverageIdentity = {
   identity_id: string; state: string; reason: string; expected: string | null;
 };
+export type WorkflowReview = {
+  setup_count: number | null;
+  preflight_identity_ids: string[];
+  captures_declared: boolean;
+  substitutions_observed: boolean;
+  write_reset_declared: boolean;
+  fixed_profile_blockers: string[];
+  runner_validation_required: true;
+};
 export type CoverageOperation = {
   endpoint_id: string; method: string; scheme: string; host: string; port: number | null;
   path_template: string; observed_identities: string[]; state: CoverageState;
@@ -108,6 +117,7 @@ export type CoverageOperation = {
     case_id: string; name: string; test_case_id: string; identities: string[];
     expected: Record<string, string>; queued_jobs: number; executed: boolean; stale_runs: number;
     latest_job_id: string | null; assessment_status: string | null; reasons: string[];
+    workflow_review?: WorkflowReview;
   }[];
   identity_coverage: CoverageIdentity[];
   candidates: { open: number; promoted: number; false_positive: number; backing_evidence: number };

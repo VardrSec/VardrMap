@@ -331,6 +331,51 @@ def _historical_reason(run: _Run, case_by_id: dict) -> str:
     return "case_modified"
 
 
+def workflow_review(spec: object) -> dict:
+    """Describe declared workflow facts, never compile or approve an execution plan."""
+    case = spec if isinstance(spec, dict) else {}
+    setup = case.get("setup", [])
+    identities = case.get("identities", [])
+    verification = case.get("write_verification")
+    verification = verification if isinstance(verification, dict) else {}
+    reset = verification.get("reset")
+    people = list(identities) if isinstance(identities, list) else []
+    if isinstance(verification.get("identity"), dict):
+        people.append(verification["identity"])
+    preflights = sorted({
+        person["id"] for person in people
+        if isinstance(person, dict) and isinstance(person.get("id"), str)
+        and person.get("preflight") is not None
+    })
+    steps = setup if isinstance(setup, list) else []
+    captures = any(isinstance(step, dict) and bool(step.get("capture")) for step in steps)
+    captures = captures or (isinstance(reset, dict) and bool(reset.get("capture")))
+    # Match the fixed profile's conservative string observation, including keys and
+    # descriptions. This is not its compiler or a positive compatibility verdict.
+    pending, seen, substitutions = [spec], set(), False
+    while pending:
+        value = pending.pop()
+        if isinstance(value, str):
+            substitutions = substitutions or "{{" in value or "${" in value
+        elif isinstance(value, (dict, list)) and id(value) not in seen:
+            seen.add(id(value))
+            if isinstance(value, dict):
+                pending.extend(value.keys())
+                pending.extend(value.values())
+            else:
+                pending.extend(value)
+    return {
+        "setup_count": len(setup) if isinstance(setup, list) else None,
+        "preflight_identity_ids": preflights,
+        "captures_declared": captures,
+        "substitutions_observed": substitutions,
+        "write_reset_declared": reset is not None,
+        "fixed_profile_blockers": (["setup_capture"] if captures else [])
+        + (["template_substitution"] if substitutions else []),
+        "runner_validation_required": True,
+    }
+
+
 def _operation(
     endpoint, matched, attributed, runs_by_case, case_by_id, current_hash, queued_by_case,
     candidates_by_job, evidence_by_job, universe, observed_identities, reasons,
@@ -356,6 +401,7 @@ def _operation(
             "case_id": case.id,
             "name": case.name,
             "test_case_id": case.test_case_id,
+            "workflow_review": workflow_review(spec),
             "identities": identities,
             "expected": decisions,
             "queued_jobs": queued_by_case.get(case.id, 0),

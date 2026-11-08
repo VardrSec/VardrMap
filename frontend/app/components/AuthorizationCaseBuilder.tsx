@@ -3,6 +3,8 @@ import { useState } from "react";
 import ApiPlaybookGuide from "./ApiPlaybookGuide";
 import { useAppContext } from "../context/AppContext";
 import { Panel } from "./ui";
+import type { WorkflowReview } from "../types";
+import WorkflowReviewSummary from "./WorkflowReviewSummary";
 import { buttonClass, errorText, Field, fieldClass, Pages, requestJson } from "./workflowUi";
 
 const BOUNDARY_LABEL: Record<string, string> = {
@@ -15,6 +17,7 @@ export default function AuthorizationCaseBuilder({ engagementId, endpointIds, id
   const [document, setDocument] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
   const [drafts, setDrafts] = useState("");
+  const [workflowReviews, setWorkflowReviews] = useState<WorkflowReview[]>([]);
   const [reviewed, setReviewed] = useState(false);
   const [offset, setOffset] = useState(0);
   const [count, setCount] = useState(0);
@@ -30,8 +33,9 @@ export default function AuthorizationCaseBuilder({ engagementId, endpointIds, id
     setBusy(true); setError(""); setMessage(""); setReviewed(false);
     try {
       const input = source === "operations" ? { endpoint_ids: endpointIds, ...(boundary ? { boundary } : identityIds.length ? { identity_ids: identityIds } : {}) } : { openapi: JSON.parse(document) };
-      const data = await requestJson<{ drafts: unknown[]; total: number; boundary_context?: { boundary: string; missing_context: string[]; conflicts: { identity_id: string; attribute: string; values: string[] }[] } | null }>(authFetch, path + "/preview", { method: "POST", body: JSON.stringify({ ...input, base_url: baseUrl, limit: 50, offset: nextOffset }) });
+      const data = await requestJson<{ drafts: unknown[]; total: number; workflow_reviews?: WorkflowReview[]; boundary_context?: { boundary: string; missing_context: string[]; conflicts: { identity_id: string; attribute: string; values: string[] }[] } | null }>(authFetch, path + "/preview", { method: "POST", body: JSON.stringify({ ...input, base_url: baseUrl, limit: 50, offset: nextOffset }) });
       setContext(data.boundary_context ?? null);
+      setWorkflowReviews(data.workflow_reviews ?? []);
       setDrafts(JSON.stringify(data.drafts, null, 2)); setTotal(data.total); setCount(data.drafts.length); setOffset(nextOffset);
       setMessage("Drafts are ready for review. No cases have been stored or queued.");
     } catch (e) { setError(errorText(e)); } finally { setBusy(false); }
@@ -68,7 +72,8 @@ export default function AuthorizationCaseBuilder({ engagementId, endpointIds, id
           {context.conflicts.length > 0 && <p className="mt-1 text-[#f87171]">Contradictory declarations were not used: {context.conflicts.map((c) => `${c.identity_id} ${c.attribute} (${c.values.join(" vs ")})`).join("; ")}.</p>}
         </div>}
         <p className="text-xs text-[#94a3b8]">Edit the generated JSON. Identity credentials use <code>value_env</code> or <code>value_keychain</code>, never token values. Replace path variables, set one allow/deny/skip decision per identity, and review mutating operations. Remove unwanted cases from this page before saving.</p>
-        <Field label="Draft cases JSON"><textarea rows={20} spellCheck={false} disabled={busy} className={fieldClass + " font-mono"} value={drafts} onChange={e => { setDrafts(e.target.value); setReviewed(false); }} /></Field>
+        <Field label="Draft cases JSON"><textarea rows={20} spellCheck={false} disabled={busy} className={fieldClass + " font-mono"} value={drafts} onChange={e => { setDrafts(e.target.value); setReviewed(false); setWorkflowReviews([]); }} /></Field>
+        {workflowReviews.length ? workflowReviews.map((review, index) => <WorkflowReviewSummary key={index} review={review} label={`Draft ${index + 1}: workflow prerequisites`} />) : <WorkflowReviewSummary />}
         <details className="text-xs text-[#94a3b8]"><summary className="cursor-pointer">Check authenticated identities before testing</summary><p>Add a preflight to each authenticated identity using a known-good GET endpoint on the API origin. Match public subject, role or tenant metadata. Any failed check stops the case before authorization requests. Anonymous identities have no preflight. Secrets remain local credential references.</p><pre className="overflow-auto whitespace-pre-wrap">{JSON.stringify({ preflight: { url: "https://api.example.test/session", expected_status: 200, json_fields: { "user.id": "reviewed-user-id", "user.tenant_id": "reviewed-tenant-id" } } }, null, 2)}</pre></details>
         <p className="text-xs text-[#94a3b8]">Changing pages replaces this unsaved page. Save or copy your edits first.</p>
         <Pages offset={offset} count={count} total={total} busy={busy} change={n => void preview(n)} />

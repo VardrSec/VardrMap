@@ -4,6 +4,8 @@ The guardrail under test is that a runner-scoped key (what a compromised agent w
 can *create* a proposal but can never *approve* one — only a full-access key applies it.
 """
 
+import pytest
+
 
 def _runner_token(client, auth_headers) -> str:
     res = client.post("/auth/apikeys", json={"scope": "runner"}, headers=auth_headers)
@@ -175,3 +177,60 @@ def test_a_resolved_proposal_cannot_be_approved_again(client, auth_headers, prog
 
 def test_approve_unknown_proposal_is_404(client, auth_headers, program_id):
     assert client.post(f"/engagements/{program_id}/proposals/does-not-exist/approve", headers=auth_headers).status_code == 404
+
+
+@pytest.mark.parametrize("kind", ["queue_job", "queue_pipeline"])
+def test_queue_proposals_wait_for_operator_and_resolve_only_once(
+    client, auth_headers, program_id, monkeypatch, kind,
+):
+    import managed_authority
+
+    def no_authority_change(*args):
+        raise AssertionError("Queue approval must not change execution authority")
+
+    monkeypatch.setattr(managed_authority, "advance", no_authority_change)
+    runner = _runner_headers(client, auth_headers)
+    stage = {"tool_type": "httpx", "target_source": "scope", "config": {"rate": 10}}
+    payload = stage if kind == "queue_job" else {"stages": [stage, {**stage, "target_source": "recon"}]}
+    base = f"/engagements/{program_id}"
+    proposal = _propose(client, runner, program_id, kind=kind, payload=payload).json()
+    assert proposal["status"] == "pending"
+    assert client.get(f"{base}/jobs", headers=auth_headers).json()["jobs"] == []
+    path = f"{base}/proposals/{proposal['id']}"
+    assert client.post(path + "/approve", headers=runner).status_code == 403
+    approved = client.post(path + "/approve", headers=auth_headers)
+    assert approved.status_code == 200 and approved.json()["status"] == "approved"
+    jobs = client.get(f"{base}/jobs", headers=auth_headers).json()["jobs"]
+    assert len(jobs) == (1 if kind == "queue_job" else 2)
+    assert approved.json()["applied_resource_id"] in {job["id"] for job in jobs}
+    if kind == "queue_pipeline":
+        assert len([job for job in jobs if job["depends_on"] is not None]) == 1
+    assert client.post(path + "/approve", headers=auth_headers).status_code == 409
+    rejected = _propose(client, runner, program_id, kind=kind, payload=payload).json()
+    path = f"{base}/proposals/{rejected['id']}"
+    assert client.post(path + "/reject", headers=auth_headers).status_code == 200
+    assert client.post(path + "/approve", headers=auth_headers).status_code == 409
+    assert len(client.get(f"{base}/jobs", headers=auth_headers).json()["jobs"]) == len(jobs)
+
+
+@pytest.mark.parametrize("kind", ["queue_job", "queue_pipeline"])
+def test_queue_approval_revalidates_without_partial_jobs(client, auth_headers, program_id, kind):
+    valid = {"tool_type": "httpx", "target_source": "scope"}
+    invalid = {"tool_type": "not-a-tool", "target_source": "scope"}
+    payload = invalid if kind == "queue_job" else {"stages": [valid, invalid]}
+    proposal = _propose(client, auth_headers, program_id, kind=kind, payload=payload)
+    assert proposal.status_code == 201
+    base = f"/engagements/{program_id}"
+    assert client.post(f"{base}/proposals/{proposal.json()['id']}/approve", headers=auth_headers).status_code == 400
+    assert client.get(f"{base}/jobs", headers=auth_headers).json()["jobs"] == []
+    pending = client.get(f"{base}/proposals?status=pending", headers=auth_headers).json()["proposals"]
+    assert proposal.json()["id"] in {row["id"] for row in pending}
+    valid_payload = valid if kind == "queue_job" else {"stages": [valid]}
+    held = _propose(client, auth_headers, program_id, kind=kind, payload=valid_payload).json()
+    assert client.post(f"{base}/stop-work", json={"reason": "Operator halt"}, headers=auth_headers).status_code == 200
+    assert client.post(f"{base}/proposals/{held['id']}/approve", headers=auth_headers).status_code == 403
+    assert client.get(f"{base}/jobs", headers=auth_headers).json()["jobs"] == []
+    pending = client.get(f"{base}/proposals?status=pending", headers=auth_headers).json()["proposals"]
+    assert held["id"] in {row["id"] for row in pending}
+    if kind == "queue_pipeline":
+        assert client.post(f"{base}/pipelines", json=valid_payload, headers=auth_headers).status_code == 403

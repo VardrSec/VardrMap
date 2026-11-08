@@ -2482,3 +2482,35 @@ The adapter preserves authentication/access status codes; malformed bodies use
 422, unsupported media 415, excess body 413, body timeout 408, disconnect 400,
 service refusal 409 and unavailable service 503. No mutation endpoint is exposed.
 See [ADR 0012](adr/0012-unregistered-observation-http.md).
+
+### Workflow review metadata
+
+Coverage case entries expose derived `workflow_review` metadata. Draft preview
+returns parallel `workflow_reviews` without adding fields to stored Gate specs.
+They describe setup count, preflight identity IDs, observed captures/substitution
+and write-reset presence. Known capture/substitution blockers are conservative;
+`runner_validation_required` is always true, never a positive plan verdict. No
+response content or credential value is projected. Assessment/history semantics
+are unchanged. Record prior-object, cleanup and expiry assumptions in the existing
+case description; no new workflow schema or execution authority is introduced.
+
+### Operator-approved queue proposals
+
+Proposal kinds additionally accept `queue_job` (the existing JobCreate payload)
+and `queue_pipeline` (the existing PipelineCreate payload, one to eight stages).
+Creation is inert. Full-scope operator approval requires engagement member-write,
+revalidates current inputs, then commits proposal resolution, jobs and audits in
+one transaction under the existing parent/proposal locks. Rejection creates no
+jobs; resolved proposals cannot enqueue again. `applied_resource_id` identifies
+the first job, with pipeline dependencies retained in jobs. Queue approval does
+not advance the authorization revision or issue an execution contract.
+Both ordinary and approved pipeline creation now check Stop Work before any job
+is written; scope/window checks retain their existing advisory meaning.
+
+Gate uploads may carry bounded optional Runner/tool provenance. These values are
+Runner-reported, not server-attested. Omitted historical provenance remains
+unknown; old receipt hashing is preserved when the field is absent. Deliverable
+snapshots retain evidence creation times and selected, same-engagement job context
+with frozen case hashes and redacted input structure. Request payloads and
+credentials may be omitted; the snapshot identifies missing operator inputs and
+does not claim an independent reassessment or grant replay authority.

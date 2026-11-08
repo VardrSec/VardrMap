@@ -9,7 +9,7 @@ import { Panel, PrimaryButton, DangerButton } from "./ui";
 // it. reason and source are the agent's own words: untrusted text, rendered only as text.
 type Proposal = {
   id: string;
-  kind: "scope_in" | "scope_out" | "authorization" | "rate_ceiling";
+  kind: "scope_in" | "scope_out" | "authorization" | "rate_ceiling" | "queue_job" | "queue_pipeline";
   payload: Record<string, unknown>;
   reason: string;
   source: string;
@@ -22,6 +22,8 @@ const KIND_LABEL: Record<Proposal["kind"], string> = {
   scope_out: "Add out-of-scope",
   authorization: "Add authorization",
   rate_ceiling: "Set request-rate ceiling",
+  queue_job: "Queue job",
+  queue_pipeline: "Queue pipeline",
 };
 
 function summarize(p: Proposal): string {
@@ -30,6 +32,8 @@ function summarize(p: Proposal): string {
     const sev = v.max_severity ? ` · max ${String(v.max_severity)}` : "";
     return `${String(v.value ?? "")} (${String(v.kind ?? "domain")})${sev}`;
   }
+  if (p.kind === "queue_job") return `${String(v.tool_type ?? "")} from ${String(v.target_source ?? "")}`;
+  if (p.kind === "queue_pipeline") return `${Array.isArray(v.stages) ? v.stages.length : 0} ordered stages`;
   if (p.kind === "rate_ceiling") return `${String(v.rate ?? "")} requests/sec`;
   if (p.kind === "authorization") {
     return [v.reference, v.permits].filter(Boolean).map(String).join(" · ") || "authorization record";
@@ -82,6 +86,11 @@ export default function ProposalsPanel({ engagement }: { engagement: Engagement 
             <div className="text-sm font-medium text-[#f1f5f9]">
               {KIND_LABEL[p.kind]}: {summarize(p)}
             </div>
+            {(p.kind === "queue_job" || p.kind === "queue_pipeline") && (
+              <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-all text-xs">
+                {JSON.stringify(p.payload, null, 2)}
+              </pre>
+            )}
             {p.reason && <div className="mt-1 text-xs text-muted">Reason: {p.reason}</div>}
             {p.source && <div className="mt-0.5 break-all text-xs text-muted">Source: {p.source}</div>}
             {p.proposed_by && <div className="mt-0.5 text-xs text-muted">Proposed by {p.proposed_by}</div>}

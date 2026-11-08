@@ -4,6 +4,18 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Add inert job/pipeline queue proposals. Full-scope operator approval revalidates
+  inputs and atomically commits jobs, audit and proposal resolution. Queue approval
+  grants no execution authority. Shared pipeline creation now honors Stop Work
+  before writing jobs, retaining advisory scope/window semantics.
+- Retain selected execution and redacted case context in portable deliverables,
+  including timing, terminal status and bounded Runner-reported tool identity.
+  Unknown legacy provenance and omitted request inputs remain explicit.
+
+- Show declared workflow prerequisites and known fixed-profile limitations beside
+  authorization coverage and draft review, without changing assessment outcomes,
+  compiling plans or adding setup, cleanup or credential-lifecycle execution.
+
 - Show an operation × identity × boundary matrix with current, stale, missing,
   conflicting and inconclusive case-backed results. Keep boundary questions open
   while any relevant identity lacks a result. Grounded drafts with no declared

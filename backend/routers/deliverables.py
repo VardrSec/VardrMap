@@ -9,9 +9,10 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy.orm import Session
 
 import finding_history
+import redaction
 from db import get_db
 from deps import get_current_user, get_engagement_or_404, log_action, require_member_write
-from models import Authorization, DeliverableRevision, EngagementDeliverable, Evidence, Finding, FindingActivity, ScopeItem
+from models import Authorization, DeliverableRevision, EngagementDeliverable, Evidence, Finding, FindingActivity, ScanJob, ScopeItem
 from schemas import ReportStatus
 from security import strip_html
 from serializers import serialize_finding, serialize_scope_item
@@ -92,15 +93,41 @@ def _snapshot(db, engagement, body, revision):
     history = db.query(FindingActivity).filter(FindingActivity.program_id == engagement.id, FindingActivity.finding_id.in_(ids), FindingActivity.kind.in_(("remediation", "retest"))).order_by(FindingActivity.created_at, FindingActivity.id).all() if ids else []
     scopes = db.query(ScopeItem).filter(ScopeItem.program_id == engagement.id).order_by(ScopeItem.id).all()
     auths = db.query(Authorization).filter(Authorization.program_id == engagement.id).order_by(Authorization.created_at, Authorization.id).all()
+    jobs = db.query(ScanJob).filter(ScanJob.program_id == engagement.id, ScanJob.id.in_({e.job_id for e in evidence if e.job_id})).order_by(ScanJob.id).all()
+    context = []
+    for job in jobs:
+        case = job.case_snapshot if isinstance(job.case_snapshot, dict) else None
+        reported = []
+        for item in evidence:
+            if item.job_id != job.id:
+                continue
+            try:
+                from routers.jobs import RunnerEvidenceProvenance
+                value = json.loads(item.body).get("provenance", {})
+                value = RunnerEvidenceProvenance(**value).model_dump()
+            except (ValueError, TypeError, AttributeError):
+                value = {"runner_version": "unknown", "tools": {}}
+            reported.append({"evidence_id": item.id, **value, "basis": "runner_reported_not_server_attested"})
+        from assessments import case_hash
+        context.append({
+            "job_id": job.id, "tool": job.tool_type, "origin": "map_job", "target_source": job.target_source,
+            "status": job.status, "started_at": _iso(job.started_at), "completed_at": _iso(job.completed_at),
+            "error_message": redaction.redact_text(job.error_message),
+            "case_hash": case_hash(case) if case else None,
+            "case_snapshot_source": "claimed_job" if case else "unavailable",
+            **(redaction.case_snapshot(case) if case else {"case_snapshot": None, "snapshot_kind": "unavailable"}),
+            "reported_provenance": reported,
+        })
     snapshot = {
         "schema_version": 1, "revision": revision, "generated_at": datetime.now(timezone.utc).isoformat(),
         "editorial": body.model_dump(exclude={"base_revision"}),
         "engagement": {"id": engagement.id, "name": engagement.name, "type": engagement.engagement_type, "status": engagement.engagement_status, "client": engagement.client.name if engagement.client else "", "starts_at": _iso(engagement.starts_at), "ends_at": _iso(engagement.ends_at)},
         "scope": [{**serialize_scope_item(s), "scope_type": s.scope_type} for s in scopes],
         "authorizations": [{"reference": a.reference, "authorized_by": a.authorized_by, "window_start": _iso(a.window_start), "window_end": _iso(a.window_end), "status": a.status} for a in auths],
+        "jobs": context,
         "findings": [serialize_finding(f) for f in findings],
         "activity": [{"finding_id": a.finding_id, "kind": a.kind, "outcome": a.outcome, "notes": a.notes, "created_at": _iso(a.created_at)} for a in history],
-        "evidence": [{"id": e.id, "finding_id": e.finding_id, "title": e.title, "kind": e.kind, "body": e.body, "content_hash": e.content_hash, "sensitivity": e.sensitivity, "source": e.source, "job_id": e.job_id, "case_id": e.case_id, "case_ref": e.case_ref, "identity_id": e.identity_id, "observed_outcome": e.observed_outcome, "expected_decision": e.expected_decision} for e in evidence],
+        "evidence": [{"id": e.id, "finding_id": e.finding_id, "title": e.title, "kind": e.kind, "body": e.body, "content_hash": e.content_hash, "created_at": _iso(e.created_at), "sensitivity": e.sensitivity, "source": e.source, "job_id": e.job_id, "case_id": e.case_id, "case_ref": e.case_ref, "identity_id": e.identity_id, "observed_outcome": e.observed_outcome, "expected_decision": e.expected_decision} for e in evidence],
     }
     snapshot = finding_history.clean_tree(snapshot)
     if len(json.dumps(snapshot, ensure_ascii=False).encode("utf-8")) > MAX_SNAPSHOT_BYTES:
@@ -130,6 +157,8 @@ def _markdown(s):
         )
         # Indented blocks cannot be escaped by target-controlled triple backticks.
         lines += [f"### {item['title'] or item['id']}", f"Sensitivity: {item['sensitivity']} | Source: {item['source']} | SHA-256: {item['content_hash']}", provenance, "\n".join("    " + line for line in item["body"].splitlines())]
+    for job in s.get("jobs", []):
+        lines += ["## Recorded execution context", "    " + json.dumps(job, ensure_ascii=False, sort_keys=True)]
     return "\n\n".join(lines) + "\n"
 
 
