@@ -4,6 +4,8 @@ A platform for authorized security testing. Run an engagement for a client under
 
 Bug bounty work is one `engagement_type` among four (`bug_bounty`, `pentest`, `red_team`, `internal`) — a supported mode rather than the centre of gravity.
 
+New Moon source-built capabilities are qualified through the [VardrSec distribution](https://github.com/VardrSec/VardrSec). Its [acceptance ledger](https://github.com/VardrSec/VardrSec/blob/main/docs/new-moon-acceptance.md) distinguishes delivered workflows, remaining safety gates and release approval. A merged component is not a published Community release.
+
 ---
 
 ## Tech Stack
@@ -25,7 +27,7 @@ Bug bounty work is one `engagement_type` among four (`bug_bounty`, `pentest`, `r
 - Clients — the organisation the work is performed for; deleting one detaches its engagements rather than deleting the testing record
 - Authorization records — who granted permission, the reference (SOW, ticket, policy URL), and the window it covers. `GET /engagements/{id}/authorization/active` answers "is there permission right now?"
 - Organizations — tenancy sits on an org, so a teammate can operate an engagement's jobs and share a runner fleet
-- Stop-work — prevents new execution until released; already running processes are not cancelled
+- Stop-work — prevents new execution. Active cancellation requires the supported controlled Runner path; the legacy policy check alone does not terminate an already running local process
 
 **Testing workflow**
 - Track in-scope and out-of-scope assets with kind and notes; subdomain coverage requires an explicit wildcard
@@ -37,6 +39,7 @@ Bug bounty work is one `engagement_type` among four (`bug_bounty`, `pentest`, `r
 - **Burp-assisted API Surface** — explicitly promote selected Proxy, Repeater, Intruder, Scanner, or Organizer exchanges into a canonical operation inventory with identity/status coverage and retained redacted request/response evidence. Passive capture remains off.
 - **API authorization testing** via [VardrGate](https://github.com/VardrSec/VardrGate) — store a test case describing one request replayed as several identities, queue it, and get BOLA / BFLA / cross-tenant / privilege-escalation findings back as triageable results. Credentials are referenced (`value_env` / `value_keychain`), never stored.
 - **API assessment outcomes** — distinguish completed commands from conclusive, partial or inconclusive assessments. Claim-time case snapshots and result hashes bind evidence to the reviewed case; conclusive does not mean secure or independently verified.
+- **Authorization coverage and review** — operation × identity × boundary gaps, grounded reviewable drafts, and pending AI queue proposals that require operator approval. Unsupported or inconclusive assessments do not count as successful coverage.
 - **Execution evidence** — retain job, case and identity provenance, inspect redacted records in the job panel, and link selected evidence to findings. Historical or manual provenance remains unknown.
 - **API playbooks** — three original versioned guides shared by the case builder and Runner MCP: ownership/tenant separation, privileged functions, and evidence/retest/handoff. Guidance records no coverage and queues no work.
 - Track findings with severity, asset, status, and full write-up fields
@@ -52,25 +55,42 @@ Bug bounty work is one `engagement_type` among four (`bug_bounty`, `pentest`, `r
 - Job Board + Terminal — three board views (Stream, Pipeline, Table); selecting a job opens a terminal that polls live lifecycle events (started → running → done/failed) every 3 s
 
 **VardrRunner** — local CLI companion ([VardrSec/VardrRunner](https://github.com/VardrSec/VardrRunner), its own repo):
-- Install the isolated CLI from PyPI with `pipx install vardrrunner`; update it with `vardrrunner update` (0.50.0+; older copies run `pipx upgrade vardrrunner` once)
-- Set up a machine with `vardrrunner init --url <api-url>`: it prompts for a runner-scoped `vmap_` key (stored in the OS keychain), names the runner and runs `doctor`. VardrRunner runs only when invoked — no startup service or background worker
+- Install the isolated CLI from PyPI with `pipx install vardrrunner`; update it with `vardrrunner update` (0.50.0+; older copies run `pipx upgrade vardrrunner` once). New managed workflows require the reviewed source-built cohort, not merely a package installation
+- Set up a machine with `vardrrunner init --url <api-url>`: it prompts for a runner-scoped `vmap_` key (stored in the OS keychain), names the runner and runs `doctor`. Ordinary setup installs no startup service and starts no worker
 - `vardrrunner tools install --all` — install, update or repair the pinned scan tools; safe to rerun
 - `vardrrunner doctor` — check config, API connectivity and local tool availability; heartbeats report hostname, OS, version and per-tool status to VardrMap
 - Run the ten supported recon/scanner tools locally, or execute queued VardrGate authorization cases; results uploaded automatically and lifecycle events posted at each stage
 - Queue scan jobs from the UI, then execute them on the runner machine with `vardrrunner jobs run`
+- The source-built Full distribution also provides [explicit managed setup](https://github.com/VardrSec/VardrSec/blob/main/docs/local-managed-setup.md). Worker enablement and individual job approval remain separate; normal startup stays inert
 - Wildcard scope entries (`*.example.com`) handled via subfinder enumeration
 
 ---
 
-## Scope is advisory
+<a id="scope-is-advisory"></a>
 
-VardrMap evaluates every job against the engagement's authorization, testing window, and scope rules, and **reports what it finds without refusing to run**. Findings come back as a `warnings` array on job creation, claim, and the transition into `running`, carrying stable reason codes (`target_out_of_scope`, `outside_testing_window`, `authorization_missing`, …).
+## Scope and execution modes
 
-Staying inside scope is the operator's responsibility, the same as it is with every other tool in the kit — Burp proxies any host you point it at, and nmap scans any range you hand it. A platform that blocks on its own reading of a scope rule interrupts legitimate work, and scope in the field is messier than any rule set.
+**Legacy/manual workflows retain advisory policy behavior.** Scope, testing-window
+and authorization concerns are reported as `warnings` on job creation, claim and
+transition into `running`, with stable codes such as `target_out_of_scope`,
+`outside_testing_window` and `authorization_missing`. These warnings alone are
+not an execution boundary; the operator remains responsible for authorized scope.
 
-The one exception is **stop-work**, which returns `403` to prevent new execution; it does not cancel already running local processes. That is not the platform second-guessing the operator: it is the operator's own emergency brake, and a brake that can be ignored is not a brake.
+**Controlled managed workflows are different.** The reviewed Map/Runner path uses
+signed authorization, issuer/origin/job binding, credential grants, expiry and
+execution budgets. Strict-mode refusals are enforced through that path. An
+ordinary queued job or API key is not a substitute for its required approval.
+Existing manual behavior is not silently migrated to managed mode.
 
-Rationale in [docs/adr/0001-central-policy-engine.md](docs/adr/0001-central-policy-engine.md) § Amendment.
+Stop-work blocks new execution. Supported controlled workers also observe stop and
+permission state to cancel active work within their documented bounds. This does
+not establish instantaneous remote cancellation during a disconnect or remove
+unaccepted host/suspension behavior. See the [worker operator guide](https://github.com/VardrSec/VardrSec/blob/main/docs/nm2-worker-operator.md)
+and [current safety dispositions](https://github.com/VardrSec/VardrSec/blob/main/docs/new-moon-architecture-review.md).
+
+The [original advisory-policy rationale](docs/adr/0001-central-policy-engine.md)
+remains a historical compatibility decision, not a description of every newer
+execution mode.
 
 ---
 
@@ -142,19 +162,27 @@ npm run dev
 | [docs/local-authentication.md](docs/local-authentication.md) | Configured login methods, HTTPS, terminal account bootstrap and recovery |
 | [docs/api-playbooks.md](docs/api-playbooks.md) | Original versioned API engagement guidance and human review boundaries |
 | [scripts/integration/README.md](scripts/integration/README.md) | Disposable Map → Runner → Gate acceptance and hosted staging boundaries |
-| [docs/implementation-roadmap.md](docs/implementation-roadmap.md) | Historical phased delivery plan; current backlog lives in roadmap.md |
-| [docs/adr/](docs/adr/) | Architecture decision records |
+| [docs/implementation-roadmap.md](docs/implementation-roadmap.md) | Historical phased delivery plan; not current acceptance status |
+| [docs/adr/](docs/adr/) | Dated architecture decisions and rationale, not a live completion scoreboard |
 | [docs/security-testing.md](docs/security-testing.md) | Manual security testing record — BOLA, XSS, SQLi |
-| [docs/roadmap.md](docs/roadmap.md) | Forward-looking backlog (next milestone) |
+| [docs/roadmap.md](docs/roadmap.md) | Backlog and proposals; reconcile dated entries against merged source and the distribution ledger |
 | [CHANGELOG.md](CHANGELOG.md) | Version history |
 
 ---
 
 ## Roadmap
 
-See [docs/roadmap.md](docs/roadmap.md) for the current backlog. Remaining work includes identity/session preflight, broader API guidance, organization administration and organization-bound runner credentials, engagement-wide execution budgets, signed contracts, running-process cancellation, remote MCP OAuth, and the physical table rename.
+The [New Moon acceptance ledger](https://github.com/VardrSec/VardrSec/blob/main/docs/new-moon-acceptance.md)
+records the accepted source-built Community scope. Managed authorization and
+budgets, supported controlled cancellation, per-identity boundary coverage and
+operator-reviewed queue proposals now have implementation and qualification
+records; they should not be treated as wholly unimplemented backlog items.
 
-Organization access, finding activity/retest records, reviewed case authoring and client deliverable revisions are implemented. Assessment outcomes, structured execution evidence and shared playbooks are recorded under **Unreleased**; their presence in this branch does not establish a production deployment. Deploy the matching backend migration before releasing the companion Runner changes.
+[docs/roadmap.md](docs/roadmap.md) retains follow-on proposals. Broader stateful
+coverage, unqualified network/platform modes and remaining research/release gates
+are not implied complete by the delivered features. Deploy matching backend
+migrations and reviewed component versions; neither branch content nor component
+CI alone establishes production deployment or release approval.
 
 ---
 
