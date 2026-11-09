@@ -30,3 +30,10 @@ Thumbs.db
 .integration/
 .local-auth-deps/
 frontend/.local-auth-e2e/
+
+# Local working notes and agent instructions are not published artifacts.
+AGENTS.md
+CLAUDE.md
+/.private-notes/
+/internal-notes/
+/VardrSec-Internal-Notes/
