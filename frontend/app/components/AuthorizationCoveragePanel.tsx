@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useAppContext } from "../context/AppContext";
 import type { AuthorizationCoverage, CoverageEvidenceRef, CoverageOperation, CoverageState } from "../types";
 import { Panel } from "./ui";
+import WorkflowReviewSummary from "./WorkflowReviewSummary";
 
 /**
  * Where authorization testing is incomplete, computed by the backend from stored
@@ -157,7 +158,8 @@ export default function AuthorizationCoveragePanel({ engagementId, onDraft }: { 
           {(op.priority_reasons ?? []).length > 0 && <ul className="mt-1 space-y-0.5 text-[10px] text-[#a1a1aa]">
             {op.priority_reasons.map((reason) => <li key={reason.code}>{reason.detail}</li>)}</ul>}</td>
         <td className="py-2.5 pr-4"><StateBadge state={op.state} />
-          {op.cases.length > 0 && <div className="mt-1 text-[10px] text-muted">{op.cases.length} reviewed case{op.cases.length === 1 ? "" : "s"}</div>}</td>
+          {op.cases.length > 0 && <div className="mt-1 text-[10px] text-muted">{op.cases.length} reviewed case{op.cases.length === 1 ? "" : "s"}</div>}
+          {op.cases.map(item => item.workflow_review ? <WorkflowReviewSummary key={item.case_id} review={item.workflow_review} label={`${item.name}: workflow prerequisites`} /> : null)}</td>
         <td className="py-2.5 pr-4 font-mono text-[#94a3b8]">{op.candidates.open + op.candidates.promoted > 0
           ? `${op.candidates.open} open · ${op.candidates.promoted} promoted · ${op.candidates.backing_evidence} with evidence` : "—"}
           {(op.candidate_evidence ?? []).map((reference) => <EvidenceRecord key={reference.evidence_id} engagementId={engagementId} reference={reference} />)}</td>

@@ -7,7 +7,7 @@ an administrator, an anonymous caller and a caller with rejected credentials.
 """
 import pytest
 
-from authorization_coverage import operation_matches, parse_request
+from authorization_coverage import operation_matches, parse_request, workflow_review
 from assessments import case_hash
 from db import SessionLocal
 from models import ApiEndpoint, AuthorizationTestCase, Evidence, ScanItem, ScanJob
@@ -295,6 +295,22 @@ def test_draft_reuses_engagement_identities_as_references_only(client, auth_head
     # Access policy is never inferred: every decision stays at skip until a human sets it.
     assert {e["decision"] for e in draft["expected_access"]} == {"skip"}
     assert not any("preflight" in i or "value" in i["credential"] for i in draft["identities"])
+    assert res.json()["workflow_reviews"] == [workflow_review(draft)]
+    summary = operation(coverage(client, auth_headers, program_id), "GET", "/orders/{id}")["cases"][0]["workflow_review"]
+    assert summary["setup_count"] == 0 and summary["runner_validation_required"] is True
+    declared = {"description": "Review {{object_id}}", "setup": [{"capture": {"id": "id"}}],
+                "identities": [{"id": "owner", "preflight": {}}],
+                "write_verification": {"reset": {"request": {}}}}
+    before = repr(declared)
+    assert workflow_review(declared) == {
+        "setup_count": 1, "preflight_identity_ids": ["owner"], "captures_declared": True,
+        "substitutions_observed": True, "write_reset_declared": True,
+        "fixed_profile_blockers": ["setup_capture", "template_substitution"],
+        "runner_validation_required": True,
+    }
+    assert repr(declared) == before
+    assert workflow_review({"setup": 1, "identities": None, "write_verification": []})["setup_count"] is None
+    assert workflow_review(None)["runner_validation_required"] is True
 
 
 def test_drafts_without_identity_ids_are_unchanged(client, auth_headers, program_id):

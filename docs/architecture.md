@@ -757,3 +757,28 @@ complete another identity's boundary. The UI pages these cells through the exist
 engagement-authorized endpoint and displays the origin to distinguish equal paths
 on different targets. Grounded drafts never invent an identity or access decision.
 No execution, authorization, storage schema or installation contract changes.
+
+## Stateful requirement visibility
+
+The existing coverage projection derives small workflow-review metadata from
+reviewed case specs; the case preview uses the same pure helper. It observes facts
+and known fixed-profile blockers, never imports or duplicates Runner's compiler.
+The coverage panel and draft builder share a text-only summary. Editing draft JSON
+clears generated summaries rather than presenting stale data as validation. Cleanup,
+credential expiry/refresh and prior-object state remain explicit operator review
+requirements in the existing description. Write reset is not general teardown, and
+a point-in-time access assessment does not establish lifecycle coverage.
+
+## Queue review and portable execution context
+
+AI queue requests reuse pending proposals, not a new service. Approval reuses the
+ordinary enqueue validators in a caller-owned transaction; ordinary endpoints
+retain their commit/notification behavior. Only the committed transaction emits
+job notifications. Queue approval does not alter execution authority, and Stop
+Work prevents any pipeline rows from being written.
+
+Deliverables join only selected evidence jobs from the same engagement and retain
+their frozen reviewed case context. Redacted derivatives preserve the original
+case hash as correlation metadata rather than claiming byte identity. Exported
+Runner/tool identity is explicitly reported metadata; missing historical fields
+remain unknown. No database migration, automatic cleanup or replay is introduced.

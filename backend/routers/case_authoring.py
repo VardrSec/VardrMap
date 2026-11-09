@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
+from authorization_coverage import workflow_review
 from authorization_relationships import draft_for_boundary, merge_identities
 from db import get_db
 from deps import get_current_user, get_engagement_or_404, log_action, require_member_write
@@ -168,7 +169,8 @@ def preview_cases(program_id: str, body: DraftRequest, current_user: dict = Depe
         # Every expected decision is skip until a person reviews it, so a draft is never ready to run.
         "ready_to_run": False,
     }
-    return {"drafts": [_draft(*op, copy.deepcopy(reuse), context) for op in page],
+    drafts = [_draft(*op, copy.deepcopy(reuse), context) for op in page]
+    return {"drafts": drafts, "workflow_reviews": [workflow_review(draft["spec"]) for draft in drafts],
             "boundary_context": boundary_context, "total": len(operations), "offset": body.offset, "limit": body.limit, "next_offset": end if end < len(operations) else None,
             "review_notes": ["No cases have been stored or queued.", "Replace path variables and review request bodies for mutating operations.", "Set identity secret references and decide expected access; observed responses do not determine authorization policy."]}
 

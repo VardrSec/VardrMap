@@ -424,13 +424,13 @@ def serialize_job(j: ScanJob) -> dict:
     }
 
 
-@router.post("/engagements/{program_id}/jobs")
-def create_job(
-    program_id: str,
-    body: JobCreate,
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
+def notify_enqueued_job(job: ScanJob) -> None:
+    """Publish only after the caller has committed the complete enqueue transaction."""
+    _sse.notify(job.program_id, {"type": "job_update", "job_id": job.id, "status": job.status})
+
+
+def enqueue_job(program_id: str, body: JobCreate, current_user: dict, db: Session):
+    """Validate and flush one job/audit in the caller-owned transaction; never commit."""
     engagement = get_engagement_or_404(program_id, current_user, db)
     require_member_write(engagement, current_user, db)
     if body.tool_type not in _VALID_TOOLS:
@@ -471,9 +471,22 @@ def create_job(
     db.add(job)
     db.flush()  # assigns job.id without committing
     log_action(db, current_user["github_id"], "create", "scan_job", job.id, program_id)
+    return job, decision
+
+
+@router.post("/engagements/{program_id}/jobs")
+def create_job(
+    program_id: str,
+    body: JobCreate,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    engagement = get_engagement_or_404(program_id, current_user, db)
+    require_member_write(engagement, current_user, db)
+    job, decision = enqueue_job(program_id, body, current_user, db)
     db.commit()
     db.refresh(job)
-    _sse.notify(program_id, {"type": "job_update", "job_id": job.id, "status": job.status})
+    notify_enqueued_job(job)
     return {**serialize_job(job), "warnings": enforcement.as_warnings(decision)}
 
 
@@ -506,20 +519,8 @@ def _validate_dependency(parent_id: str, program_id: str, github_id: str, db: Se
         raise HTTPException(status_code=400, detail="depends_on must reference an existing job in this engagement")
 
 
-@router.post("/engagements/{program_id}/pipelines", status_code=201)
-def create_pipeline(
-    program_id: str,
-    body: PipelineCreate,
-    current_user: dict = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    """Queue an ordered chain of jobs where each stage waits on the previous one.
-
-    The canonical recon pipeline is subfinder -> httpx -> nuclei: one click queues
-    all three, and each stage only becomes eligible in GET /jobs/pending once its
-    parent completes. Validation is per-stage and identical to single-job creation,
-    so a bad stage rejects the whole pipeline before anything is written.
-    """
+def enqueue_pipeline(program_id: str, body: PipelineCreate, current_user: dict, db: Session):
+    """Validate all stages and flush their jobs/audits without committing or notifying."""
     engagement = get_engagement_or_404(program_id, current_user, db)
     require_member_write(engagement, current_user, db)
     stage_configs: list[dict] = []
@@ -538,6 +539,14 @@ def create_pipeline(
             _validate_test_case_ref(program_id, config, db)
         stage_configs.append(config)
 
+    # Preserve advisory scope/window behavior, but honor Stop Work before any
+    # pipeline row is flushed, including when an operator approves a proposal.
+    for stage, config in zip(body.stages, stage_configs):
+        enforcement.check(
+            db, engagement, capability=stage.tool_type,
+            targets=_resolve_targets(program_id, stage.target_source, config, db),
+        )
+
     created: list[ScanJob] = []
     prev_id: Optional[str] = None
     for stage, config in zip(body.stages, stage_configs):
@@ -554,10 +563,30 @@ def create_pipeline(
         log_action(db, current_user["github_id"], "create", "scan_job", job.id, program_id)
         created.append(job)
         prev_id = job.id
+    return created
+
+
+@router.post("/engagements/{program_id}/pipelines", status_code=201)
+def create_pipeline(
+    program_id: str,
+    body: PipelineCreate,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Queue an ordered chain of jobs where each stage waits on the previous one.
+
+    The canonical recon pipeline is subfinder -> httpx -> nuclei: one click queues
+    all three, and each stage only becomes eligible in GET /jobs/pending once its
+    parent completes. Validation is per-stage and identical to single-job creation,
+    so a bad stage rejects the whole pipeline before anything is written.
+    """
+    engagement = get_engagement_or_404(program_id, current_user, db)
+    require_member_write(engagement, current_user, db)
+    created = enqueue_pipeline(program_id, body, current_user, db)
     db.commit()
     for job in created:
         db.refresh(job)
-    _sse.notify(program_id, {"type": "job_update", "job_id": created[0].id, "status": created[0].status})
+    notify_enqueued_job(created[0])
     return {"jobs": [serialize_job(j) for j in created]}
 
 
@@ -1151,6 +1180,17 @@ class IdentityPreflightResult(BaseModel):
     status_code: int = Field(ge=0, le=599, strict=True)
 
 
+class ToolEvidenceProvenance(BaseModel):
+    hash_basis: Literal["unknown", "verified_runtime_binary", "qualified_managed_binary", "approved_plan_not_observed"] = "unknown"
+    sha256: str = Field(default="unknown", pattern=r"^([a-f0-9]{64}|unknown)$")
+    version: str = Field(default="unknown", min_length=1, max_length=80)
+
+
+class RunnerEvidenceProvenance(BaseModel):
+    runner_version: str = Field(default="unknown", min_length=1, max_length=80)
+    tools: dict[Literal["vardrgate_api_test", "dnsx", "httpx"], ToolEvidenceProvenance] = Field(default_factory=dict)
+
+
 class VardrGateUpload(BaseModel):
     """One `engine.Result` from VardrGate.
 
@@ -1160,6 +1200,7 @@ class VardrGateUpload(BaseModel):
     not rest on the sender.
     """
 
+    provenance: RunnerEvidenceProvenance | None = None
     case_hash: str = Field(default="", pattern=r"^([a-f0-9]{64})?$")
     test_case_id: str = Field(default="", max_length=200)
     executions: list[dict] = Field(default_factory=list, max_length=100)
@@ -1250,6 +1291,8 @@ def store_gate_result(db, job, body, current_user):
     guard. The managed adapter supplies its stronger owned-attempt validation.
     """
     receipt_payload = body.model_dump()
+    if body.provenance is None:
+        receipt_payload.pop("provenance")  # Keep historical upload receipt hashes unchanged.
     # Preserve hashes of legacy receipts created before case_hash existed.
     if not body.case_hash:
         receipt_payload.pop("case_hash")
@@ -1393,6 +1436,10 @@ def store_gate_result(db, job, body, current_user):
             semantic_rows = [assessments.safe_semantic_row(a) for a in body.assessments if a.get("identity_id") == execution.get("identity_id")]
             if semantic_rows:
                 detail["scanner_assessments"] = semantic_rows
+        detail["provenance"] = {
+            **(body.provenance.model_dump() if body.provenance else {"runner_version": "unknown", "tools": {}}),
+            "basis": "runner_reported_not_server_attested",
+        }
         text = json.dumps(redaction.redact_mapping(detail), indent=2, sort_keys=True, default=str)
         db.add(
             Evidence(

@@ -1,4 +1,4 @@
-"""Agent proposals: inert scope/authorization/rate changes awaiting operator approval.
+"""Agent proposals: inert permission changes or job requests awaiting operator approval.
 
 An MCP agent can *propose* a change through the VardrRunner MCP server, but the server
 exposes no approve tool (VardrRunner ADR 0015). A proposal is created here as ``pending``
@@ -23,7 +23,7 @@ from deps import (
     require_full_scope,
     require_member_write,
 )
-from models import AgentProposal, Authorization, ScopeItem
+from models import AgentProposal, Authorization, ScanJob, ScopeItem
 from schemas import AuthorizationCreate, ProposalCreate, ScopeItemCreate
 from serializers import serialize_proposal
 
@@ -39,9 +39,14 @@ _AUTH_DATE_FIELDS = ("authorized_at", "window_start", "window_end")
 
 def _validated_payload(kind: str, payload: dict) -> dict:
     """Return a clean, stored-ready payload for the kind, or raise 400. The same sanitisers
-    the real scope/authorization endpoints use run here, so an approval later needs no
-    re-sanitisation and a malicious value never reaches the database."""
+    the real endpoints use run here. Queue payloads reuse their request models and
+    are validated again against current engagement/config/case state at approval."""
     try:
+        if kind in ("queue_job", "queue_pipeline"):
+            from routers.jobs import JobCreate, PipelineCreate
+
+            model = JobCreate if kind == "queue_job" else PipelineCreate
+            return model(**payload).model_dump()
         if kind in ("scope_in", "scope_out"):
             item = ScopeItemCreate(**payload)
             out = {"value": item.value, "kind": item.kind, "notes": item.notes or ""}
@@ -140,12 +145,21 @@ def _proposal_or_404(program_id: str, proposal_id: str, current_user: dict, db: 
     return engagement, proposal
 
 
-def _apply(engagement, proposal: AgentProposal, db: Session) -> str:
+def _apply(engagement, proposal: AgentProposal, db: Session, current_user: dict) -> str:
     """Apply an approved proposal; return the id of any row it created, or "" for a rate change."""
     from managed_authority import advance
 
-    engagement = advance(db, engagement)
     kind, payload = proposal.kind, proposal.payload or {}
+    if kind in ("queue_job", "queue_pipeline"):
+        from routers.jobs import JobCreate, PipelineCreate, enqueue_job, enqueue_pipeline
+
+        clean = _validated_payload(kind, payload)
+        if kind == "queue_job":
+            job, _decision = enqueue_job(engagement.id, JobCreate(**clean), current_user, db)
+            return job.id
+        jobs = enqueue_pipeline(engagement.id, PipelineCreate(**clean), current_user, db)
+        return jobs[0].id
+    engagement = advance(db, engagement)
     if kind in ("scope_in", "scope_out"):
         item = ScopeItem(
             program_id=engagement.id,
@@ -193,17 +207,23 @@ def approve_proposal(
     from managed_authority import lock
 
     engagement = lock(db, engagement)
-    db.refresh(proposal)
+    db.refresh(proposal, with_for_update=True)
     if proposal.status != "pending":
         raise HTTPException(status_code=409, detail=f"proposal is already {proposal.status}")
 
-    proposal.applied_resource_id = _apply(engagement, proposal, db)
+    proposal.applied_resource_id = _apply(engagement, proposal, db, current_user)
     proposal.status = "approved"
     proposal.resolved_at = datetime.now(timezone.utc)
     proposal.resolved_by = current_user["github_id"]
     log_action(db, current_user["github_id"], "approve", "agent_proposal", proposal.id, engagement.id)
     db.commit()
     db.refresh(proposal)
+    if proposal.kind in ("queue_job", "queue_pipeline"):
+        from routers.jobs import notify_enqueued_job
+
+        job = db.get(ScanJob, proposal.applied_resource_id)
+        if job is not None:  # A concurrent deletion cannot undo the committed approval.
+            notify_enqueued_job(job)
     return serialize_proposal(proposal)
 
 
@@ -217,6 +237,10 @@ def reject_proposal(
     """Reject a pending proposal without applying it. Full-access key only."""
     engagement, proposal = _proposal_or_404(program_id, proposal_id, current_user, db)
     require_member_write(engagement, current_user, db)
+    from managed_authority import lock
+
+    lock(db, engagement)
+    db.refresh(proposal, with_for_update=True)
     if proposal.status != "pending":
         raise HTTPException(status_code=409, detail=f"proposal is already {proposal.status}")
 

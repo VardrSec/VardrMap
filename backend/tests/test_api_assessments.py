@@ -116,6 +116,8 @@ def test_claim_snapshot_assessment_and_evidence_provenance(
         "case_hash": case_hash(_spec()),
         "test_case_id": "bola-check",
         "executions": [BASELINE, execution(outcome="server_error", code=503)],
+        "provenance": {"runner_version": "0.0.0-test", "tools": {"vardrgate_api_test": {"sha256": "a" * 64, "version": "unknown"}},
+                       "basis": "verified", "case_snapshot": {"credential": {"value": "opaque-upload-secret"}}},
         "findings": [],
     }
     assert (
@@ -140,6 +142,11 @@ def test_claim_snapshot_assessment_and_evidence_provenance(
     ).json()
     assert evidence["total"] == 1
     row = evidence["evidence"][0]
+    import json
+    provenance = json.loads(row["body"])["provenance"]
+    assert provenance["runner_version"] == "0.0.0-test"
+    assert provenance["basis"] == "runner_reported_not_server_attested"
+    assert "opaque-upload-secret" not in row["body"] and "case_snapshot" not in provenance
     assert (row["job_id"], row["case_id"], row["case_ref"], row["identity_id"]) == (
         job,
         tc,
@@ -298,4 +305,30 @@ def test_provenance_survives_linking_and_is_snapshotted_in_retest(
     )
     assert report.status_code == 201, report.text
     assert report.json()["snapshot"]["evidence"][0]["job_id"] == job
+    snapshot = report.json()["snapshot"]
+    assert snapshot["evidence"][0]["created_at"] == e["created_at"]
+    context = snapshot["jobs"][0]
+    assert context["job_id"] == job and context["status"] == "running"
+    assert context["started_at"] and context["completed_at"] is None
+    assert context["case_hash"] == case_hash(_spec())
+    assert context["case_snapshot"]["request"]["url"] == _spec()["request"]["url"]
+    assert context["snapshot_kind"] == "redacted_unresolved_reviewed"
+    assert context["reported_provenance"][0]["runner_version"] == "unknown"
+    assert context["reported_provenance"][0]["basis"] == "runner_reported_not_server_attested"
+    import redaction
+    hostile = {"request": {"method": "GET", "url": "https://user:opaque-userinfo@example.test/path?custom=opaque-query",
+                           "headers": {"X-Custom": "opaque-header"}, "body": {"custom": "opaque-body"}},
+               "identities": [{"id": "owner", "credential": {"type": "static_header", "value": "opaque-value"}}]}
+    projected = redaction.case_snapshot(hostile)
+    assert not any(value in str(projected) for value in ("opaque-userinfo", "opaque-query", "opaque-header", "opaque-body", "opaque-value"))
+    assert projected["logical_target"] == "https://example.test/path"
+    assert projected["case_snapshot"]["identities"][0]["id"] == "owner"
+    assert projected["requires_operator_inputs"] and projected["requires_new_review"]
+    anonymous = redaction.case_snapshot({"identities": [{"id": "anonymous", "credential": {
+        "type": "static_header", "header": "", "value": "", "value_env": None, "value_keychain": ""}}]})
+    assert anonymous["requires_operator_inputs"] is False
+    assert anonymous["case_snapshot"]["identities"][0]["credential"] == {"type": "static_header"}
+    userinfo = redaction.case_snapshot({"request": {"url": "https://user:opaque-only@example.test/path"}})
+    assert userinfo["requires_operator_inputs"] and userinfo["logical_target"] == "https://example.test/path"
+    assert "opaque-only" not in str(userinfo)
     assert f"Job: {job}" in report.json()["markdown"]

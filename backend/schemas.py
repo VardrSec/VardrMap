@@ -324,7 +324,7 @@ class ProposalCreate(BaseModel):
     """An agent's proposed change. `payload` is validated per `kind` in the router, where the
     reused ScopeItem/Authorization sanitisers apply, so only clean values are ever stored."""
 
-    kind: Literal["scope_in", "scope_out", "authorization", "rate_ceiling"]
+    kind: Literal["scope_in", "scope_out", "authorization", "rate_ceiling", "queue_job", "queue_pipeline"]
     payload: dict = Field(default_factory=dict)
     reason: Optional[str] = Field(default="", max_length=2000)
     source: Optional[str] = Field(default="", max_length=500)

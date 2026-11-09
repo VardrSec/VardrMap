@@ -21,7 +21,10 @@ const coverage = {
     {
       ...base, endpoint_id: "e1", method: "GET", path_template: "/orders/{id}", state: "violation_candidate",
       cases: [{ case_id: "c1", name: "orders", test_case_id: "orders", identities: ["owner", "peer"], expected: {}, queued_jobs: 0,
-        executed: true, latest_job_id: "j1", assessment_status: "conclusive", reasons: [] }],
+        executed: true, latest_job_id: "j1", assessment_status: "conclusive", reasons: [],
+        workflow_review: { setup_count: 1, preflight_identity_ids: ["owner"], captures_declared: true,
+          substitutions_observed: true, write_reset_declared: true,
+          fixed_profile_blockers: ["setup_capture", "template_substitution"], runner_validation_required: true } }],
       identity_coverage: [
         { identity_id: "owner", state: "evaluated", reason: "reported_allow_or_deny", expected: "allow" },
         { identity_id: "peer", state: "evaluated", reason: "reported_allow_or_deny", expected: "deny" },
@@ -55,6 +58,9 @@ describe("AuthorizationCoveragePanel", () => {
     expect(screen.getByText("tenant-b · not reviewed")).toBeInTheDocument();
     expect(screen.getByText("owner · reviewed, not run")).toBeInTheDocument();
     expect(screen.getAllByText(/1 reviewed case$/).length).toBe(2);
+    await userEvent.click(screen.getByText(/orders: workflow prerequisites/));
+    expect(screen.getByText(/Setup\/reset capture is outside the controlled fixed-request profile/)).toBeInTheDocument();
+    expect(screen.getByText(/Write reset is not end-of-case cleanup/)).toBeInTheDocument();
   });
 
   it("never presents a conclusive result as a security statement", async () => {
