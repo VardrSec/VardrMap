@@ -117,6 +117,9 @@ activation is introduced.
 
 Local managed-issuance builds (`0036managedauth`) accept the optional strict
 boolean `authorization_contract_required` on single fixed Gate job creation.
+The ordinary job composer exposes this as an unchecked Gate-only option,
+“Require managed authorization”; case/tool changes reset it. Queueing this way
+requires separate operator approval and grants no execution authority.
 It defaults to false and is returned only when true. A required job is inert
 without approval and refuses the legacy claim, live-control, upload and successful
 finish paths. Contract-required pipeline requests are unsupported (400); they

@@ -345,9 +345,17 @@ describe("JobsSection", () => {
     expect(screen.getByRole("button", { name: "Queue Pipeline" })).toBeEnabled();
   });
 
-  it("the standalone vardrgate tool offers the picker and posts the reference", async () => {
+  it.each([false, true])("the standalone vardrgate tool posts its case with managed authorization %s", async (managed) => {
+    const managedJobId = "01234567-89ab-cdef-0123-456789abcdef";
     const { authFetch } = renderWithApp(<JobsSection engagementId={PROGRAM_ID} />, {
-      routes: ROUTES_WITH_CASE,
+      routes: {
+        ...ROUTES_WITH_CASE,
+        ...(managed ? { [`POST /engagements/${PROGRAM_ID}/jobs`]: { body: {
+          ...ROUTES_WITH_CASE[`POST /engagements/${PROGRAM_ID}/jobs`].body,
+          id: managedJobId,
+          warnings: [{ reason: "scope", message: "Review configured scope." }],
+        } } } : {}),
+      },
     });
 
     await screen.findByText("Queue a Job");
@@ -358,6 +366,9 @@ describe("JobsSection", () => {
     await userEvent.selectOptions(
       await screen.findByRole("combobox", { name: "Authorization test case" }), "tc-1",
     );
+    const managedOption = screen.getByRole("checkbox", { name: "Require managed authorization" });
+    expect(managedOption).not.toBeChecked();
+    if (managed) await userEvent.click(managedOption);
     await userEvent.click(screen.getByRole("button", { name: "Queue Job" }));
 
     await waitFor(() =>
@@ -375,6 +386,21 @@ describe("JobsSection", () => {
     const sent = JSON.parse((call![1] as { body: string }).body);
     expect(sent.tool_type).toBe("vardrgate_api_test");
     expect(sent.config).toEqual({ test_case_id: "tc-1" });
+    if (managed) {
+      expect(sent.authorization_contract_required).toBe(true);
+      expect(await screen.findByText(`Managed job ${managedJobId} queued. Separate operator approval is required before execution. Warnings: Review configured scope.`)).toBeInTheDocument();
+      await userEvent.selectOptions(screen.getByRole("combobox", { name: "Authorization test case" }), "");
+      expect(managedOption).not.toBeChecked();
+      await userEvent.click(managedOption);
+      await openTools();
+      await userEvent.click(screen.getByRole("button", { name: "Select nuclei" }));
+      expect(screen.queryByRole("checkbox", { name: "Require managed authorization" })).not.toBeInTheDocument();
+      await openTools();
+      await userEvent.click(screen.getByRole("button", { name: "Select vardrgate" }));
+      expect(screen.getByRole("checkbox", { name: "Require managed authorization" })).not.toBeChecked();
+    } else {
+      expect(sent).not.toHaveProperty("authorization_contract_required");
+    }
   });
 
   it("with no stored cases the picker explains why vardrgate cannot run", async () => {

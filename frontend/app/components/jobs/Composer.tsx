@@ -14,12 +14,13 @@ import {
 // resolves no scope/recon targets and needs a case reference instead of config.
 const VARDRGATE = "vardrgate_api_test";
 
-type QueueSpec = {
+export type QueueSpec = {
   tool: string;
   source: string;
   config: Record<string, unknown>;
   targets: number;
   yieldKind: string;
+  authorization_contract_required?: boolean;
 };
 
 type ComposerProps = {
@@ -110,6 +111,7 @@ export default function Composer({ accent, onQueue, onPipeline, onPreview, profi
   // Which stored case a vardrgate job runs. Shared by the standalone tool and
   // the API Assessment pipeline, since both queue the same job type.
   const [caseId, setCaseId] = useState("");
+  const [requireManagedAuthorization, setRequireManagedAuthorization] = useState(false);
   // Pipelines and tools share one mutually-exclusive selection — picking either
   // clears the other. `toolId` is kept across the toggle so returning to a tool
   // restores the config that was already typed into it.
@@ -138,11 +140,17 @@ export default function Composer({ accent, onQueue, onPipeline, onPreview, profi
 
   const tool = TOOLS[toolId];
 
+  function chooseCase(id: string) {
+    setCaseId(id);
+    setRequireManagedAuthorization(false);
+  }
+
   function pick(id: string) {
     // Choosing is what the open list is for, so close it and bring the tool's
     // settings back into view.
     onToolsOpenChange(false);
     setPipelineId(null);
+    setRequireManagedAuthorization(false);
     setToolId(id);
     const t = TOOLS[id];
     setSource(t.sources[0]);
@@ -153,6 +161,7 @@ export default function Composer({ accent, onQueue, onPipeline, onPreview, profi
   }
 
   function pickPipeline(id: string) {
+    setRequireManagedAuthorization(false);
     setPipelineId(id);
     setPreview(null);
   }
@@ -212,7 +221,10 @@ export default function Composer({ accent, onQueue, onPipeline, onPreview, profi
       return;
     }
     const config = toolId === VARDRGATE ? { test_case_id: caseId } : configFor(toolId, cfg);
-    onQueue({ tool: toolId, source, config, targets: sourceCount, yieldKind: tool.yields });
+    onQueue({
+      tool: toolId, source, config, targets: sourceCount, yieldKind: tool.yields,
+      ...(toolId === VARDRGATE && requireManagedAuthorization ? { authorization_contract_required: true } : {}),
+    });
   }
 
   async function runPreview() {
@@ -227,6 +239,7 @@ export default function Composer({ accent, onQueue, onPipeline, onPreview, profi
 
   function loadProfile(p: ScanProfile) {
     if (p.tool_type in TOOLS) {
+      setRequireManagedAuthorization(false);
       setPipelineId(null);
       setToolId(p.tool_type);
       setSource(p.target_source);
@@ -357,7 +370,7 @@ export default function Composer({ accent, onQueue, onPipeline, onPreview, profi
             )}
             {needsCase && (
               <div className="mt-3">
-                <TestCasePicker cases={testCases} value={caseId} onChange={setCaseId} accent={accent} />
+                <TestCasePicker cases={testCases} value={caseId} onChange={chooseCase} accent={accent} />
               </div>
             )}
           </Field>
@@ -382,7 +395,20 @@ export default function Composer({ accent, onQueue, onPipeline, onPreview, profi
         {/* vardrgate takes a stored case, not typed config — offer the same
             picker the pipeline uses rather than a raw uuid field. */}
         {!pipeline && toolId === VARDRGATE && (
-          <TestCasePicker cases={testCases} value={caseId} onChange={setCaseId} accent={accent} />
+          <div className="space-y-3">
+            <TestCasePicker cases={testCases} value={caseId} onChange={chooseCase} accent={accent} />
+            <div>
+              <label className="flex items-center gap-2 text-sm text-[#cbd5e1]">
+                <input type="checkbox" checked={requireManagedAuthorization}
+                  onChange={(event) => setRequireManagedAuthorization(event.target.checked)}
+                  aria-describedby="managed-authorization-help" />
+                Require managed authorization
+              </label>
+              <p id="managed-authorization-help" className="mt-1 text-xs text-muted">
+                Requires separate operator approval before execution
+              </p>
+            </div>
+          </div>
         )}
 
         {!pipeline && toolId !== VARDRGATE && (

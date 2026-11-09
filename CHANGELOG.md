@@ -4,6 +4,10 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Expose an explicit Gate-only managed-authorization option in the ordinary job
+  composer. It uses the existing contract-required flag and needs separate
+  operator approval; unchecked jobs and pipelines keep their legacy behavior.
+
 - Apply targeted Trixie security upgrades for apt/libapt and zlib in the API and
   final web runtime images, with minimum-version guards. Preserve base digests,
   startup/authentication behavior and runtime users. Rebuilt image evidence is

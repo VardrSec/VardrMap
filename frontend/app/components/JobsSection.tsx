@@ -8,7 +8,7 @@ import { useAppContext } from "../context/AppContext";
 import { TOOLS } from "./jobs/mockData";
 import Bridge from "./jobs/Bridge";
 import Telemetry from "./jobs/Telemetry";
-import Composer from "./jobs/Composer";
+import Composer, { type QueueSpec } from "./jobs/Composer";
 import JobBoard from "./jobs/JobBoard";
 import Terminal from "./jobs/Terminal";
 
@@ -236,9 +236,8 @@ export default function JobsSection({
     return () => clearTimeout(timerId);
   }, [loadJobs]);
 
-  async function queueJob(spec: {
-    tool: string; source: string; config: Record<string, unknown>; targets: number; yieldKind: string;
-  }) {
+  async function queueJob(spec: QueueSpec) {
+    const contractRequired = spec.tool === "vardrgate_api_test" && spec.authorization_contract_required === true;
     try {
       const res = await authFetch(`/engagements/${engagementId}/jobs`, {
         method: "POST",
@@ -246,6 +245,7 @@ export default function JobsSection({
           tool_type:     spec.tool,
           target_source: spec.source,
           config:        spec.config,
+          ...(contractRequired ? { authorization_contract_required: true } : {}),
         }),
       });
       if (!res.ok) {
@@ -263,9 +263,11 @@ export default function JobsSection({
       // Scope findings are advisory — the job is queued either way, but the
       // operator should see what fell outside the recorded scope.
       flash(
-        created.warnings?.length
-          ? `Job queued with warnings: ${created.warnings.map((w) => w.message).join(" ")}`
-          : "Job queued. Run `vardrrunner jobs run` on your runner machine to execute it.",
+        contractRequired
+          ? `Managed job ${created.id} queued. Separate operator approval is required before execution.${created.warnings?.length ? ` Warnings: ${created.warnings.map((w) => w.message).join(" ")}` : ""}`
+          : created.warnings?.length
+            ? `Job queued with warnings: ${created.warnings.map((w) => w.message).join(" ")}`
+            : "Job queued. Run `vardrrunner jobs run` on your runner machine to execute it.",
       );
     } catch { flash("Failed to queue job."); }
   }
