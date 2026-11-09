@@ -4,6 +4,11 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Apply targeted Trixie security upgrades for apt/libapt and zlib in the API and
+  final web runtime images, with minimum-version guards. Preserve base digests,
+  startup/authentication behavior and runtime users. Rebuilt image evidence is
+  required; remaining vulnerability dispositions and publication stay separate.
+
 - Add inert job/pipeline queue proposals. Full-scope operator approval revalidates
   inputs and atomically commits jobs, audit and proposal resolution. Queue approval
   grants no execution authority. Shared pipeline creation now honors Stop Work

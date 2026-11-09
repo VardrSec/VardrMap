@@ -1,8 +1,11 @@
 # Development containers
 
 The backend Python 3.12 and frontend Node 24 bases use reviewed Debian Trixie
-digests. Base-image identity is pinned; dependency resolution and application
-release publication remain separate concerns. Native development commands are
+digests. The API and final web runtime upgrade only apt/libapt and zlib from the
+existing signed Trixie repositories, refusing versions below the reviewed
+security floors (apt/libapt 3.0.4 and zlib 1:1.3.dfsg+really1.3.1-1+deb13u1).
+Base-image identity is pinned; dependency resolution and application release
+publication remain separate concerns. Native development commands are
 unchanged. The web runtime removes npm/npx and their global dependency tree;
 Next starts through Node directly. Use the build stage or native checkout for
 package-manager operations, rather than changing a retained runtime container.
@@ -32,3 +35,7 @@ dependency caches and test artifacts. These source builds are development images
 image publication, immutable application release digests, trusted browser setup
 and distribution acceptance remain separate steps. See the
 [local HTTPS requirements](local-https-acceptance.md).
+
+Package security references: [Debian apt status](https://security-tracker.debian.org/tracker/source-package/apt)
+and [zlib DSA-6613-1](https://lists.debian.org/debian-security-announce/2026/msg00532.html).
+Rebuilt image reports must verify the correction; this does not clear other findings.
