@@ -682,3 +682,8 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 | [v0.3.0](changelog/v0.3.0.md) | 2026-06-07 | Scan review workflow, markdown export, inline editing, JWT refresh |
 | [v0.2.0](changelog/v0.2.0.md) | 2026-06-05 | Security hardening — sanitization, headers, audit logging, BOLA verification |
 | [v0.1.0](changelog/v0.1.0.md) | 2026-06-01 | Initial release |
+
+## Agent security audit (unreleased)
+
+- Ignore agent-local credential/session files while preserving shared instructions.
+- Retain existing Gitleaks secret-scanning coverage.
