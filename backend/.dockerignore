@@ -10,3 +10,5 @@
 !migrations/**
 **/__pycache__/
 **/*.pyc
+
+!LICENSE

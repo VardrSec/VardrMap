@@ -39,3 +39,10 @@ local HTTPS requirements.
 Package security references: [Debian apt status](https://security-tracker.debian.org/tracker/source-package/apt)
 and [zlib DSA-6613-1](https://lists.debian.org/debian-security-announce/2026/msg00532.html).
 Rebuilt image reports must verify the correction; this does not clear other findings.
+
+## License files
+
+Both build contexts include an unchanged copy of the repository's AGPL-3.0
+license. The backend retains it at `/app/LICENSE`; the frontend runtime retains
+it at `/usr/share/licenses/vardrmap/LICENSE`. Retaining the license text does
+not replace applicable corresponding-source and dependency-notice obligations.
