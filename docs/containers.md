@@ -39,3 +39,11 @@ local HTTPS requirements.
 Package security references: [Debian apt status](https://security-tracker.debian.org/tracker/source-package/apt)
 and [zlib DSA-6613-1](https://lists.debian.org/debian-security-announce/2026/msg00532.html).
 Rebuilt image reports must verify the correction; this does not clear other findings.
+
+## Source access
+
+The sign-in screen and Settings offer a public source link. Supply the actual
+40-character Git commit through the `NEXT_PUBLIC_VARDRMAP_REVISION` build argument
+to point to that exact revision. Without valid revision metadata, the link is
+explicitly labeled as the source repository. Source access alone does not
+establish complete corresponding-source delivery or transitive license review.

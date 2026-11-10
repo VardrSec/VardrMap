@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Offer source access on sign-in and Settings. Builds with an explicit complete
+  source revision link to that commit; other builds identify the repository.
+
 - Add explicit managed authorization for reviewed Gate jobs, preserving ordinary
   queueing and separately enabled execution.
 - Enforce job/runtime binding, finite budgets, concurrency reservations and
