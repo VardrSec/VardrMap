@@ -7,7 +7,7 @@ service; omission/`0` performs no managed key reads or route registration. Start
 never registers an admission, approves work or starts a worker. No new environment
 flag or service is introduced. SQLite/ASGI
 component checks, migrated PostgreSQL roles and actual platform acceptance remain
-distinct. See [protocol, migration and rollback notes](nm2-persistent-runtime.md).
+distinct. See the [managed runtime protocol](managed-runtime-protocol.md).
 
 The bounded [runtime protocol](managed-runtime-protocol.md) requires additive head
 `0040runtimesequence` before enabled requests. Focused SQLite/ASGI tests are
@@ -534,7 +534,7 @@ Run `python -m pip check`, audit the installed Python dependency closure and run
 `npm audit` after updating dependencies. urllib3 is explicitly pinned because it
 is Sentry's transitive HTTP transport. Use compatible updates and rerun frontend
 lint, typecheck, tests and build; do not blindly apply `npm audit fix --force`.
-See [the code audit](code-audit-2026-10-11.md) for remaining development-tool advisories.
+Record current development-tool advisories when updating dependencies; historical audit counts do not establish current clearance.
 
 ## Browser acceptance
 
@@ -684,8 +684,8 @@ The opt-in verified TLS suite exercises Runner's bounded managed JSON primitive
 with actual authentication, result/stop/observation flows, redirects, invalid CA,
 ambiguous claim replies and size/JSON negatives. Test adapters alone register
 fixture routes; no production Map route, key, enrollment or migration is added.
-See [canonical NM-2 exit status](nm2-canonical-exit-status.md): this does not prove
-the required operator-enabled Docker Desktop worker or Linux/container control.
+These adapter checks alone do not prove operator-enabled Docker Desktop worker
+or Linux/container control.
 
 ## Read-only managed observation adapter tests
 
@@ -704,9 +704,9 @@ The observation HTTP PostgreSQL cases use migrated administrator/restricted role
 and actual API authentication/request-scoped sessions through the threadpool.
 Verified TLS additionally emulates existing Full `/backend` prefix stripping while
 preserving the exact signed API-base identity and result/stop receipts. Neither
-fixture enrolls live credentials or executes a target. The
-[pending worker decision record](nm2-worker-decisions-pending.md) lists approved
-constraints and unresolved containment/bootstrap/lifecycle choices; none is chosen.
+fixture enrolls live credentials or executes a target. For the supported explicitly enabled worker, use the distribution
+[local managed setup](https://github.com/VardrSec/VardrSec/blob/main/docs/local-managed-setup.md);
+these test fixtures do not grant execution authority.
 
 Run PostgreSQL test collection from `backend`: `python -m pytest postgres_tests -v`.
 These modules share fixtures through the `postgres_tests` package; invoking that

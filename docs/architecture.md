@@ -7,7 +7,7 @@ retain all history while normal paths select indexed exact rows. Runtime precede
 ManagedClock; existing issuer/budget/result/stop services remain authoritative.
 Owner-approved isolated testing uses the existing explicit managed-worker
 configuration; ordinary startup remains disabled.
-See [persistent protocol and acceptance boundaries](nm2-persistent-runtime.md).
+See the [managed runtime protocol](managed-runtime-protocol.md); protocol support is not release acceptance.
 
 Additive schema `0040runtimesequence` keeps v1 runtime rows intact and adds nullable
 `max_attempts`, monotone `last_sequence`, one active pointer and an immutable
@@ -125,19 +125,19 @@ Cumulative duration allocation uses nullable `programs.duration_limit`, durable
 `duration_allocated` and owned-attempt `duration_seconds` (`0035durationbudget`).
 The engagement lock serializes finite allocation with claim and policy mutation;
 no finalization or deletion refunds it. Runner enforces a monotonic permission
-window independently of accounting. See [the exact scope](nm2-duration-budget.md).
+window independently of accounting.
 
 The opt-in cumulative target slice adds nullable `programs.target_limit`, durable
 `targets_spent` and owned-attempt charge/binding metadata (`0034targetbudget`).
 Spend increments only with a successful claim under the existing engagement lock
 and is never released. It counts conservative represented-origin attempts for
-guarded fixed Gate cases. See [the bounded design](nm2-target-budget.md).
+guarded fixed Gate cases.
 
 Opt-in engagement capacity uses nullable `programs.concurrency_limit` and durable
 `job_executions.capacity_reserved` (`0033concurrencybudget`). The engagement lock
 serializes reservation, policy mutation and deletion. Only owned confirmed terminal
 outcomes release capacity; uncertainty holds it. Map coordinates and Runner
-executes. See [the bounded design](nm2-concurrency-budget.md).
+executes.
 
 NM-2 adds opt-in owned manual execution control, described in
 [ADR 0006](adr/0006-owned-execution-control.md). An additive `job_executions` table

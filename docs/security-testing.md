@@ -4,7 +4,7 @@ This document captures manual security testing performed on VardrMap during deve
 
 The manual results below are historical records, not a verification of today's
 deployment. Sanitization now uses `nh3`, replacing the historical `bleach` implementation.
-See [the current code audit](code-audit-2026-10-11.md) for local regression testing
+See the current code audit for local regression testing
 and current limitations.
 
 ---
