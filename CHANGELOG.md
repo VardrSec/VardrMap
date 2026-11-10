@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Retain the project license in backend and frontend runtime images without
+  changing its terms or the existing build contexts.
+
 - Add explicit managed authorization for reviewed Gate jobs, preserving ordinary
   queueing and separately enabled execution.
 - Enforce job/runtime binding, finite budgets, concurrency reservations and

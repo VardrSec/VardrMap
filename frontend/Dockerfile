@@ -25,6 +25,7 @@ COPY --from=build --chown=node:node /app/package.json /app/package-lock.json ./
 COPY --from=build --chown=node:node /app/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/.next ./.next
 COPY --from=build --chown=node:node /app/public ./public
+COPY --from=build /app/LICENSE /usr/share/licenses/vardrmap/LICENSE
 # Startup uses node directly; package-manager dependencies are build-only.
 RUN rm -rf /usr/local/lib/node_modules/npm \
     && rm -f /usr/local/bin/npm /usr/local/bin/npx
