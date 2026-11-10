@@ -105,5 +105,5 @@ keeps the tab signed out even if another provider's cookie remains. Site storage
 must be allowed to retain this choice. New tabs independently restore a method.
 
 If methods cannot load, the login screen provides startup/certificate/backend
-update guidance and a retry action. See the [local HTTPS acceptance gate](local-https-acceptance.md)
+update guidance and a retry action. See the local HTTPS acceptance gate
 before advertising a complete Community installation.

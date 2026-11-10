@@ -108,7 +108,6 @@ features that require them.
 
 [API reference](docs/api.md) · [Local authentication](docs/local-authentication.md) ·
 [API playbooks](docs/api-playbooks.md) · [Security model](docs/security-model.md) ·
-[Architecture](docs/architecture.md) · [Development](docs/development.md) ·
 [Changelog](CHANGELOG.md)
 
 ## License
