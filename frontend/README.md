@@ -6,7 +6,7 @@ distribution and hosted on Vercel.
 ## Setup
 
 Run `npm install`, copy `.env.example` to `.env.local`, and run `npm run dev`.
-See [development setup](../docs/development.md) for backend configuration and tests.
+See development setup for backend configuration and tests.
 Set `VARDRMAP_AUTH_METHODS` consistently on frontend and backend: `github` (default),
 `local`, or `github,local`. `AUTH_SECRET`, `BACKEND_JWT_SECRET` and
 `NEXT_PUBLIC_API_URL` remain required; `AUTH_GITHUB_ID` and `AUTH_GITHUB_SECRET`

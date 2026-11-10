@@ -2,7 +2,7 @@
 
 This describes implemented models, not a proposed future schema. The engagement
 is the unit of work, performed for a client under an authorization.
-See [architecture](architecture.md) for field details and [API](api.md) for endpoints.
+See architecture for field details and [API](api.md) for endpoints.
 
 ## Relationships
 

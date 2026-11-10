@@ -1,6 +1,6 @@
 # API Reference
 
-Persistent runtime v3 is available for owner-approved isolated testing through
+Persistent runtime v3 uses
 the existing explicit `VARDRMAP_MANAGED_WORKER=1` configuration. Ordinary startup
 and the direct service constructor remain disabled by default. New versioned
 runtime wrappers preserve finite v1/v2 and generic job receipts. Host `/disable`
@@ -40,7 +40,7 @@ closes an unknown local claim. See the [exact protocol](managed-runtime-protocol
 
 Managed HTTP factories remain absent from default startup. Explicit
 `VARDRMAP_MANAGED_WORKER=1` uses the reviewed
-[configuration](development.md#explicit-managed-service-configuration) to assemble
+configuration to assemble
 one shared issuer/result/runtime graph. This is a development candidate; installed
 worker acceptance and release remain open. The opt-in does not approve queued work
 or start an execution process.
@@ -68,7 +68,7 @@ a three-second total body-read deadline. Replies are capped at 256 KiB, use
 `managed_approval_refused` on failure. Modified signatures, stale case/authority
 bindings and expired receipts do not become permission. Operator signing remains
 outside Map and the worker; Map's separately provisioned contract key remains
-distinct. [Terminal binding](development.md#explicit-managed-key-binding) selects
+distinct. Terminal binding selects
 existing API-key/Runner associations and grants no human approval.
 
 `backend/managed_http.py` provides a **default-unregistered** router factory requiring an
@@ -125,7 +125,7 @@ without approval and refuses the legacy claim, live-control, upload and successf
 finish paths. Contract-required pipeline requests are unsupported (400); they
 cannot silently become ordinary jobs. No HTTP approve, signing, enrollment or
 managed execution route is registered by this prototype. Existing omitted calls
-remain unchanged. See [ADR 0007](adr/0007-transactional-managed-issuance.md).
+remain unchanged.
 
 Local duration-budget builds add owner/full-scope
 `PUT /engagements/{program_id}/duration-policy` with required `limit_seconds`.
@@ -140,13 +140,13 @@ explicit null before any spend, while idle). Owned fixed Gate claims supply
 `target_budget` with binding/charged/spent/limit. Spend is cumulative and never
 refunded.
 
-Local NM-2 builds add owner/full-scope `PUT /engagements/{program_id}/concurrency-policy`
+Controlled execution provides owner/full-scope `PUT /engagements/{program_id}/concurrency-policy`
 with required `limit` (1–1000, or explicit null while idle). Enabled engagements
 require owned claims with `concurrency_budget:true`; receipts confirm
 `capacity_reserved:true`. Exhausted capacity/unsafe reconfiguration/deletion return
 409.
 
-NM-2 local source builds add explicit owned execution control (not execution
+Controlled execution provides explicit owned execution control (not execution
 approval or a worker):
 
 | Method and route | Contract |
@@ -161,23 +161,17 @@ sticky cancellation from a full-access writer; it returns running until confirme
 Legacy PATCH cannot set controlled done. Ordinary jobs keep existing behavior.
 `POST /engagements/{program_id}/stop-work` blocks claims and makes active controlled
 attempts cancel-requested. Releasing stop-work never revives those attempts.
-Remote stops depend on connectivity and bounded lease expiry. See
-[ADR 0006](adr/0006-owned-execution-control.md) for ownership, races and rollback.
+Remote stops depend on connectivity and bounded lease expiry.
 
 Control responses use `Cache-Control: no-store`; malformed claim/control/finalization
 payloads return a generic 422 without reflecting capability values.
-
-The NM-1 issuance adapter is an unregistered read-only prototype, not an API
-endpoint. It cannot approve/claim/execute jobs; see
-[ADR 0005](adr/0005-nm1-contract-issuance.md).
 
 Protected endpoints require authentication unless noted otherwise: a browser JWT
 (minted after GitHub OAuth), a personal `vmap_` API key in
 `Authorization: Bearer <token>`, or an enabled local browser session cookie.
 Cookie-authenticated writes also require an allowed Origin and `X-CSRF-Token`.
-API keys remain independent of the configured browser login providers. See
-[architecture.md](architecture.md#authentication-flow) for identity resolution
-and the local-authentication section below for session requirements.
+API keys remain independent of the configured browser login providers. See the [local-authentication guide](local-authentication.md) for identity resolution
+and session requirements.
 
 Responses are JSON unless a streaming endpoint is documented otherwise. Timestamps are ISO 8601 UTC strings.
 
@@ -2427,63 +2421,6 @@ verifier diagnostics. They do not establish a denied write. Validate coordinated
 versions with the [strict semantic contract](../scripts/integration/README.md#semantic-evidence-and-version-compatibility)
 before rollout; older Map backends may accept the upload without retaining these
 conclusions, and older companions may lack independent reader/strategy support.
-
-### Local managed consumption prototype
-
-Managed jobs refuse every outcome on the legacy `execution-finish` endpoint,
-including `failed`, `cancelled` and `uncertain`. An ordinary execution capability
-cannot replace the exact managed contract/fence, consumption acknowledgment or
-result/known-stop receipt. Refusal leaves execution ownership and all reservations
-unchanged; legacy jobs retain their existing finish behavior.
-
-`Issuer.consume` is a library operation exposed only by the explicit configured
-managed factory or disposable adapters. It validates current owned permission
-and the signed-contract hash, then atomically consumes once without renewing the
-lease, completing the job or releasing reservations. Exact ACK and unknown-reply
-rules are in [ADR 0008](adr/0008-managed-consumption-ack.md). Existing marked-job
-legacy claim/control/upload/completion refusals remain in force.
-
-### Managed result prototype
-
-`managed_results.Results.submit`, `finish` and `inspect` are library
-operations behind explicit configured factories or disposable adapters. They require the
-existing owned capability and exact consumed contract. Evidence receipt alone
-never completes work; terminal receipts and inspection rules are documented in
-[ADR 0009](adr/0009-managed-result-receipts.md). No production endpoint is added.
-
-### Managed known-stop prototype
-
-`managed_stops.Stops.report` and `inspect` are default-unregistered library operations.
-They require the original consumed owned contract and fixed known-termination
-report; neither expiry nor a PID establishes a release right. Stop receipts remain
-separate from result receipts. See [ADR 0010](adr/0010-managed-known-stop-receipts.md).
-
-### Managed claim observation prototype
-
-`managed_observations.Observations.inspect` is a default-unregistered library operation.
-Its fixture-only adapter accepts original origin/Runner and plan/case/association
-hashes with the original enrolled API key; no control token is accepted or returned.
-It returns bounded metadata and existing immutable receipts without renewing,
-releasing or retrying work. Absence is only a snapshot. See
-[ADR 0011](adr/0011-managed-claim-observation.md).
-
-### Unregistered observation HTTP factory
-
-`managed_observation_http.build_observation_router(existing_service)` reserves
-`POST /jobs/{job_id}/managed/observation` for isolated integration. **It is not
-registered during default startup.** Explicit service configuration enables it.
-It accepts origin, Runner UUID and exact
-plan/case/association fingerprints using the original enrolled API key. It rejects
-control tokens and other extra fields, returns no capability, and changes no
-business state. Successful observations use the existing v1 metadata/receipt shape.
-
-The adapter requires HTTPS, JSON without content compression, at most 8 KiB of
-request bytes within three seconds of body reading, and at most 16 KiB of reply.
-Handled errors and success are non-cacheable and never echo submitted content.
-The adapter preserves authentication/access status codes; malformed bodies use
-422, unsupported media 415, excess body 413, body timeout 408, disconnect 400,
-service refusal 409 and unavailable service 503. No mutation endpoint is exposed.
-See [ADR 0012](adr/0012-unregistered-observation-http.md).
 
 ### Workflow review metadata
 

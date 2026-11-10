@@ -34,7 +34,7 @@ Build contexts use allowlists to exclude local environment files, databases,
 dependency caches and test artifacts. These source builds are development images;
 image publication, immutable application release digests, trusted browser setup
 and distribution acceptance remain separate steps. See the
-[local HTTPS requirements](local-https-acceptance.md).
+local HTTPS requirements.
 
 Package security references: [Debian apt status](https://security-tracker.debian.org/tracker/source-package/apt)
 and [zlib DSA-6613-1](https://lists.debian.org/debian-security-announce/2026/msg00532.html).

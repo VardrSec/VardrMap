@@ -40,4 +40,4 @@ No database migration or new environment variable is required. Map owns the
 readiness interface and presentation. Operational diagnosis stays in Runner;
 Compose lifecycle stays in VardrSec; Gate remains the authorization-testing engine.
 Full doctor reports, release manifest compatibility and fresh-host/tool/network
-acceptance remain separate work. See [readiness](adr/0003-platform-readiness.md).
+acceptance remain separate work. See readiness.

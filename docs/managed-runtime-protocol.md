@@ -1,6 +1,6 @@
 # Managed runtime admission and host stop receipts
 
-This is the bounded ADR 0043 implementation protocol. It is disabled by default
+This protocol describes managed runtime admission and stop receipts. It is disabled by default
 and requires explicit worker configuration, an existing issuer, operator public
 trust, a separate Map contract-signing key and an existing Runner enrollment.
 Protocol tests do not establish Docker termination or platform acceptance.
@@ -125,7 +125,7 @@ SHA256(b"VardrSec.WorkerStop.v1\0" + secret.encode("ascii"))
 The secret remains in the host's protected store outside container-accessible
 paths. It never enters public admission, container environment, arguments, labels
 or Runner journal. Host storage and direct daemon proof belong to the distribution.
-Map cannot independently inspect the daemon; the owner-approved stop grant trusts
+Map cannot independently inspect the daemon; the explicitly registered stop grant trusts
 that host producer. A submitted observation hash is integrity metadata, not remote
 attestation.
 
