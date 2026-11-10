@@ -5,6 +5,9 @@
 - Offer source access on sign-in and Settings. Builds with an explicit complete
   source revision link to that commit; other builds identify the repository.
 
+- Retain the project license in backend and frontend runtime images without
+  changing its terms or the existing build contexts.
+
 - Add explicit managed authorization for reviewed Gate jobs, preserving ordinary
   queueing and separately enabled execution.
 - Enforce job/runtime binding, finite budgets, concurrency reservations and

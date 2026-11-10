@@ -47,3 +47,10 @@ The sign-in screen and Settings offer a public source link. Supply the actual
 to point to that exact revision. Without valid revision metadata, the link is
 explicitly labeled as the source repository. Source access alone does not
 establish complete corresponding-source delivery or transitive license review.
+
+## License files
+
+Both build contexts include an unchanged copy of the repository's AGPL-3.0
+license. The backend retains it at `/app/LICENSE`; the frontend runtime retains
+it at `/usr/share/licenses/vardrmap/LICENSE`. Retaining the license text does
+not replace applicable corresponding-source and dependency-notice obligations.
