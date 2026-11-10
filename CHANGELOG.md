@@ -4,6 +4,8 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
 
 ## Unreleased
 
+- Align public documentation with retained guides and remove references to private working records.
+
 - Expose an explicit Gate-only managed-authorization option in the ordinary job
   composer. It uses the existing contract-required flag and needs separate
   operator approval; unchecked jobs and pipelines keep their legacy behavior.
@@ -66,7 +68,7 @@ All notable changes to VardrMap. Full release notes live in [`changelog/`](chang
   retirement STOP reporting for isolated testing only. The existing explicit
   managed-worker configuration enables this path; ordinary startup remains off.
   Runtime/platform and release acceptance remain open. See
-  [protocol notes](docs/nm2-persistent-runtime.md).
+  protocol notes.
 
 - Reject retained v2 proof documents whose numeric types or canonical contents
   differ from their exact expected release/retirement receipts. Preserve the

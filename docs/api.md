@@ -6,7 +6,7 @@ and the direct service constructor remain disabled by default. New versioned
 runtime wrappers preserve finite v1/v2 and generic job receipts. Host `/disable`
 blocks new claims while preserving bound control/terminal release and reporting.
 Exact DTOs, decimal counters, advisory presence and the separate reporting-lifetime
-decision are in [persistent runtime notes](nm2-persistent-runtime.md).
+decision are in the [managed runtime protocol](managed-runtime-protocol.md).
 
 Explicit `max_attempts` in runtime registration opts into bounded
 [healthy sequencing](managed-runtime-protocol.md#bounded-healthy-sequencing-v2)
@@ -131,21 +131,20 @@ Local duration-budget builds add owner/full-scope
 `PUT /engagements/{program_id}/duration-policy` with required `limit_seconds`.
 Owned claims supply `duration_seconds` (1–86400); receipts return `duration_budget`
 with allocated seconds, cumulative allocated total and ceiling. These are
-nonrefundable allocations, not measured consumption. See
-[the enforcement scope and cleanup overshoot](nm2-duration-budget.md).
+nonrefundable allocations, not measured consumption.
 
 Local target-ceiling builds add owner/full-scope
 `PUT /engagements/{program_id}/target-policy` with required `limit` (1–1000000 or
 explicit null before any spend, while idle). Owned fixed Gate claims supply
 `target_binding` with profile, case SHA-256 and canonical origins. Receipts return
 `target_budget` with binding/charged/spent/limit. Spend is cumulative and never
-refunded. See [scope, exclusions and persistence](nm2-target-budget.md).
+refunded.
 
 Local NM-2 builds add owner/full-scope `PUT /engagements/{program_id}/concurrency-policy`
 with required `limit` (1–1000, or explicit null while idle). Enabled engagements
 require owned claims with `concurrency_budget:true`; receipts confirm
 `capacity_reserved:true`. Exhausted capacity/unsafe reconfiguration/deletion return
-409. See [the scope and protocol](nm2-concurrency-budget.md).
+409.
 
 NM-2 local source builds add explicit owned execution control (not execution
 approval or a worker):

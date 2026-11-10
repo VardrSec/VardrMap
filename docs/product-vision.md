@@ -8,7 +8,7 @@ assessment, or bug bounty research. The discipline changes what the work looks
 like; it does not change the data model, the interface, or the product.
 
 The vision includes future capabilities; see [domain model](domain-model.md) for
-implemented features and [roadmap](roadmap.md) for remaining work.
+implemented features and roadmap for remaining work.
 
 ## The unified operating model
 
