@@ -2,6 +2,7 @@
 
 import LocalPasswordForm from "./LocalPasswordForm";
 import PlatformStatusPanel from "./PlatformStatusPanel";
+import SourceCodeLink from "./SourceCodeLink";
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { ApiKey } from "../types";
@@ -162,6 +163,7 @@ export default function SettingsSection() {
       <SectionHeader title="Settings" description="Manage personal API keys for external tools like Burp Suite." />
       {state.session?.authMethod === "local" && <LocalPasswordForm />}
       <PlatformStatusPanel />
+      <p className="text-xs text-muted">VardrMap · AGPL-3.0 · <SourceCodeLink /></p>
 
       {newToken && (
         <div className="rounded-xl border border-[#a6e3a1]/30 bg-[#a6e3a1]/5 p-5 space-y-3">

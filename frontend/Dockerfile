@@ -5,6 +5,8 @@ COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
 ARG NEXT_PUBLIC_API_URL
+ARG NEXT_PUBLIC_VARDRMAP_REVISION
+ENV NEXT_PUBLIC_VARDRMAP_REVISION=$NEXT_PUBLIC_VARDRMAP_REVISION
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 RUN test -n "$NEXT_PUBLIC_API_URL" \
     && npm run lint && npm run typecheck && npm test -- --runInBand \
