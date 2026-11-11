@@ -2,7 +2,11 @@
 
 This describes implemented models, not a proposed future schema. The engagement
 is the unit of work, performed for a client under an authorization.
-See architecture for field details and [API](api.md) for endpoints.
+See the [ORM models](../backend/models.py) for fields and the [API](api.md) for endpoints.
+For installation, choose the distribution’s [Full setup](https://github.com/VardrSec/VardrSec/blob/main/docs/installation.md)
+or [Mapless workflow](https://github.com/VardrSec/VardrSec/blob/main/docs/mapless.md).
+Mapless uses Runner and Gate without a Map account or database; it does not share
+this ORM state or automatically migrate it.
 
 ## Relationships
 
@@ -24,8 +28,31 @@ Gate jobs freeze the unresolved reviewed case in `case_snapshot` at claim and st
 separate `assessment` on upload. Runner's `case_hash` binds the artifact to that snapshot;
 legacy unbound uploads remain usable but inconclusive. Lifecycle `done` is not an
 assessment verdict, and conclusive completeness can still contain violation candidates.
-There are no recurring scans: each job runs once, when an operator runs `vardrrunner jobs run`.
-Per-execution limits do not create an engagement-wide traffic budget.
+Manual jobs are claimed by an explicit Runner invocation. Separately configured
+managed workers can discover and claim approved Gate jobs; starting Map or queueing
+a job does not start a worker or authorize execution. A persistent worker can
+serve successive independently approved jobs, not automatically repeat a completed
+job. Existing manual workflows are not silently upgraded to managed execution.
+
+`JobExecution` records an owned attempt, its bounded lease and capacity reservation.
+Configured engagement concurrency, target and duration policies apply to budgeted
+owned execution. Target spend and duration allocations are cumulative and
+nonrefundable; duration allocation is not measured elapsed traffic, and concurrency
+reservations are not a universal counter of processes on the host.
+
+`ManagedEnrollment` binds an existing API key and Runner to an origin.
+`ManagedApproval` retains the reviewed, separately signed approval and issuance
+counters; `ManagedContract` binds one issued execution. Managed result and stop
+receipts preserve the original outcome. `ManagedRuntime` and its attempt records
+track admitted worker incarnations and job ownership. Admission and heartbeat
+presence are not permission to execute a job. See the
+[managed runtime protocol](managed-runtime-protocol.md) for finite and persistent
+worker modes and the [security model](security-model.md) for enforcement limits.
+
+Stop-work blocks new execution and requests cancellation of active controlled
+attempts. A cancellation request is not a confirmed process exit; unresolved work
+retains ownership/capacity until the applicable stop or completion protocol resolves
+it. Legacy manual processes do not gain active cancellation from a policy warning.
 
 `ScanItem` is a scanner candidate. Dalfox payload and match evidence are preserved
 as reported; raw evidence requires safe rendering, not destructive HTML sanitization.
@@ -48,13 +75,15 @@ remove its audit trail.
 The ORM class is `Engagement`, but the table remains `programs` and foreign keys
 remain `program_id`. `/programs/*` is a compatibility alias for `/engagements/*`.
 Do not introduce a second engagement table. Physical renaming and alias retirement
-remain scheduled work.
+are not part of this compatibility contract.
 
 `RadarProgram` describes external bounty programmes and is not an engagement.
 API keys and runner heartbeats remain user-bound. Raw API keys are not stored;
 credential references in test cases are resolved in the execution environment.
-Broader organization management, organization-bound runner credentials, signed job
-contracts and running-process cancellation remain distinct future capabilities.
+Runner credentials remain user-bound, not organization-bound. Signed managed job
+contracts and controlled running-process cancellation are implemented opt-in
+capabilities, distinct from legacy manual execution and from broader organization
+management. They require the matching Runner and explicit service configuration.
 
 ## Guidance
 

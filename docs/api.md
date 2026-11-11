@@ -41,8 +41,11 @@ closes an unknown local claim. See the [exact protocol](managed-runtime-protocol
 Managed HTTP factories remain absent from default startup. Explicit
 `VARDRMAP_MANAGED_WORKER=1` uses the reviewed
 configuration to assemble
-one shared issuer/result/runtime graph. This is a development candidate; installed
-worker acceptance and release remain open. The opt-in does not approve queued work
+one shared issuer/result/runtime graph. For the source-built installed workflow,
+use the distribution’s [managed setup](https://github.com/VardrSec/VardrSec/blob/main/docs/local-managed-setup.md)
+and [support limits](https://github.com/VardrSec/VardrSec/blob/main/docs/limitations.md);
+protocol implementation alone does not qualify a platform or publish a release.
+The opt-in does not approve queued work
 or start an execution process.
 
 Managed result and known-stop receipts are mutually exclusive. Once either lane
@@ -123,9 +126,11 @@ requires separate operator approval and grants no execution authority.
 It defaults to false and is returned only when true. A required job is inert
 without approval and refuses the legacy claim, live-control, upload and successful
 finish paths. Contract-required pipeline requests are unsupported (400); they
-cannot silently become ordinary jobs. No HTTP approve, signing, enrollment or
-managed execution route is registered by this prototype. Existing omitted calls
-remain unchanged.
+cannot silently become ordinary jobs. Ordinary startup does not register managed
+routes; explicit managed configuration registers the review, approval registration
+and execution factories described above. Operator signing remains external and
+existing enrollments must be provisioned separately. Existing omitted calls remain
+unchanged.
 
 Local duration-budget builds add owner/full-scope
 `PUT /engagements/{program_id}/duration-policy` with required `limit_seconds`.
@@ -257,8 +262,8 @@ identifiers, connection strings, credentials and exception text are never return
 
 This endpoint reads state; it never stamps/upgrades a schema, creates user data,
 installs tools or executes scans. It checks a revision marker, not every table or
-the UI/runner/target workflow. A future distribution must test that complete path
-separately. Consume this v1 contract explicitly; older Map versions return 404.
+the UI/runner/target workflow. End-to-end distribution validation must cover that
+complete path separately. Consume this v1 contract explicitly; older Map versions return 404.
 
 ---
 
@@ -407,7 +412,10 @@ Delete a engagement. Cascades to all child records (scope, findings, reports, ma
 ```
 
 ### `POST /engagements/{program_id}/stop-work`
-Engage the emergency brake. While engaged, **every** execution for this engagement is denied by the policy engine regardless of scope, testing window, or authorization status.
+Block new execution for this engagement regardless of scope, testing window or
+authorization status. Active controlled attempts become cancel-requested; the
+Runner must confirm termination before cancellation is complete. This does not
+kill legacy manual processes or guarantee instantaneous stop while disconnected.
 
 Idempotent — re-engaging an already-stopped engagement succeeds and leaves the original `stop_work_at` unchanged. During an incident an operator needs certainty that the brake is on, not an error about pulling it twice.
 
@@ -429,9 +437,9 @@ Release the emergency brake. **Owner only** — engaging a stop is a safety acti
 - `403` — caller is a member but not the owner
 - `404` — engagement not found or caller is not a member
 
-### Scope warnings
+### Legacy scope warnings
 
-Job creation and job claim run the policy evaluator (`backend/policy.py`); claim is the only way a job enters `running`. Findings are **advisory** — staying in scope is the operator's responsibility, so a job outside scope or outside its testing window is still queued and still runs. Both responses carry a `warnings` array (`PATCH /jobs/{id}` returns an empty one):
+For legacy manual jobs, job creation and job claim run the policy evaluator (`backend/policy.py`); claim is the only way a job enters `running`. Findings are **advisory** — staying in scope is the operator's responsibility, so a job outside scope or outside its testing window is still queued and still runs. Both responses carry a `warnings` array (`PATCH /jobs/{id}` returns an empty one):
 
 ```json
 {
@@ -1293,7 +1301,13 @@ Atomically claim a pending job. Sets `status: "running"` and stamps `started_at`
 - `409` — job is not in `pending` state
 
 ### `PATCH /jobs/{job_id}`
-Release, complete, fail or cancel a job. A job enters `running` only through `POST /jobs/{id}/claim`, and a finished job never reopens: running the work again is a new job, so a recorded outcome and its evidence are not rewritten.
+The table below applies to legacy jobs without an owned execution. For controlled
+running jobs, a full-access writer’s `failed` request records sticky cancellation
+and returns the job as running until confirmed. Other legacy PATCH transitions
+refuse for owned execution; use its bound finalization protocol. Contract-required
+jobs also cannot bypass managed authorization through legacy endpoints.
+
+Release, complete, fail or cancel a legacy job. A job enters `running` only through `POST /jobs/{id}/claim`, and a finished job never reopens: running the work again is a new job, so a recorded outcome and its evidence are not rewritten.
 
 | From | Allowed `status` | Used for |
 |---|---|---|
