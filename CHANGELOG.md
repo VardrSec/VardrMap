@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Clarify legacy advisory scope checks, enforced managed authorization and
+  configured engagement budget controls in the security guide.
+
 - Offer source access on sign-in and Settings. Builds with an explicit complete
   source revision link to that commit; other builds identify the repository.
 
