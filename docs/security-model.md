@@ -10,31 +10,31 @@ to the operator.
 
 | # | Threat | Control | Status |
 |---|---|---|---|
-| T1 | Testing outside authorization (expired window, revoked, out of scope) | Central policy evaluator warns; operator decides. Stop-work refuses. | Advisory by design — see below |
+| T1 | Testing outside authorization (expired window, revoked, out of scope) | Legacy policy warnings; managed execution requires current approved authority. Stop-work refuses. | Separate legacy and managed boundaries — see below |
 | T2 | Cross-tenant read of another user's engagement | `get_engagement_or_404` → 404, never 403 | Implemented |
 | T3 | Secrets leaking into findings, evidence, logs, reports | Centralized redaction | Implemented; see limitations below |
 | T4 | SSRF via webhook or scan target | Resolve, reject unsafe addresses and pin webhook connections to approved IPs | Implemented (webhooks) |
 | T5 | Stolen runner API key → arbitrary execution | Runner-scoped keys, hashed at rest, policy re-check at claim | Implemented; user-bound keys |
 | T6 | Audit tampering | No FK constraints; append-only; survives subject deletion | Implemented |
-| T7 | Denial of service against a client | Rate/concurrency limits in job envelope | Per execution; aggregate budgets remain future work |
+| T7 | Denial of service against a client | Per-job limits plus configured engagement target/duration allocations and owned concurrency reservations | Implemented for budgeted execution; not a universal process counter |
 | T8 | Prompt injection into AI triage | Heuristic redaction before provider calls; AI returns drafts, not execution authority | Implemented; see limitations below |
 
-## Scope is advisory — a deliberate product decision
+## Legacy scope warnings and managed authorization
 
-VardrMap evaluates every job against the engagement's authorization, testing
-window, and scope, and **reports what it finds without refusing to run**. Staying
-inside scope is the operator's responsibility, the same as it is with every other
-tool in the kit — Burp and nmap do not police their users either.
+Legacy manual jobs report policy warnings for authorization, testing-window and
+scope mismatches; the operator remains responsible for permitted traffic.
+Stop-work refuses execution rather than returning a warning.
 
-The reasoning: a platform that blocks on its own reading of a scope rule
-interrupts legitimate work mid-engagement, and scope in the field is messier than
-any rule set (verbal expansions, hosts that appear overnight, ranges that shift).
-Being wrong in that direction costs the operator a paid engagement; being wrong
-in the other direction costs them a warning they chose to ignore.
+Managed jobs have a separate enforced boundary. They require an operator-approved
+plan and current authorization, enrollment and contract bindings. Missing or stale
+authority and exhausted configured budgets refuse execution. Claims enforce
+Map-owned engagement target/duration allocations and concurrency capacity; Runner
+also checks local credential grants and finite execution limits. Queueing a job
+or keeping a worker available does not grant execution authority. See the
+[managed runtime protocol](managed-runtime-protocol.md) and [API guide](api.md).
+These controls do not silently change the legacy manual-job policy.
 
-**The one exception is stop-work**, which still refuses. That is not the platform
-second-guessing the operator: it is the operator's own emergency brake, pulled
-deliberately, and honouring it is the entire point of having it.
+### Legacy scope policy
 
 Implemented in `backend/policy.py` as a pure function returning a typed
 `PolicyDecision` with a stable reason code. `backend/enforcement.py` adapts it to
