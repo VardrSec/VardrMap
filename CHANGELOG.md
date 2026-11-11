@@ -2,26 +2,12 @@
 
 ## Unreleased
 
-- Clarify legacy advisory scope checks, enforced managed authorization and
-  configured engagement budget controls in the security guide.
+## Prepared source versions
 
-- Offer source access on sign-in and Settings. Builds with an explicit complete
-  source revision link to that commit; other builds identify the repository.
-
-- Retain the project license in backend and frontend runtime images without
-  changing its terms or the existing build contexts.
-
-- Add explicit managed authorization for reviewed Gate jobs, preserving ordinary
-  queueing and separately enabled execution.
-- Enforce job/runtime binding, finite budgets, concurrency reservations and
-  cancellation; uncertain outcomes remain held for original-run reconciliation.
-- Add operation/identity/boundary coverage, review-only case drafts and
-  operator-approved AI queue proposals.
-- Preserve missing or historical provenance as unknown in review and exports.
-- Improve approval context, stop-work handling and session-expiry notices.
-- Update container security packages and protect agent-local settings.
-- Separate public user documentation from private planning and validation notes.
+- [v0.44.0 — managed authorization and reconciled user guidance](changelog/v0.44.0.md)
+  (prepared source version; not a published release).
 
 ## Previous releases
 
 Versioned release histories are retained in [changelog/](changelog/).
+Historical version headings do not by themselves confirm published tags or artifacts.
