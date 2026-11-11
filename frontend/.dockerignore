@@ -24,3 +24,6 @@
 
 !infocmp-bound.patch
 !ncurses-source.txt
+
+!util-linux/
+!util-linux/**
