@@ -8,7 +8,7 @@ permissions:
 jobs:
   images:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
       - name: Build backend image
@@ -17,3 +17,12 @@ jobs:
         run: docker run --rm --network none --entrypoint alembic vardrmap-api:smoke heads
       - name: Build and verify frontend image
         run: docker build --build-arg NEXT_PUBLIC_API_URL=https://localhost:8443/backend -t vardrmap-web:smoke frontend
+      - name: Verify retained OS backport sources in both runtime images
+        run: |
+          for image in vardrmap-api:smoke vardrmap-web:smoke; do
+            docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges \
+              --entrypoint sh "$image" -ec '
+                for package in libsqlite3-0 ncurses-bin util-linux; do
+                  (cd "/usr/share/doc/$package/vardr-source" && sha256sum -c SHA256SUMS)
+                done'
+          done
