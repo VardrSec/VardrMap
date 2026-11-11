@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Backport the upstream infocmp analysis bound to the existing Trixie ncurses
+  source; retain original/modified source without replacing runtime libraries.
+
 - Rebuild the fixed SQLite runtime in both local images using Trixie build
   packages, retaining original/modified source and package copyright material.
 

@@ -16,3 +16,6 @@
 !Dockerfile
 
 !sqlite-source.txt
+
+!infocmp-bound.patch
+!ncurses-source.txt

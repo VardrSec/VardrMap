@@ -24,3 +24,14 @@ docker build --target sqlite-source-delivery --output type=local,dest=../web-sql
 
 These commands build only the source-delivery target. Existing source links,
 application licenses and other dependency notice obligations remain in effect.
+
+## ncurses source delivery
+
+The image backports the upstream `infocmp` analysis-copy bound for
+CVE-2025-69720 to Debian's existing Trixie source. Only `ncurses-bin` is
+installed; the existing ncurses and libtinfo libraries remain unchanged.
+Original/modified Debian source, the patch, build metadata and checksums are
+retained in `/usr/share/doc/ncurses-bin/vardr-source/`. The
+`ncurses-source-delivery` build target exports the same source materials.
+No unstable binary packages or repositories are introduced. A custom package
+version does not itself resolve version-based scanner findings.
