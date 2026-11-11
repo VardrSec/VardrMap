@@ -12,9 +12,15 @@ access-control expectations.
 ## Get started
 
 For the source-built local platform, follow the [VardrSec installation guide](https://github.com/VardrSec/VardrSec/blob/main/docs/installation.md).
-It supplies the compatible components, PostgreSQL, local HTTPS, account bootstrap
+This is the **Full** path. It supplies the compatible components, PostgreSQL, local HTTPS, account bootstrap
 and lifecycle commands. Starting services does not start scans. Source-built
 compatibility does not mean that a Community release has been published.
+
+For a CLI-only installation without Map or PostgreSQL, follow the distribution’s
+[Mapless workflow](https://github.com/VardrSec/VardrSec/blob/main/docs/mapless.md).
+Full and Mapless have separate state and identities; choosing Mapless is not a
+migration of a Full installation. The native commands below are for developing
+Map itself, not an alternative Community installation walkthrough.
 
 ## Capabilities
 
@@ -107,7 +113,8 @@ features that require them.
 ## Documentation
 
 [API reference](docs/api.md) · [Local authentication](docs/local-authentication.md) ·
-[API playbooks](docs/api-playbooks.md) · [Security model](docs/security-model.md) ·
+[API playbooks](docs/api-playbooks.md) · [Domain model](docs/domain-model.md) ·
+[Security model](docs/security-model.md) ·
 [Changelog](CHANGELOG.md)
 
 ## License

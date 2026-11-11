@@ -1,5 +1,13 @@
 # Development containers
 
+For an operator installation, use the distribution’s
+[Full setup](https://github.com/VardrSec/VardrSec/blob/main/docs/installation.md),
+which selects compatible component pins and manages PostgreSQL, HTTPS and state.
+For CLI-only use without Map, choose
+[Mapless](https://github.com/VardrSec/VardrSec/blob/main/docs/mapless.md).
+The image-build instructions here are for component development, not a second
+installation path.
+
 The backend Python 3.12 and frontend Node 24 bases use reviewed Debian Trixie
 digests. The API and final web runtime upgrade only apt/libapt and zlib from the
 existing signed Trixie repositories, refusing versions below the reviewed
@@ -34,7 +42,7 @@ Build contexts use allowlists to exclude local environment files, databases,
 dependency caches and test artifacts. These source builds are development images;
 image publication, immutable application release digests, trusted browser setup
 and distribution acceptance remain separate steps. See the
-local HTTPS requirements.
+[local HTTPS requirements](local-authentication.md).
 
 Package security references: [Debian apt status](https://security-tracker.debian.org/tracker/source-package/apt)
 and [zlib DSA-6613-1](https://lists.debian.org/debian-security-announce/2026/msg00532.html).

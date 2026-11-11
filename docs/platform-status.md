@@ -3,7 +3,8 @@
 Settings displays API/database readiness and account-owned Runner heartbeat
 reports. It refreshes read-only observations every 30 seconds, with an eight-second
 request deadline and a manual **Refresh status** button. This starts no scans,
-worker, installation, repair or update operation. Runner remains explicitly invoked.
+worker, installation, repair or update operation. Manual Runner commands remain
+explicitly invoked; managed workers require separate configuration and startup.
 The deadline covers authentication and response-body waits as well as transport;
 timed-out refreshes enable retry and late success cannot replace the failure.
 
@@ -40,4 +41,6 @@ No database migration or new environment variable is required. Map owns the
 readiness interface and presentation. Operational diagnosis stays in Runner;
 Compose lifecycle stays in VardrSec; Gate remains the authorization-testing engine.
 Full doctor reports, release manifest compatibility and fresh-host/tool/network
-acceptance remain separate work. See readiness.
+acceptance are separate from these status observations. See the distribution’s
+[installation guide](https://github.com/VardrSec/VardrSec/blob/main/docs/installation.md)
+and [support limits](https://github.com/VardrSec/VardrSec/blob/main/docs/limitations.md).

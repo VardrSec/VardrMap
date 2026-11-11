@@ -3,11 +3,48 @@
 This protocol describes managed runtime admission and stop receipts. It is disabled by default
 and requires explicit worker configuration, an existing issuer, operator public
 trust, a separate Map contract-signing key and an existing Runner enrollment.
-Protocol tests do not establish Docker termination or platform acceptance.
+Protocol tests do not establish Docker termination or platform acceptance. Use the
+distribution’s [managed setup](https://github.com/VardrSec/VardrSec/blob/main/docs/local-managed-setup.md)
+and [support limits](https://github.com/VardrSec/VardrSec/blob/main/docs/limitations.md)
+for the installed workflow and platform qualification.
 
 Omitting `max_attempts` retains the one-attempt v1 protocol below. Explicit v2
-sequencing is a development candidate; source protocol tests do not complete its
-native descendant-drain or installed worker acceptance.
+sequencing selects the finite v2 protocol. Explicit persistent mode selects v3.
+Neither selection itself establishes native descendant-drain or installed worker
+acceptance. The finite contracts below remain supported; they are not the only
+runtime mode.
+
+## Persistent admission (v3)
+
+The explicitly configured managed service also exposes persistent admission.
+Registration selects `mode: "persistent"`, supplies `limits` and
+`reporting_authority`, and omits finite `expires_in_seconds` and `max_attempts`.
+The admission uses `vardr.worker-admission/3` and its own `admission_sha256`;
+finite v1/v2 records are not implicitly converted.
+
+- `limits.max_attempts` is a positive decimal string or null;
+  `limits.idle_timeout_seconds` is an integer from 1 to 86400 or null.
+- Sequence/cursor counters are canonical decimal strings, bounded by the signed
+  64-bit maximum. A v3 attempt pairs its counter with `admission_sha256`;
+  finite v2 integer sequences retain their existing shape.
+- `reporting_authority` is explicitly `{ "purpose": "worker-stop-only",
+  "expires_at": null }`. This reporting lifetime is separate from per-job
+  authorization, grants and leases. It is not indefinite permission to run jobs.
+- Host `/disable` disables new work while retaining the bound control, terminal
+  reporting and release path. It does not itself prove that the process exited.
+- Presence is an expiring advisory observation correlated with the current
+  cursor. `idle-ready` or `active` is not approval, independent host attestation
+  or a substitute for an owned attempt receipt.
+
+Each job still requires its own signed approval and finite authority. Healthy
+completion and durable release of the previous attempt are required before reuse;
+unknown outcomes do not authorize retry, refund or automatic repair. See the
+[current DTOs](../backend/managed_persistent_http.py),
+[wire validation](../backend/managed_persistent_wire.py) and
+[persistent runtime implementation](../backend/managed_runtime_persistent.py)
+for exact fields and refusal behavior. The Runner’s
+[managed-worker guide](https://github.com/VardrSec/VardrRunner/blob/main/docs/managed-worker.md#persistent-v3)
+describes the matching execution side.
 
 ## Bounded healthy sequencing (v2)
 
