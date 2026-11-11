@@ -12,3 +12,7 @@
 **/*.pyc
 
 !LICENSE
+
+!Dockerfile
+
+!sqlite-source.txt
