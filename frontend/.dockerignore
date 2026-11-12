@@ -17,3 +17,13 @@
 !test-utils/**
 
 !LICENSE
+
+!Dockerfile
+
+!sqlite-source.txt
+
+!infocmp-bound.patch
+!ncurses-source.txt
+
+!util-linux/
+!util-linux/**
