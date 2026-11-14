@@ -55,3 +55,15 @@ CLAUDE.md
 # Unpublished development fragments belong in local notes; public changes go in CHANGELOG.md.
 /changelog/nm*.md
 /changelog/unreleased*.md
+
+# Agent-local credentials and session state.
+.claude/settings.local.json
+.claude/*.local.json
+.claude/.credentials.json
+.claude/projects/
+.claude/history.jsonl
+.codex/auth.json
+.codex/config.local.toml
+.codex/sessions/
+.codex/history.jsonl
+.mcp.local.json

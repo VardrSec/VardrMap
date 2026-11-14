@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Ignore agent-local credential and session files, retaining the existing private-note exclusions and Gitleaks coverage.
+
 - Verify retained OS backport source checksums in both actual runtime images.
 
 - Backport the maintained util-linux mount/descriptor security fixes and their
