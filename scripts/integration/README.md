@@ -64,7 +64,7 @@ binding, and structured job/case/identity provenance. The real Runner adds the h
 to Gate's artifact; legacy unbound uploads cannot establish a conclusive assessment.
 
 This supplements the repositories' normal suites. The separate
-[browser suite](../../docs/development.md#browser-acceptance) exercises real UI
+browser suite exercises real UI
 and API persistence; neither suite tests real GitHub OAuth.
 
 ## Hosted staging boundary

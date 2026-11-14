@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { signIn } from "next-auth/react";
+import SourceCodeLink from "./SourceCodeLink";
 import { API_URL, isSecureApi, selectAuthMethod } from "../auth-client";
 
 export default function LoginPanel({ onSignedIn = () => window.location.reload() }: { onSignedIn?: () => void }) {
@@ -71,6 +72,7 @@ export default function LoginPanel({ onSignedIn = () => window.location.reload()
           </form>
         )}
         {methods?.includes("github") && <button onClick={() => void loginWithGithub()} className="mt-6 w-full rounded-lg bg-[#f59e0b] px-4 py-2.5 text-sm font-semibold text-[#161616]">Sign in with GitHub</button>}
+        <p className="mt-6 text-xs text-muted">VardrMap · AGPL-3.0 · <SourceCodeLink /></p>
       </div>
     </main>
   );

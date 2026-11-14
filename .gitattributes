@@ -4,3 +4,5 @@
 # rather than a line-ending problem and is a genuinely confusing hour to lose.
 # Without this, correctness depends on each contributor's core.autocrlf setting.
 *.sh text eol=lf
+backend/infocmp-bound.patch -text
+frontend/infocmp-bound.patch -text

@@ -2,39 +2,39 @@
 
 ## Threat model
 
-VardrMap holds the authority to attack third-party infrastructure, plus the
-evidence of successful attacks against it. The consequences of compromise are
+VardrMap holds assessment scope, authorization records and sensitive evidence,
+and coordinates execution by separately configured Runners. The consequences of compromise are
 asymmetric: a leaked finding is a disclosed vulnerability in someone else's
 production system, and an unauthorized job is an unlawful intrusion attributed
 to the operator.
 
 | # | Threat | Control | Status |
 |---|---|---|---|
-| T1 | Testing outside authorization (expired window, revoked, out of scope) | Central policy evaluator warns; operator decides. Stop-work refuses. | Advisory by design — see below |
+| T1 | Testing outside authorization (expired window, revoked, out of scope) | Legacy policy warnings; managed execution requires current approved authority. Stop-work refuses. | Separate legacy and managed boundaries — see below |
 | T2 | Cross-tenant read of another user's engagement | `get_engagement_or_404` → 404, never 403 | Implemented |
 | T3 | Secrets leaking into findings, evidence, logs, reports | Centralized redaction | Implemented; see limitations below |
 | T4 | SSRF via webhook or scan target | Resolve, reject unsafe addresses and pin webhook connections to approved IPs | Implemented (webhooks) |
-| T5 | Stolen runner API key → arbitrary execution | Runner-scoped keys, hashed at rest, policy re-check at claim | Implemented; user-bound keys |
+| T5 | Stolen runner API key → unauthorized job access or execution | Runner-scoped keys, hashed at rest; managed execution additionally binds enrollment, signed approval and local grants | Implemented; user-bound keys; legacy scope checks remain advisory |
 | T6 | Audit tampering | No FK constraints; append-only; survives subject deletion | Implemented |
-| T7 | Denial of service against a client | Rate/concurrency limits in job envelope | Per execution; aggregate budgets remain future work |
+| T7 | Denial of service against a client | Per-job limits plus configured engagement target/duration allocations and owned concurrency reservations | Implemented for budgeted execution; not a universal process counter |
 | T8 | Prompt injection into AI triage | Heuristic redaction before provider calls; AI returns drafts, not execution authority | Implemented; see limitations below |
 
-## Scope is advisory — a deliberate product decision
+## Legacy scope warnings and managed authorization
 
-VardrMap evaluates every job against the engagement's authorization, testing
-window, and scope, and **reports what it finds without refusing to run**. Staying
-inside scope is the operator's responsibility, the same as it is with every other
-tool in the kit — Burp and nmap do not police their users either.
+Legacy manual jobs report policy warnings for authorization, testing-window and
+scope mismatches; the operator remains responsible for permitted traffic.
+Stop-work refuses execution rather than returning a warning.
 
-The reasoning: a platform that blocks on its own reading of a scope rule
-interrupts legitimate work mid-engagement, and scope in the field is messier than
-any rule set (verbal expansions, hosts that appear overnight, ranges that shift).
-Being wrong in that direction costs the operator a paid engagement; being wrong
-in the other direction costs them a warning they chose to ignore.
+Managed jobs have a separate enforced boundary. They require an operator-approved
+plan and current authorization, enrollment and contract bindings. Missing or stale
+authority and exhausted configured budgets refuse execution. Claims enforce
+Map-owned engagement target/duration allocations and concurrency capacity; Runner
+also checks local credential grants and finite execution limits. Queueing a job
+or keeping a worker available does not grant execution authority. See the
+[managed runtime protocol](managed-runtime-protocol.md) and [API guide](api.md).
+These controls do not silently change the legacy manual-job policy.
 
-**The one exception is stop-work**, which still refuses. That is not the platform
-second-guessing the operator: it is the operator's own emergency brake, pulled
-deliberately, and honouring it is the entire point of having it.
+### Legacy scope policy
 
 Implemented in `backend/policy.py` as a pure function returning a typed
 `PolicyDecision` with a stable reason code. `backend/enforcement.py` adapts it to
@@ -89,8 +89,11 @@ Evaluating at claim means the warning reflects the state at the moment work
 actually starts, and it means stop-work engaged after queueing still halts the
 job rather than applying only to future ones.
 
-Transitions to `done` / `failed` are never gated: a runner must always be able to
-report the outcome of work already performed, including after a stop-work.
+Legacy result reporting is not refused solely because the testing window has
+closed or stop-work is engaged. Controlled and managed completion have additional
+ownership, receipt and termination checks: a cancelled or expired attempt cannot
+be reported as successful merely by PATCHing its job to `done`. Historical result
+reporting does not renew authority or release uncertain execution capacity.
 
 ### Bug bounty exception
 
@@ -140,12 +143,22 @@ because that is a deliberate operator action with an incident behind it. The
 - AI suggestion and triage inputs use the shared heuristic redactor. Provider errors are generic. This is not a guarantee that every client secret is detected; do not send restricted evidence to an external provider.
 - Webhook delivery pins the approved IP, retains original Host and TLS identity, disables environment proxies and redirects, and avoids logging secret-bearing URLs. Malformed URLs and URL credentials are rejected.
 - Imports read at most the upload cap plus one byte before rejecting oversize data; infrastructure request limits are still needed for multipart ingress.
-- Stop-work prevents new execution; it does not kill an already running local process.
+- Stop-work prevents new execution and makes active controlled attempts
+  cancel-requested. The controlled Runner must stop and confirm termination;
+  cancellation is not an instantaneous remote kill, especially during disconnection.
+  Legacy manual processes are not terminated by the policy check alone.
+- Host suspend/resume is not qualified. Host termination reports remain a trust
+  boundary, not independent OS attestation. Preserve unknown outcomes rather than
+  retrying work to clear a status.
+- Managed Full execution supports the reviewed Gate path, not arbitrary unattended
+  execution of every scanner. See the distribution’s [managed setup](https://github.com/VardrSec/VardrSec/blob/main/docs/local-managed-setup.md)
+  and [support limits](https://github.com/VardrSec/VardrSec/blob/main/docs/limitations.md)
+  for installed-platform, network and release boundaries.
 
 ## Test coverage required
 
 Every control above needs a test that fails when the control is removed.
 `test_policy.py` covers the decision logic for all nine reason codes and the
 scope-matching rules; `test_execution_policy.py` covers the wiring — that
-findings surface as warnings at all three evaluation points, that a warned job is
+legacy findings surface as warnings at job creation and claim, that a warned job is
 still queued, that warnings are not audited, and that stop-work still refuses.

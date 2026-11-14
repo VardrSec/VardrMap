@@ -1,3 +1,0 @@
-# Frontend Instructions
-
-@AGENTS.md
