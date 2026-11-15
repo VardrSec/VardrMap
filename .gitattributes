@@ -6,3 +6,7 @@
 *.sh text eol=lf
 backend/infocmp-bound.patch -text
 frontend/infocmp-bound.patch -text
+backend/acl/** text eol=lf
+frontend/acl/** text eol=lf
+backend/acl/*.patch whitespace=-blank-at-eol,-space-before-tab
+frontend/acl/*.patch whitespace=-blank-at-eol,-space-before-tab

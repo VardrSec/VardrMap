@@ -27,3 +27,11 @@
 
 !util-linux/
 !util-linux/**
+
+# Reviewed ACL builder inputs; no generated test binaries or caches.
+!acl/
+!acl/*.sh
+!acl/*.py
+!acl/*.c
+!acl/*.patch
+!acl/README.md
