@@ -90,9 +90,9 @@ def bulk_create_services(
             .first()
         )
         if existing:
-            existing.service_name    = svc.service_name or ""
-            existing.product         = svc.product or ""
-            existing.version         = svc.version or ""
+            existing.service_name    = svc.service_name or existing.service_name
+            existing.product         = svc.product or existing.product
+            existing.version         = svc.version or existing.version
             existing.state           = svc.state or "open"
             existing.source          = svc.source or "nmap"
             existing.last_scanned_at = now

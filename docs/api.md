@@ -1564,6 +1564,8 @@ List services for a engagement, ordered by host then port. Optional `job_id` ret
 ### `POST /engagements/{program_id}/services`
 Bulk-upsert services. VardrRunner posts port-discovery results (naabu; nmap only when opted in) here after a scan job completes. Upserts on `(host, port, protocol)` — updates metadata if the combination already exists. Optional body field `job_id` links every service in the request (new or updated) to the job that observed it; it must be a job of this engagement or the request fails with `404`.
 
+On an existing service, each nonempty `service_name`, `product`, or `version` replaces its stored value independently. Omitting one of these fields or sending `null` or `""` preserves its stored value. Re-observations still refresh `source` and `last_scanned_at`.
+
 **Request body**
 ```json
 {
