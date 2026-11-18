@@ -30,3 +30,6 @@
 !acl/*.c
 !acl/*.patch
 !acl/README.md
+
+!glibc/
+!glibc/**
