@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Require a completed parent in the same engagement before a dependent job can be claimed.
+
 - Preserve stored service details when a scan re-observes an existing service with missing or empty details (#144).
 
 - Ignore agent-local credential and session files, retaining the existing private-note exclusions and Gitleaks coverage.
