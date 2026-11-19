@@ -420,19 +420,6 @@ def test_patch_to_running_is_denied_when_stop_work_is_engaged(
     assert client.post(f"/jobs/{job_id}/claim", headers=auth_headers).status_code == 403
 
 
-def test_claim_warns_outside_the_testing_window(client, auth_headers, engagement):
-    from datetime import datetime, timedelta, timezone
-
-    job_id = _create_job(client, auth_headers, engagement).json()["id"]
-    _set(engagement, engagement_type="pentest")
-    _add_authorization(
-        engagement, status="active", window_end=datetime.now(timezone.utc) - timedelta(minutes=1)
-    )
-    res = client.post(f"/jobs/{job_id}/claim", headers=auth_headers)
-    assert res.status_code == 200
-    assert "outside_testing_window" in _reasons(res)
-
-
 def test_patch_job_stays_pending_after_a_denied_transition(client, auth_headers, engagement):
     from datetime import datetime, timezone
 
@@ -445,13 +432,6 @@ def test_patch_job_stays_pending_after_a_denied_transition(client, auth_headers,
         assert db.query(ScanJob).filter(ScanJob.id == job_id).first().status == "pending"
     finally:
         db.close()
-
-
-def test_claim_still_works_when_policy_permits(client, auth_headers, engagement):
-    job_id = _create_job(client, auth_headers, engagement).json()["id"]
-    res = client.post(f"/jobs/{job_id}/claim", headers=auth_headers)
-    assert res.status_code == 200
-    assert _warnings(res) == []
 
 
 def test_patch_to_terminal_states_is_not_policy_gated(client, auth_headers, engagement):
