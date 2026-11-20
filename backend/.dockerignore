@@ -33,3 +33,5 @@
 
 !glibc/
 !glibc/**
+!openssl/
+!openssl/**
