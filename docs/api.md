@@ -1,52 +1,14 @@
 # API Reference
 
-Persistent runtime v3 uses
-the existing explicit `VARDRMAP_MANAGED_WORKER=1` configuration. Ordinary startup
-and the direct service constructor remain disabled by default. New versioned
-runtime wrappers preserve finite v1/v2 and generic job receipts. Host `/disable`
-blocks new claims while preserving bound control/terminal release and reporting.
-Exact DTOs, decimal counters, advisory presence and the separate reporting-lifetime
-decision are in the [managed runtime protocol](managed-runtime-protocol.md).
+Managed runtime endpoints are disabled by default. Set `VARDRMAP_MANAGED_WORKER=1`
+to enable them on a configured Map instance. Each job still requires explicit
+approval, and enabling the endpoints does not start a worker.
 
-Explicit `max_attempts` in runtime registration opts into bounded
-[healthy sequencing](managed-runtime-protocol.md#bounded-healthy-sequencing-v2)
-under `0040runtimesequence`; omission preserves the existing v1 API. V2 claim and
-runtime-bind require the exact `runtime_sequence`. Original-token
-`POST /jobs/{job_id}/managed/runtime-idle-release` records a completed/drained
-attempt before another may claim. Host lookup separates active job receipt from
-whole-incarnation retirement; exact historical lookup uses
-`POST /managed/runtimes/{runtime_id}/attempts/{runtime_sequence}/receipt`.
-Explicit sequence on original-key job observation selects `/3`, echoing runtime
-ID/hash/sequence; prior `/1` and `/2` shapes remain unchanged.
-
-The explicit managed-worker profile adds [runtime admission and host receipt
-contracts](managed-runtime-protocol.md) under `0039managedruntime`. Optional paired
-`runtime_id`/`runtime_sha256` on managed claim are associated atomically before its
-first response; the post-consumption runtime acknowledgement confirms that exact
-tuple. Host-only `VardrStop` authentication cannot authorize execution. Defaults and
-native/manual calls without runtime fields retain their existing behavior.
-
-An authenticated active host stop grant can close the uploaded-result/before-finish
-window by failing that same immutable result receipt. It creates no second stop
-receipt, successful outcome or refund. Exact host lookup remains available after
-grant expiry/revocation; those states still refuse new terminal reports.
-
-The same capability may irreversibly retire an exactly observed exited runtime
-whose claim association is still absent, through `observed-unbound-exit`. Runtime
-locking serializes this with late claims; pending jobs and allowances are unchanged.
-Original-key job observation accepts paired runtime ID/hash for an explicit v2
-retirement proof; omitted fields keep v1 unchanged. An absent binding alone never
-closes an unknown local claim. See the [exact protocol](managed-runtime-protocol.md#physical-exit-before-a-runtime-claim-is-bound).
-
-Managed HTTP factories remain absent from default startup. Explicit
-`VARDRMAP_MANAGED_WORKER=1` uses the reviewed
-configuration to assemble
-one shared issuer/result/runtime graph. For the source-built installed workflow,
-use the distribution’s [managed setup](https://github.com/VardrSec/VardrSec/blob/main/docs/local-managed-setup.md)
-and [support limits](https://github.com/VardrSec/VardrSec/blob/main/docs/limitations.md);
-protocol implementation alone does not qualify a platform or publish a release.
-The opt-in does not approve queued work
-or start an execution process.
+The [managed runtime protocol](managed-runtime-protocol.md) covers admission,
+claim binding, host stop reporting and receipt lookup for finite v1/v2 and
+persistent v3 runtimes. For the installed workflow and supported platforms, see
+the distribution's [managed setup](https://github.com/VardrSec/VardrSec/blob/main/docs/local-managed-setup.md)
+and [support limits](https://github.com/VardrSec/VardrSec/blob/main/docs/limitations.md).
 
 Managed result and known-stop receipts are mutually exclusive. Once either lane
 has retained its first receipt, the other is refused without evidence writes,
