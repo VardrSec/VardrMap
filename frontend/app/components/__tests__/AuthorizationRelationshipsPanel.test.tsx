@@ -51,6 +51,27 @@ describe("AuthorizationRelationshipsPanel", () => {
     expect(screen.queryByText("Same-tenant peer")).not.toBeInTheDocument();
   });
 
+  it("shows an evaluated denial separately from its raw HTTP allow when boundary context is missing", async () => {
+    const cell = {
+      id: "peer-write", endpoint_id: "e-write", operation: "PUT /verification/write", identity_id: "peer",
+      boundary: "unknown", state: "context_missing", observations: [{
+        case_id: "c-fixed", case_name: "Fixed write", job_id: "fixed", state: "context_missing",
+        reason: "missing_context", assessment_state: "evaluated", expected: "deny", observed: "allow",
+        reported_decision: "denied", source: "write_verification", write_verification: "verified_no_effect",
+        owner_identity: "owner", basis: [],
+      }],
+    };
+    renderWithApp(<AuthorizationRelationshipsPanel engagementId="eng-1" />, {
+      routes: route({ ...base, hypotheses: [], boundary_matrix: [cell] }),
+    });
+    await userEvent.click(await screen.findByText("1 case"));
+    expect(screen.getByText("Assessment state evaluated")).toBeVisible();
+    expect(screen.getByText("Expected deny · Raw HTTP outcome allow")).toBeVisible();
+    expect(screen.getByText("Reported decision denied")).toBeVisible();
+    expect(screen.getByText("Decision source write_verification")).toBeVisible();
+    expect(screen.getByText("Write verification verified_no_effect")).toBeVisible();
+  });
+
   it("warns when identities have no declared tenant instead of assuming one", async () => {
     renderWithApp(<AuthorizationRelationshipsPanel engagementId="eng-1" />, {
       routes: route({ ...base, identities_without_tenant: ["contractor"], hypotheses: [] }),

@@ -142,6 +142,20 @@ def test_stranger_cannot_list_evidence(client, other_headers, engagement):
     ).status_code == 404
 
 
+def test_read_exact_redacted_record(client, auth_headers, other_headers, engagement, program_id):
+    created = _post(client, auth_headers, engagement).json()
+    _post(client, auth_headers, engagement, body="newer record")
+    path = f"/engagements/{engagement}/evidence/{created['id']}"
+    response = client.get(path, headers=auth_headers)
+    assert response.status_code == 200
+    assert response.json() == created
+    assert client.get(path, headers=other_headers).status_code == 404
+    missing = client.get(f"/engagements/{program_id}/evidence/missing", headers=auth_headers)
+    foreign = client.get(f"/engagements/{program_id}/evidence/{created['id']}", headers=auth_headers)
+    assert foreign.status_code == missing.status_code == 404
+    assert foreign.json() == missing.json()
+
+
 def test_list_and_delete_round_trip(client, auth_headers, engagement):
     evidence_id = _post(client, auth_headers, engagement).json()["id"]
 

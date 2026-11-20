@@ -20,10 +20,9 @@ Semantics that must not drift:
   it never counts as coverage for a definition it did not run.
 * Unresolved findings are not coverage. A candidate keeps its operation flagged
   even after the case that produced it was edited or deleted.
-* `conclusive` repeats the stored assessment: every declared identity had a
-  definite reported outcome and a working baseline. It is not evidence that the
-  operation is secure. It requires every matching case to have a current,
-  conclusive run.
+* `conclusive` requires a current run with a working baseline and a definite
+  outcome for every identity in every matching case. Historical HTTP-only
+  assessments must also satisfy the proof requirements of their frozen case.
 * An identity evaluated by some matching cases but not all is `mixed`, never
   `evaluated`. An identity that exists elsewhere in the engagement but is absent
   from the cases covering an operation is `not_reviewed`: a gap in what was
@@ -143,11 +142,25 @@ def _declared_decisions(spec: dict) -> dict[str, str]:
     return {i: (next(iter(d)) if len(d) == 1 else "unknown") for i, d in decisions.items()}
 
 
-def _latest(jobs: list[ScanJob]) -> ScanJob | None:
-    executed = [j for j in jobs if j.assessment]
-    if not executed:
+def _decision_fields(item: dict) -> dict:
+    return {key: item.get(key) for key in ("reported_decision", "source", "write_verification")}
+
+
+def _evaluated_decision(item: dict, required_source: str | None) -> str | None:
+    """Read the conclusion supported by this evaluated row and its frozen expectation."""
+    source = item.get("source")
+    decision = item.get("reported_decision")
+    if required_source is None:
+        raw = {"allow": "allowed", "deny": "denied"}.get(item.get("observed_outcome"))
+        if (source is None and decision is None) or (source == "http_status" and decision == raw):
+            return raw
         return None
-    return max(executed, key=lambda j: (j.completed_at or j.created_at, j.created_at, j.id))
+    if source != required_source or decision not in ("allowed", "denied"):
+        return None
+    if source == "write_verification":
+        effect = "verified_effect" if decision == "allowed" else "verified_no_effect"
+        return decision if item.get("verification") and item.get("write_verification") == effect else None
+    return decision if item.get("matched_assertions") else None
 
 
 class _Run:
@@ -159,7 +172,62 @@ class _Run:
         snapshot = job.case_snapshot if isinstance(job.case_snapshot, dict) and job.case_snapshot else None
         self.request = parse_request(snapshot.get("request")) if snapshot else None
         self.snapshot_hash = case_hash(snapshot) if snapshot else None
-        self.verified = bool((job.assessment or {}).get("case_snapshot_verified"))
+        assessment = job.assessment or {}
+        self.verified = bool(
+            snapshot and assessment.get("case_snapshot_verified")
+            and assessment.get("case_hash") == self.snapshot_hash
+            and assessment.get("case_id") == self.case_id
+        )
+
+        self.status = assessment.get("status")
+        self.baseline_valid = assessment.get("baseline_valid")
+        self.reasons = list(assessment.get("reasons") or [])
+        self.identities: dict[str, dict] = {}
+        self.violations: dict[str, dict] = {}
+        spec = snapshot or {}
+        expectations = {row["identity_id"]: row for row in spec.get("expected_access") or []}
+        proof_gaps = set()
+        for item in assessment.get("identities") or []:
+            identity = item.get("identity_id")
+            if not identity:
+                continue
+            self.identities[identity] = item
+            if item.get("state") != "evaluated":
+                continue
+            expected = expectations.get(identity, {})
+            required_source = None
+            if spec.get("write_verification"):
+                required_source = "write_verification"
+            elif expected.get("response_assertions"):
+                required_source = "response_assertion"
+            decision = _evaluated_decision(item, required_source)
+            if required_source and decision is None:
+                reason = "semantic_assessment_inconsistent"
+                if item.get("source") in (None, "none", "http_status"):
+                    reason = "semantic_assessment_missing"
+                self.identities[identity] = {**item, "state": "inconclusive", "reason": reason}
+                proof_gaps.add(reason)
+            elif decision == "allowed" and item.get("expected_decision") == expected.get("decision") == "deny":
+                self.violations[identity] = item
+
+        if proof_gaps:
+            # Losing the sole legitimate baseline also invalidates otherwise evaluated peers.
+            self.baseline_valid = bool(self.baseline_valid) and any(
+                row.get("expected_decision") == "allow" and row.get("state") == "evaluated"
+                for row in self.identities.values()
+            )
+            if not self.baseline_valid:
+                proof_gaps.add("legitimate_baseline_missing")
+                for identity, row in self.identities.items():
+                    if row.get("state") == "evaluated":
+                        self.identities[identity] = {**row, "state": "inconclusive", "reason": "legitimate_baseline_missing"}
+            self.reasons = sorted(set(self.reasons) | proof_gaps)
+            if self.status in ("partial", "conclusive"):
+                evaluated = any(row.get("state") == "evaluated" for row in self.identities.values())
+                self.status = "partial" if evaluated else "inconclusive"
+
+        if not self.verified or not self.baseline_valid or self.status not in ("conclusive", "partial"):
+            self.violations.clear()
 
     def is_current_for(self, case_id: str, current_hash: str | None) -> bool:
         return bool(
@@ -211,24 +279,38 @@ def build_coverage(db: Session, program_id: str) -> dict:
             .all()
         ):
             candidates_by_job[job_id][status or "new"] += 1
-        # Backing proof of a violation candidate: a reviewed deny that was observed
-        # as an allow, retained as evidence for the same job.
+        # A policy mismatch can exist without a scan item. Only jobs with a
+        # retained candidate (in any triage state) contribute candidate evidence.
+        runs_by_id = {run.job.id: run for run in runs if run.violations and run.job.id in candidates_by_job}
         for row in (
-            db.query(Evidence.id, Evidence.job_id, Evidence.case_id, Evidence.identity_id, Evidence.content_hash, Evidence.collected_at)
+            db.query(Evidence.id, Evidence.job_id, Evidence.case_id, Evidence.case_ref, Evidence.identity_id,
+                     Evidence.content_hash, Evidence.observed_outcome)
             .filter(
                 Evidence.program_id == program_id,
-                Evidence.job_id.in_(job_ids),
+                Evidence.job_id.in_(runs_by_id),
+                Evidence.source == "vardrgate", Evidence.kind == "tool_result",
+                # Map stores preflights with an unknown expectation. Only the
+                # resource execution carries the reviewed deny.
                 Evidence.expected_decision == "deny",
-                Evidence.observed_outcome == "allow",
             )
             .order_by(Evidence.collected_at, Evidence.id)
             .all()
         ):
+            run = runs_by_id[row.job_id]
+            item = run.violations.get(row.identity_id)
+            if item is None or row.observed_outcome != item.get("observed_outcome"):
+                continue
+            # Deleting a reviewed case clears the evidence FK. Its frozen
+            # case reference and bound job still identify the original execution.
+            if row.case_ref != str(run.job.case_snapshot.get("id") or "") or (
+                row.case_id != run.case_id and (row.case_id is not None or run.case_id in case_by_id)
+            ):
+                continue
             # Metadata only: the redacted record itself is read through the evidence endpoint.
             evidence_by_job[row.job_id].append({
                 "evidence_id": row.id, "job_id": row.job_id, "case_id": row.case_id,
                 "identity_id": row.identity_id, "content_hash": row.content_hash,
-                "expected": "deny", "observed": "allow",
+                "expected": "deny", "observed": row.observed_outcome, **_decision_fields(item),
             })
 
     observed: dict[str, set[str]] = defaultdict(set)
@@ -290,7 +372,7 @@ def build_coverage(db: Session, program_id: str) -> dict:
     # not be placed anywhere. They are listed, never silently dropped.
     unattributed = [
         {"job_id": run.job.id, "case_id": run.case_id or None,
-         "assessment_status": (run.job.assessment or {}).get("status"),
+         "assessment_status": run.status,
          "reason": "no_usable_snapshot" if run.request is None else "no_observed_operation"}
         for run in runs
         if run.job.id not in attributed_run_ids
@@ -381,20 +463,18 @@ def _operation(
     candidates_by_job, evidence_by_job, universe, observed_identities, reasons,
 ) -> dict:
     case_entries = []
-    current_jobs: list[ScanJob] = []
     declared: dict[str, list[str]] = defaultdict(list)  # identity -> declaring case ids
     per_case_identity: dict[str, dict[str, dict | None]] = defaultdict(dict)
     stale_runs_for_matched = 0
-    current_run_ids: set[str] = set()
 
     for case, spec in matched:
         # Every run of this case, wherever its old definition pointed: a case edited since
         # it last ran has history but no current coverage.
         mine = runs_by_case.get(case.id, [])
-        current = [r.job for r in mine if r.is_current_for(case.id, current_hash.get(case.id))]
+        current = [r for r in mine if r.is_current_for(case.id, current_hash.get(case.id))]
         stale = [r for r in mine if not r.is_current_for(case.id, current_hash.get(case.id))]
         stale_runs_for_matched += len(stale)
-        latest = _latest(current)
+        latest = max(current, key=lambda r: (r.job.completed_at or r.job.created_at, r.job.created_at, r.job.id), default=None)
         decisions = _declared_decisions(spec)
         identities = _identity_ids(spec)
         case_entries.append({
@@ -408,22 +488,21 @@ def _operation(
             "executed": latest is not None,
             "identity_states": {},
             "stale_runs": len(stale),
-            "latest_job_id": latest.id if latest else None,
-            "assessment_status": (latest.assessment or {}).get("status") if latest else None,
-            "reasons": list((latest.assessment or {}).get("reasons") or []) if latest else [],
+            "latest_job_id": latest.job.id if latest else None,
+            "assessment_status": latest.status if latest else None,
+            "baseline_valid": latest.baseline_valid if latest else None,
+            "reasons": latest.reasons if latest else [],
         })
         rows = {}
         if latest:
-            current_jobs.append(latest)
-            current_run_ids.add(latest.id)
-            for item in (latest.assessment or {}).get("identities") or []:
-                if item.get("identity_id"):
-                    rows[str(item["identity_id"])] = {
-                        "state": str(item.get("state") or "missing"),
-                        "reason": str(item.get("reason") or ""),
-                        "expected": str(item.get("expected_decision") or "unknown"),
-                        "observed": str(item.get("observed_outcome") or "unknown"),
-                    }
+            for identity, item in latest.identities.items():
+                rows[identity] = {
+                    "state": str(item.get("state") or "missing"),
+                    "reason": str(item.get("reason") or ""),
+                    "expected": str(item.get("expected_decision") or "unknown"),
+                    "observed": str(item.get("observed_outcome") or "unknown"),
+                    **_decision_fields(item),
+                }
         case_entries[-1]["identity_states"] = {i: rows[i]["state"] for i in identities if i in rows}
         case_entries[-1]["identity_results"] = {i: rows[i] for i in identities if i in rows}
         for identity in identities:
@@ -473,18 +552,18 @@ def _operation(
                 "case_id": run.case_id or None,
                 "case_name": case.name if case else None,
                 "reason": _historical_reason(run, case_by_id),
-                "assessment_status": (run.job.assessment or {}).get("status"),
+                "assessment_status": run.status,
                 "completed_at": run.job.completed_at.isoformat() if run.job.completed_at else None,
                 "candidates": {"open": run_open, "promoted": counts.get("promoted", 0), "false_positive": counts.get("false_positive", 0)},
             })
     history.sort(key=lambda h: (h["completed_at"] or "", h["job_id"]), reverse=True)
 
-    statuses = [(j.assessment or {}).get("status") for j in current_jobs]
+    statuses = [entry["assessment_status"] for entry in case_entries if entry["executed"]]
     if open_candidates or promoted:
         state = "violation_candidate"
     elif not matched:
         state = "untested"
-    elif not current_jobs:
+    elif not statuses:
         state = "stale" if stale_runs_for_matched else "reviewed_not_executed"
     elif all(s == "conclusive" for s in statuses) and all(e["executed"] for e in case_entries):
         state = "conclusive"

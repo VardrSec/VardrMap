@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useAppContext } from "../context/AppContext";
 import type { AuthorizationRelationships } from "../types";
+import { ObservationDetails } from "./AuthorizationCoveragePanel";
 import { Panel } from "./ui";
 
 /**
@@ -105,7 +106,9 @@ export default function AuthorizationRelationshipsPanel({ engagementId, onDraft 
           <td className="py-2">{cell.observations.length === 0 ? "No reviewed case for this operation and identity" : <details>
             <summary className="cursor-pointer">{cell.observations.length} case{cell.observations.length === 1 ? "" : "s"}</summary>
             <ul className="mt-1 space-y-2">{cell.observations.map(item => <li key={item.case_id}>
-              <div>{item.case_name}: expected {item.expected}, observed {item.observed}</div>
+              <div className="font-medium">{item.case_name}</div>
+              <ObservationDetails result={item} />
+              {item.assessment_state && <div>Assessment state {item.assessment_state}</div>}
               <div className="text-muted">{CELL_LABEL[item.state] ?? item.state} · {item.reason.replace(/_/g, " ")}</div>
               {item.basis.map(line => <div key={line} className="text-muted">{line}</div>)}
               {item.job_id && <div className="font-mono text-[10px] text-muted">job {item.job_id}</div>}

@@ -504,6 +504,11 @@ creation. Historical/manual rows keep null provenance; it is never inferred. Ove
 ids (above 200 characters) retain their redacted text in the body and use null
 identity metadata, never a truncated identifier that names a different identity.
 
+### `GET /engagements/{program_id}/evidence/{evidence_id}`
+
+Returns the individual evidence record with its stored redacted `body` and `content_hash`.
+The caller needs read access to the engagement. An unknown ID or an ID from another engagement returns `404`.
+
 ### `DELETE /engagements/{program_id}/evidence/{evidence_id}`
 
 ---
@@ -2173,19 +2178,22 @@ latest assessment is conclusive), `partial` (some evaluated results, not conclus
 `inconclusive` (executed, nothing evaluated), `reviewed_not_executed` (a reviewed case
 but no job reported an assessment; queued, running and failed jobs do not count), `stale` (a reviewed
 case whose only runs predate its current definition) and `untested`. An unresolved candidate keeps
-`violation_candidate` even when its case was later edited or deleted. `conclusive` requires every matching
-case to have a current, conclusive run. `conclusive` repeats the stored assessment and is never a statement that the
-operation is secure. `candidates` reports `open`, `promoted`, `false_positive` and
-`backing_evidence` (reviewed-deny executions observed as allow). `identity_coverage`
+`violation_candidate` even when its case was later edited or deleted. `conclusive` describes the
+completeness of the projected assessments. If the frozen case required response assertions or write
+verification, an older HTTP-only result for that identity projects as `inconclusive`. Cases reviewed
+for status alone retain their evaluated HTTP outcomes. `candidates` reports `open`, `promoted`,
+`false_positive` and `backing_evidence` (the total number of qualifying resource-execution records). `identity_coverage`
 lists every identity declared in any case of the engagement with its best latest state
 for this operation: `evaluated`, `mixed` (evaluated by some matching cases but not all), `inconclusive`, `missing`,
 `skipped`, `reviewed_not_run` or `not_reviewed` (not in a reviewed case for this operation: a gap in what was
 reviewed, not a claim about what should be allowed).
 
-Operations with a violation candidate also carry `candidate_evidence` (at most 10 references:
-`evidence_id`, `job_id`, `case_id`, `identity_id`, `content_hash` and the reviewed/observed pair). They are
-metadata only; the redacted record itself is read through `GET /engagements/{id}/evidence` with the
-same `job_id`, `case_id` and `identity_id`, and its `content_hash` can be compared with the reference.
+`candidate_evidence` lists up to 10 resource-execution references with their `job_id`, `case_id`,
+`identity_id`, expected decision and raw HTTP outcome. Each comes from a job with a Gate candidate,
+a valid baseline and an evaluated allow for an identity reviewed as deny in the frozen case.
+Promoted and dismissed candidates retain their backing references. To open a reference,
+fetch `GET /engagements/{program_id}/evidence/{evidence_id}` using its `evidence_id`. Verify the
+returned `id` and `content_hash` against the reference before displaying the body.
 
 Each operation also carries `priority_reasons`, the captured facts that make its boundary worth
 testing, each with a `code` and a plain-language `detail`: `object_identifier_in_path`,
@@ -2222,9 +2230,12 @@ tenant or role. `boundary_evidence` lists, per operation, the boundary classes w
 The additive `boundary_matrix` lists operation × identity × boundary cells. Each
 cell retains the endpoint ID, method/path label, scheme, host and port, identity ID,
 boundary and aggregate state. `observations` links each reviewed case and latest
-job to expected/observed outcomes, state, reason, owner identity and declared basis.
-The underlying coverage case entry also exposes `identity_results` alongside
-`identity_states`; only a current case-bound result counts. Missing owner/tenant
+job to its expected decision, raw HTTP outcome (`observed`), boundary state, reason, owner identity
+and declared basis. Each observation also includes the projected `assessment_state` and the stored
+`reported_decision`, `source` and `write_verification`.
+The underlying coverage case entry exposes those decision fields and the raw HTTP outcome in
+`identity_results`, alongside `identity_states` and the case's `baseline_valid`. Only a current
+case-bound result counts. Missing owner/tenant
 context and conflicting declarations remain explicit; an identity absent from an
 operation is `not_reviewed`, never an inferred peer. Differing case states produce
 `mixed`. Evaluated describes an observation, not security or independent proof.

@@ -182,6 +182,22 @@ def list_evidence(
     return {"evidence": [_serialize(e) for e in rows], "total": total}
 
 
+@router.get("/engagements/{program_id}/evidence/{evidence_id}")
+def get_evidence(
+    program_id: str,
+    evidence_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    get_engagement_or_404(program_id, current_user, db)
+    item = db.query(Evidence).filter(
+        Evidence.program_id == program_id, Evidence.id == evidence_id
+    ).first()
+    if item is None:
+        raise HTTPException(status_code=404, detail="Evidence not found")
+    return _serialize(item)
+
+
 @router.delete("/engagements/{program_id}/evidence/{evidence_id}")
 def delete_evidence(
     program_id: str,
