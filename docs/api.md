@@ -1291,14 +1291,14 @@ Pipeline stages with an unmet dependency are held back: a job with `depends_on` 
 That keeps `scan_jobs.config` flat for validation while giving the runner the object its config parser requires. The expansion is never written back, so revising a case changes what the next hand-off carries. A job whose case has been deleted is auto-failed with `"authorization test case ... no longer exists"`.
 
 ### `POST /jobs/{job_id}/claim`
-Atomically claim a pending job. Sets `status: "running"` and stamps `started_at` only if the job is currently `pending`. Returns `409` if the job is already running, done, or failed — prevents two VardrRunner instances from double-claiming the same job.
+Atomically claim a pending job. If `depends_on` is set, the parent must exist in the same engagement and have status `done`. A dependency refusal leaves the child pending with no start time, budget charge, or execution credentials. Only the winning claim sets the status to `running` and stamps `started_at`.
 
 **Response:** updated job object with `status: "running"`.
 
 **Errors**
 - `401` — not authenticated
 - `404` — job not found or belongs to another user
-- `409` — job is not in `pending` state
+- `409` — job is already running or terminal, or its dependency is unsatisfied
 
 ### `PATCH /jobs/{job_id}`
 The table below applies to legacy jobs without an owned execution. For controlled
@@ -1563,6 +1563,8 @@ List services for a engagement, ordered by host then port. Optional `job_id` ret
 
 ### `POST /engagements/{program_id}/services`
 Bulk-upsert services. VardrRunner posts port-discovery results (naabu; nmap only when opted in) here after a scan job completes. Upserts on `(host, port, protocol)` — updates metadata if the combination already exists. Optional body field `job_id` links every service in the request (new or updated) to the job that observed it; it must be a job of this engagement or the request fails with `404`.
+
+On an existing service, each nonempty `service_name`, `product`, or `version` replaces its stored value independently. Omitting one of these fields or sending `null` or `""` preserves its stored value. Re-observations still refresh `source` and `last_scanned_at`.
 
 **Request body**
 ```json

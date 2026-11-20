@@ -6,7 +6,8 @@ from typing import Any, Literal, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy.orm import Session
+from sqlalchemy import exists, or_
+from sqlalchemy.orm import Session, aliased
 
 import assessments
 import enforcement
@@ -885,8 +886,8 @@ def claim_job(
     db: Session = Depends(get_db),
     response: Response = None,
 ):
-    """Atomically claim a pending job. Returns 409 if the job is not in 'pending'
-    state, 404 if it does not exist or is not owned by the caller.
+    """Atomically claim a pending job whose dependency, if any, is done in this
+    engagement. An unmet dependency or non-pending status returns 409.
 
     The transition is a single conditional UPDATE (... WHERE status = 'pending'),
     so when two runners race for the same job exactly one wins — the database,
@@ -939,12 +940,22 @@ def claim_job(
             raise HTTPException(status_code=404, detail="Test case not found")
         snapshot = case.spec
 
+    parent = aliased(ScanJob)
+    dependency_ready = or_(
+        ScanJob.depends_on.is_(None),
+        exists().where(
+            parent.id == ScanJob.depends_on,
+            parent.program_id == ScanJob.program_id,
+            parent.status == "done",
+        ).correlate(ScanJob),
+    )
     claimed = (
         db.query(ScanJob)
         .filter(
             ScanJob.id == job_id,
             ScanJob.program_id.in_(accessible_engagement_ids(current_user["github_id"], db)),
             ScanJob.status == "pending",
+            dependency_ready,
             ScanJob.authorization_contract_required.is_(False),
             ScanJob.managed_approval_id.is_(None),
             ~ScanJob.program_id.in_(db.query(Engagement.id).filter(Engagement.stop_work_at.is_not(None))),
@@ -954,29 +965,30 @@ def claim_job(
             synchronize_session=False,
         )
     )
+    if claimed == 0:
+        # Diagnose the refusal before releasing the engagement lock.
+        job = (
+            db.query(ScanJob.status, dependency_ready.label("dependency_ready"))
+            .filter(
+                ScanJob.id == job_id,
+                ScanJob.program_id.in_(accessible_engagement_ids(current_user["github_id"], db)),
+            )
+            .first()
+        )
+        db.rollback()
+        if not job:
+            raise HTTPException(status_code=404)
+        if job.status == "pending" and not job.dependency_ready:
+            raise HTTPException(409, "job dependency must be done in this engagement before claim")
+        raise HTTPException(status_code=409, detail=f"job is already {job.status}")
+
+    target_receipt = target_budget.charge(engagement, pending, snapshot, body)
+    duration_receipt = duration_budget.allocate(engagement, body)
     execution = None
-    target_receipt = target_budget.charge(engagement, pending, snapshot, body) if claimed else None
-    duration_receipt = duration_budget.allocate(engagement, body) if claimed else None
-    if claimed and body is not None:
+    if body is not None:
         execution = control.issue(db, job_id, current_user, request, body, target_receipt, duration_receipt)
         control.no_store(response)
     db.commit()
-
-    if claimed == 0:
-        # We didn't win the transition. Read once to distinguish "not found / not
-        # mine" (404) from "exists but no longer pending" (409). The read stays
-        # scoped to the owner so a non-owner's job is reported as 404, not 403.
-        job = (
-            db.query(ScanJob)
-            .filter(
-            ScanJob.id == job_id,
-            ScanJob.program_id.in_(accessible_engagement_ids(current_user["github_id"], db)),
-        )
-            .first()
-        )
-        if not job:
-            raise HTTPException(status_code=404)
-        raise HTTPException(status_code=409, detail=f"job is already {job.status}")
 
     job = (
         db.query(ScanJob)

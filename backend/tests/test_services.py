@@ -105,15 +105,24 @@ class TestPortDiscoveryAttribution:
         assert _bulk_create(client, program_id, auth_headers, [self.NAABU]).status_code == 201
         assert [s["source"] for s in self._list(client, program_id, auth_headers)] == ["naabu"]
 
-    def test_naabu_seeing_a_legacy_nmap_row_relabels_it_without_duplicating(
+    def test_port_only_naabu_observation_preserves_existing_details(
         self, client, program_id, auth_headers
     ):
-        _bulk_create(client, program_id, auth_headers, [{**_SVC, "port": 8080}])
-        assert self._list(client, program_id, auth_headers)[0]["source"] == "nmap"
-        res = _bulk_create(client, program_id, auth_headers, [self.NAABU])
+        assert _bulk_create(client, program_id, auth_headers, [{**_SVC, "port": 8080}]).status_code == 201
+        before, = self._list(client, program_id, auth_headers)
+        assert before["source"] == "nmap"
+
+        observation = {"host": _SVC["host"], "port": 8080, "source": "naabu"}
+        res = _bulk_create(client, program_id, auth_headers, [observation])
+        assert res.status_code == 201
         assert (res.json()["created"], res.json()["updated"]) == (0, 1)
-        rows = self._list(client, program_id, auth_headers)
-        assert [(s["port"], s["source"]) for s in rows] == [(8080, "naabu")]
+
+        after, = self._list(client, program_id, auth_headers)
+        assert after["id"] == before["id"]
+        assert after["source"] == "naabu"
+        assert after["last_scanned_at"] > before["last_scanned_at"]
+        for field in ("service_name", "product", "version"):
+            assert after[field] == before[field] == _SVC[field]
 
     def test_only_a_missing_source_receives_the_legacy_nmap_label(
         self, client, program_id, auth_headers
@@ -131,9 +140,18 @@ class TestBulkCreateServices:
         assert data["created"] == 1
         assert data["updated"] == 0
 
-    def test_upsert_updates_existing(self, client, program_id, auth_headers):
+    @pytest.mark.parametrize(
+        ("details", "changed_field"),
+        [
+            ({"service_name": "http-alt", "product": None, "version": ""}, "service_name"),
+            ({"service_name": "", "product": "Apache", "version": None}, "product"),
+            ({"service_name": None, "product": "", "version": "1.25.0"}, "version"),
+        ],
+        ids=["service-name", "product", "version"],
+    )
+    def test_upsert_updates_existing(self, client, program_id, auth_headers, details, changed_field):
         _bulk_create(client, program_id, auth_headers)
-        updated_svc = {**_SVC, "version": "1.25.0"}
+        updated_svc = {"host": _SVC["host"], "port": _SVC["port"], **details}
         res = _bulk_create(client, program_id, auth_headers, [updated_svc])
         assert res.status_code == 201
         data = res.json()
@@ -141,7 +159,9 @@ class TestBulkCreateServices:
         assert data["updated"] == 1
 
         services = client.get(f"/programs/{program_id}/services", headers=auth_headers).json()["services"]
-        assert services[0]["version"] == "1.25.0"
+        for field in ("service_name", "product", "version"):
+            expected = details[field] if field == changed_field else _SVC[field]
+            assert services[0][field] == expected
 
     def test_multiple_services(self, client, program_id, auth_headers):
         svcs = [

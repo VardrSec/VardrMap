@@ -133,15 +133,6 @@ export function Textarea({ label, value, onChange }: { label: string; value: str
   );
 }
 
-export function KeyValue({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="mb-4 last:mb-0">
-      <div className="text-[9px] font-semibold uppercase tracking-widest text-muted">{label}</div>
-      <div className="mt-1 text-sm text-[#94a3b8]">{value}</div>
-    </div>
-  );
-}
-
 export function ListCard({ title, subtitle, onDelete }: { title: string; subtitle: string; onDelete: () => void }) {
   return (
     <div className="flex items-start justify-between gap-3 rounded-lg border border-[#2e2e2e] bg-[#161616] px-4 py-3">

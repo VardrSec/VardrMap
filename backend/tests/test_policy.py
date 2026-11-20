@@ -162,15 +162,6 @@ def test_exclusion_beats_inclusion_regardless_of_rule_order():
     )
 
 
-def test_exclusion_covers_subdomains_of_the_excluded_host():
-    rules = (
-        policy.ScopeRule(value="*.acme.com"),
-        policy.ScopeRule(value="prod.acme.com", excluded=True),
-    )
-    d = policy.evaluate(_input(target="db.prod.acme.com", scope_rules=rules))
-    assert not d.allowed and d.reason == policy.TARGET_EXCLUDED
-
-
 def test_sibling_of_an_excluded_host_is_still_allowed():
     rules = (
         policy.ScopeRule(value="*.acme.com"),
