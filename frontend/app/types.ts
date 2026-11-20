@@ -82,7 +82,6 @@ export type Engagement = {
   my_role?: "owner" | "member" | "viewer";
 };
 export type ApiKey = { id: string; label: string; scope: "full" | "runner"; created_at: string | null; last_used_at: string | null };
-export type EngagementMember = { id: string; program_id: string; member_github_id: string; role: string; invited_at: string | null };
 export type Service = {
   id: string; program_id: string; host: string; port: number; protocol: string;
   service_name: string; product: string; version: string; state: string; source: string;
@@ -302,7 +301,6 @@ export type RunnerStatus = RunnerInfo & {
   checked_at?: string;
   stale_after_seconds?: number;
 };
-export type UserSettings = { webhook_url: string; notify_min_severity: string };
 export type Section = "dashboard" | "scope" | "overview" | "review" | "findings" | "reports" | "settings";
 export type AppSession = {
   authMethod?: "local";
