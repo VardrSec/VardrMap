@@ -2,15 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { useAppContext } from "../context/AppContext";
-import type { AuthorizationCoverage, CoverageEvidenceRef, CoverageOperation, CoverageState } from "../types";
+import type { AuthorizationCoverage, AuthorizationObservation, CoverageEvidenceRef, CoverageOperation, CoverageState } from "../types";
 import { Panel } from "./ui";
 import WorkflowReviewSummary from "./WorkflowReviewSummary";
 
 /**
  * Where authorization testing is incomplete, computed by the backend from stored
- * inventory, reviewed cases, executed jobs and their evidence. Nothing here is
- * inferred in the browser, and "conclusive" never means "secure": it repeats the
- * stored assessment (definite reported outcomes with a working baseline).
+ * inventory, reviewed cases, executed jobs and their evidence. The backend
+ * checks each run against the proof required by its frozen case.
  */
 
 const STATE_LABEL: Record<CoverageState, string> = {
@@ -59,29 +58,38 @@ function StateBadge({ state }: { state: CoverageState }) {
     style={{ color: STATE_COLOR[state], background: `${STATE_COLOR[state]}1f` }}>{STATE_LABEL[state]}</span>;
 }
 
+export function ObservationDetails({ result }: { result: AuthorizationObservation }) {
+  return <>
+    <div>Expected {result.expected} · Raw HTTP outcome {result.observed}</div>
+    <div>Reported decision {result.reported_decision ?? "not recorded"}</div>
+    {result.source && <div>Decision source {result.source}</div>}
+    {result.write_verification && <div>Write verification {result.write_verification}</div>}
+  </>;
+}
+
 /** The retained, redacted record behind a candidate, loaded only when asked for. */
 function EvidenceRecord({ engagementId, reference }: { engagementId: string; reference: CoverageEvidenceRef }) {
   const { authFetch } = useAppContext();
-  const [record, setRecord] = useState<{ body: string; content_hash: string } | "failed" | null>(null);
+  const [record, setRecord] = useState<{ body: string; content_hash: string } | "unavailable" | "different-id" | null>(null);
   async function open() {
     try {
-      const params = new URLSearchParams({ job_id: reference.job_id, limit: "1" });
-      if (reference.case_id) params.set("case_id", reference.case_id);
-      if (reference.identity_id) params.set("identity_id", reference.identity_id);
-      const res = await authFetch(`/engagements/${engagementId}/evidence?${params}`);
+      const res = await authFetch(`/engagements/${engagementId}/evidence/${encodeURIComponent(reference.evidence_id)}`);
       if (!res.ok) throw new Error();
-      const row = ((await res.json()).evidence ?? [])[0];
-      setRecord(row ? { body: String(row.body ?? ""), content_hash: String(row.content_hash ?? "") } : "failed");
-    } catch { setRecord("failed"); }
+      const row = await res.json();
+      if (!row?.id || typeof row.body !== "string" || typeof row.content_hash !== "string" || !row.content_hash) throw new Error();
+      setRecord(row.id === reference.evidence_id ? { body: row.body, content_hash: row.content_hash } : "different-id");
+    } catch { setRecord("unavailable"); }
   }
   return <div className="mt-1 rounded border border-[#2e2e2e] bg-[#111] p-2 text-[10px] text-[#94a3b8]">
-    <div><span className="font-mono text-[#f1f5f9]">{reference.identity_id ?? "unknown identity"}</span> was reviewed as <strong>{reference.expected}</strong> and observed as <strong>{reference.observed}</strong>
-      {" "}(job <span className="font-mono">{reference.job_id.slice(0, 8)}</span>)
-      {record === null && <button type="button" onClick={() => void open()} className="ml-2 text-[#89b4fa] hover:underline">View redacted record</button>}</div>
-    {record === "failed" && <div className="mt-1 text-[#f87171]">The record could not be loaded.</div>}
-    {record && record !== "failed" && <>
+    <div className="font-mono text-[#f1f5f9]">{reference.identity_id ?? "unknown identity"} · job {reference.job_id.slice(0, 8)}</div>
+    <ObservationDetails result={reference} />
+    {record === null && <button type="button" onClick={() => void open()} className="text-[#89b4fa] hover:underline">View redacted record</button>}
+    {record === "unavailable" && <div className="mt-1 text-[#f87171]">The cited evidence is unavailable.</div>}
+    {record === "different-id" && <div className="mt-1 text-[#f87171]">The returned evidence ID differs from the coverage reference.</div>}
+    {record && typeof record === "object" && (record.content_hash === reference.content_hash ? <>
       <pre className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap font-mono">{record.body}</pre>
-      <div className="mt-1 font-mono text-muted">sha256 {record.content_hash}{record.content_hash === reference.content_hash ? " (matches)" : " (differs from the coverage reference)"}</div></>}
+      <div className="mt-1 font-mono text-muted">sha256 {record.content_hash} (matches)</div>
+    </> : <div className="mt-1 text-[#f87171]">sha256 {record.content_hash} (differs from the coverage reference)</div>)}
   </div>;
 }
 
@@ -168,7 +176,16 @@ export default function AuthorizationCoveragePanel({ engagementId, onDraft }: { 
             className="rounded border px-1.5 py-0.5 font-mono text-[10px]"
             style={{ color: IDENTITY_COLOR[row.state] ?? "#94a3b8", borderColor: `${IDENTITY_COLOR[row.state] ?? "#94a3b8"}55` }}>
             {row.identity_id} · {IDENTITY_LABEL[row.state] ?? row.state}
-          </span>)}{op.identity_coverage.length === 0 && <span className="text-muted">no identities declared in this engagement</span>}</div></td>
+          </span>)}{op.identity_coverage.length === 0 && <span className="text-muted">no identities declared in this engagement</span>}</div>
+          {op.cases.filter(item => item.executed).map(item => <details key={item.case_id} className="mt-1 text-[10px] text-[#94a3b8]">
+            <summary className="cursor-pointer">{item.name} · assessment details</summary>
+            <div>Legitimate baseline {item.baseline_valid == null ? "not recorded" : item.baseline_valid ? "valid" : "not established"}</div>
+            <ul>{Object.entries(item.identity_results ?? {}).map(([id, result]) => <li key={id} className="mt-1">
+              <div className="font-mono text-[#f1f5f9]">{id} · {result.state}</div>
+              {result.reason === "semantic_assessment_missing" && <div>Required semantic proof is missing.</div>}
+              <ObservationDetails result={result} />
+            </li>)}</ul>
+          </details>)}</td>
         <td className="py-2.5 pl-3 text-right">{onDraft && op.identity_coverage.some((row) => row.state !== "evaluated") &&
           <button type="button" onClick={() => onDraft(op.endpoint_id, op.identity_coverage.map((row) => row.identity_id))}
             aria-label={`Draft a test for ${op.method} ${op.path_template}`}

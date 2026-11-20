@@ -70,6 +70,40 @@ describe("AuthorizationCoveragePanel", () => {
     expect(await screen.findByText(/does not mean the operation is secure/)).toBeInTheDocument();
   });
 
+  it("shows the HTTP outcome, reported decision and proof with the individual assessment state", async () => {
+    const item = {
+      ...coverage.operations[0].cases[0], baseline_valid: true, identity_results: {
+        peer: { state: "evaluated", reason: "state_unchanged", expected: "deny", observed: "allow",
+          reported_decision: "denied", source: "write_verification", write_verification: "verified_no_effect" },
+      },
+    };
+    const body = { ...coverage, operations: [{ ...coverage.operations[0], cases: [item] }] };
+    renderWithApp(<AuthorizationCoveragePanel engagementId="eng-1" />, {
+      routes: { "GET /engagements/eng-1/api/coverage?limit=500": { body } },
+    });
+    await userEvent.click(await screen.findByText("orders · assessment details"));
+    expect(screen.getByText("Legitimate baseline valid")).toBeVisible();
+    expect(screen.getByText("Expected deny · Raw HTTP outcome allow")).toBeVisible();
+    expect(screen.getByText("Reported decision denied")).toBeVisible();
+    expect(screen.getByText("Decision source write_verification")).toBeVisible();
+    expect(screen.getByText("Write verification verified_no_effect")).toBeVisible();
+  });
+
+  it("explains the missing proof on a historical HTTP-only result", async () => {
+    const operation = coverage.operations[0];
+    const peer = { state: "inconclusive", reason: "semantic_assessment_missing", expected: "deny",
+      observed: "allow", reported_decision: null, source: null, write_verification: null };
+    const item = { ...operation.cases[0], identity_results: { peer } };
+    const body = { ...coverage, operations: [{ ...operation, cases: [item] }] };
+    renderWithApp(<AuthorizationCoveragePanel engagementId="eng-1" />, {
+      routes: { "GET /engagements/eng-1/api/coverage?limit=500": { body } },
+    });
+    await userEvent.click(await screen.findByText("orders · assessment details"));
+    expect(screen.getByText("Required semantic proof is missing.")).toBeVisible();
+    expect(screen.getByText("Expected deny · Raw HTTP outcome allow")).toBeVisible();
+    expect(screen.getByText("Reported decision not recorded")).toBeVisible();
+  });
+
   it("filters by state through the backend and marks the active filter", async () => {
     const filtered = { ...coverage, operations: [coverage.operations[2]] };
     const { authFetch } = renderWithApp(<AuthorizationCoveragePanel engagementId="eng-1" />, {
@@ -174,25 +208,28 @@ describe("AuthorizationCoveragePanel priority", () => {
 describe("AuthorizationCoveragePanel evidence", () => {
   const reference = {
     evidence_id: "ev-1", job_id: "job-12345678", case_id: "c1", identity_id: "peer",
-    content_hash: "abc123", expected: "deny", observed: "allow",
+    content_hash: "abc123", expected: "deny", observed: "allow", reported_decision: "allowed",
+    source: "write_verification", write_verification: "verified_effect",
   };
   const withEvidence = {
     ...coverage,
     operations: [{ ...coverage.operations[0], candidate_evidence: [reference] }, ...coverage.operations.slice(1).map((op) => ({ ...op, candidate_evidence: [] }))],
   };
-  const url = "GET /engagements/eng-1/evidence?job_id=job-12345678&limit=1&case_id=c1&identity_id=peer";
+  const path = "/engagements/eng-1/evidence/ev-1";
+  const url = `GET ${path}`;
 
-  it("states what was reviewed against what was observed and loads the redacted record on request", async () => {
-    renderWithApp(<AuthorizationCoveragePanel engagementId="eng-1" />, {
+  it("loads the exact cited record on request", async () => {
+    const { authFetch } = renderWithApp(<AuthorizationCoveragePanel engagementId="eng-1" />, {
       routes: {
         "GET /engagements/eng-1/api/coverage?limit=500": { body: withEvidence },
-        [url]: { body: { evidence: [{ id: "ev-1", body: '{"status_code": 200, "identity_id": "peer"}', content_hash: "abc123" }], total: 1 } },
+        [url]: { body: { id: "ev-1", body: '{"status_code": 204, "identity_id": "peer"}', content_hash: "abc123" } },
       },
     });
-    expect(await screen.findByText(/was reviewed as/)).toBeInTheDocument();
-    expect(screen.queryByText(/status_code/)).not.toBeInTheDocument(); // not fetched until asked
+    expect(await screen.findByText("Reported decision allowed")).toBeInTheDocument();
+    expect(authFetch).not.toHaveBeenCalledWith(path);
     await userEvent.click(screen.getByRole("button", { name: "View redacted record" }));
-    expect(await screen.findByText(/"status_code": 200/)).toBeInTheDocument();
+    expect(await screen.findByText(/"status_code": 204/)).toBeInTheDocument();
+    expect(authFetch).toHaveBeenCalledWith(path);
     expect(screen.getByText(/sha256 abc123 \(matches\)/)).toBeInTheDocument();
   });
 
@@ -200,22 +237,36 @@ describe("AuthorizationCoveragePanel evidence", () => {
     renderWithApp(<AuthorizationCoveragePanel engagementId="eng-1" />, {
       routes: {
         "GET /engagements/eng-1/api/coverage?limit=500": { body: withEvidence },
-        [url]: { body: { evidence: [{ id: "ev-1", body: "{}", content_hash: "different" }], total: 1 } },
+        [url]: { body: { id: "ev-1", body: "uncited content", content_hash: "different" } },
       },
     });
     await userEvent.click(await screen.findByRole("button", { name: "View redacted record" }));
     expect(await screen.findByText(/differs from the coverage reference/)).toBeInTheDocument();
+    expect(screen.queryByText("uncited content")).not.toBeInTheDocument();
   });
 
-  it("says so when the record cannot be loaded", async () => {
-    renderWithApp(<AuthorizationCoveragePanel engagementId="eng-1" />, {
+  it("reports an unavailable reference without falling back to another row", async () => {
+    const { authFetch } = renderWithApp(<AuthorizationCoveragePanel engagementId="eng-1" />, {
       routes: {
         "GET /engagements/eng-1/api/coverage?limit=500": { body: withEvidence },
-        [url]: { body: { evidence: [], total: 0 } },
+        [url]: { ok: false, status: 404 },
       },
     });
     await userEvent.click(await screen.findByRole("button", { name: "View redacted record" }));
-    expect(await screen.findByText("The record could not be loaded.")).toBeInTheDocument();
+    expect(await screen.findByText("The cited evidence is unavailable.")).toBeInTheDocument();
+    expect(authFetch.mock.calls.filter(([path]) => path.includes("/evidence"))).toEqual([[path]]);
+  });
+
+  it("rejects a different record even when its hash matches", async () => {
+    renderWithApp(<AuthorizationCoveragePanel engagementId="eng-1" />, {
+      routes: {
+        "GET /engagements/eng-1/api/coverage?limit=500": { body: withEvidence },
+        [url]: { body: { id: "ev-2", body: "uncited content", content_hash: "abc123" } },
+      },
+    });
+    await userEvent.click(await screen.findByRole("button", { name: "View redacted record" }));
+    expect(await screen.findByText(/returned evidence ID differs/)).toBeInTheDocument();
+    expect(screen.queryByText("uncited content")).not.toBeInTheDocument();
   });
 });
 

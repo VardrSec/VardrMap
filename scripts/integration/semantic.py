@@ -4,6 +4,89 @@ import copy
 import json
 
 
+def check_write_projections(*, record, req, base, target, jobs):
+    """Read the paired fixture's stored job assessments, matrix and cited records."""
+    exchange = req(
+        "POST", base + "/api/exchanges",
+        {"method": "PUT", "url": target + "/verification/write", "identity_label": "owner",
+         "response_status": 204},
+        expected=(201,),
+    )
+    endpoint_id = exchange["endpoint"]["id"]
+    # Older Map snapshots in the compatibility matrix can lack these projections.
+    coverage = req("GET", base + "/api/coverage", expected=(200, 404))
+    matrix = req("GET", base + "/api/relationships", expected=(200, 404)).get("boundary_matrix", [])
+    operation = next((op for op in coverage.get("operations", []) if op["endpoint_id"] == endpoint_id), {})
+    job_details = {row["id"]: row for row in req("GET", base + "/jobs")["jobs"]}
+    cases = {row["latest_job_id"]: row for row in operation.get("cases", [])}
+    for mode, job in jobs.items():
+        assessment = job_details[job]["assessment"] or {}
+        case_id = job_details[job]["config"]["test_case_id"]
+        case = cases.get(job, {})
+        by_identity = {row["identity_id"]: row for row in assessment.get("identities", [])}
+        rows = req("GET", base + f"/evidence?job_id={job}")["evidence"]
+        executions = {}
+        preflights = {}
+        for row in rows:
+            detail = json.loads(row["body"])
+            records = preflights if detail.get("phase") == "identity_preflight" else executions
+            records[row["identity_id"]] = row
+        record(
+            mode + " coverage retains the valid bound assessment",
+            case.get("case_id") == case_id and assessment.get("case_id") == case_id
+            and case.get("assessment_status") == assessment.get("status") == "conclusive"
+            and case.get("baseline_valid") is True and assessment.get("baseline_valid") is True
+            and assessment.get("case_snapshot_verified") is True,
+        )
+        for identity in ("owner", "peer"):
+            allowed = identity == "owner" or mode == "vulnerable"
+            expected = "allow" if identity == "owner" else "deny"
+            decision = "allowed" if allowed else "denied"
+            effect = "verified_effect" if allowed else "verified_no_effect"
+            stored = by_identity.get(identity, {})
+            result = case.get("identity_results", {}).get(identity, {})
+            observations = [
+                obs for cell in matrix if cell["endpoint_id"] == endpoint_id and cell["identity_id"] == identity
+                for obs in cell["observations"] if obs["job_id"] == job and obs["case_id"] == case_id
+            ]
+            evidence = json.loads(executions.get(identity, {}).get("body", "{}"))
+            job_result = {**stored, "expected": stored.get("expected_decision"), "observed": stored.get("observed_outcome")}
+            fields = {"expected": expected, "observed": "allow", "reported_decision": decision,
+                      "source": "write_verification", "write_verification": effect}
+            record(
+                f"{mode} {identity} job detail, coverage and matrix agree on the 204 write",
+                evidence.get("status_code") == 204 and evidence.get("observed_outcome") == "allow"
+                and job_result.get("state") == result.get("state") == "evaluated"
+                and bool(observations) and all(obs.get("assessment_state") == "evaluated" for obs in observations)
+                and all(fields.items() <= row.items() for row in [job_result, result, *observations]),
+            )
+        references = [ref for ref in operation.get("candidate_evidence", []) if ref["job_id"] == job]
+        scans = req("GET", base + f"/scans?job_id={job}")["scans"]
+        count = 1 if mode == "vulnerable" else 0
+        record(
+            mode + " job contributes the expected candidates and backing references",
+            assessment.get("candidate_findings") == len(scans) == len(references) == count
+            and all(scan["status"] == "new" for scan in scans)
+            and operation.get("candidates") == {"open": 1, "promoted": 0, "false_positive": 0, "backing_evidence": 1},
+        )
+        if mode == "vulnerable":
+            resource = executions.get("peer", {})
+            preflight = preflights.get("peer", {})
+            ref = references[0] if references else {}
+            opened = req("GET", base + "/evidence/" + ref["evidence_id"], expected=(200, 404, 405)) if ref else {}
+            record(
+                "vulnerable peer resource record remains available after the fixed job",
+                ref.get("identity_id") == "peer" and ref.get("case_id") == case_id
+                and ref.get("expected") == "deny" and ref.get("observed") == "allow"
+                and ref.get("reported_decision") == "allowed" and ref.get("source") == "write_verification"
+                and ref.get("write_verification") == "verified_effect"
+                and preflight.get("case_id") == resource.get("case_id") == case_id
+                and preflight.get("created_at", "") > resource.get("created_at", "")
+                and bool(ref.get("content_hash")) and ref["content_hash"] == resource.get("content_hash")
+                and ref.get("evidence_id") == resource.get("id") and opened == resource,
+            )
+
+
 def run_semantic(
     *,
     check,
@@ -93,7 +176,7 @@ def run_semantic(
                 ]
             ),
         )
-        return result, assessment, items, evidence, state["requests"][mark:]
+        return job, result, assessment, items, evidence, state["requests"][mark:]
 
     for mode, decision in [
         ("vulnerable", "allowed"),
@@ -110,7 +193,7 @@ def run_semantic(
                 {"json_pointer": "/access", "equals": "allowed", "decision": "allow"},
                 {"json_pointer": "/error", "equals": "private", "decision": "deny"},
             ]
-        result, assessment, items, evidence, traffic = execute(spec["id"], mode, spec)
+        _, result, assessment, items, evidence, traffic = execute(spec["id"], mode, spec)
         peer = items.get("peer", {})
         record(
             mode + " assertion separates raw HTTP from scanner conclusion",
@@ -135,6 +218,7 @@ def run_semantic(
             ),
         )
 
+    write_jobs = {}
     for mode, decision in [("vulnerable", "allowed"), ("fixed", "denied")]:
         spec = copy.deepcopy(common)
         spec.update(
@@ -154,7 +238,8 @@ def run_semantic(
                 },
             },
         )
-        result, assessment, items, evidence, traffic = execute(spec["id"], mode, spec)
+        job, result, assessment, items, evidence, traffic = execute(spec["id"], mode, spec)
+        write_jobs[mode] = job
         peer, owner = items.get("peer", {}), items.get("owner", {})
         proof = peer.get("verification", {})
         record(
@@ -198,6 +283,7 @@ def run_semantic(
             ),
         )
 
+    check_write_projections(record=record, req=req, base=base, target=target, jobs=write_jobs)
     record(
         "scanner uploads never create or promote confirmed findings",
         req("GET", base + "/findings")["findings"] == initial_findings,

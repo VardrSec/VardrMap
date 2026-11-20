@@ -218,8 +218,12 @@ def boundary_cells(operation: dict, cases: dict, identities: dict) -> list[dict]
                 grouped[identity_id, boundary].append({
                     "case_id": entry["case_id"], "case_name": entry["name"],
                     "job_id": entry["latest_job_id"], "state": state, "reason": reason,
+                    "assessment_state": result.get("state"),
                     "expected": entry["expected"].get(identity_id, "unknown"),
                     "observed": result.get("observed", "unknown"),
+                    "reported_decision": result.get("reported_decision"),
+                    "source": result.get("source"),
+                    "write_verification": result.get("write_verification"),
                     "owner_identity": owner_id or None, "basis": basis,
                 })
     # Engagement identities absent from this operation are gaps, not inferred peers.

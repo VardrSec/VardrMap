@@ -488,13 +488,17 @@ def test_matrix_keeps_other_identities_visible_after_one_boundary_result(client,
     value = case("matrix", "/orders/42", people, expect={"owner": "allow", "tenant-b": "deny", "outsider": "deny"})
     case_id = store(client, auth_headers, program_id, value)
     execute(client, auth_headers, program_id, case_id, value,
-            [run("allow", 200, "owner"), run("deny", 403, "tenant-b"), run("server_error", 503, "outsider")])
+            [run("allow", 200, "owner"), run("deny", 403, "tenant-b"), run("server_error", 503, "outsider")],
+            assessments=[{"identity_id": "tenant-b", "expected_access": "deny", "decision": "denied",
+                          "source": "http_status", "reason": "status_only", "write_verification": "not_configured"}])
     data = relationships(client, auth_headers, program_id)
     cells = {row["identity_id"]: row for row in data["boundary_matrix"] if row["boundary"] == "cross_tenant"}
     assert cells["tenant-b"]["state"] == "evaluated" and cells["outsider"]["state"] == "inconclusive"
     assert cells["tenant-b"]["host"] == "api.example.com"
-    assert cells["tenant-b"]["observations"][0]["case_id"] == case_id
-    assert cells["tenant-b"]["observations"][0]["observed"] == "deny"
+    observation = cells["tenant-b"]["observations"][0]
+    assert observation["case_id"] == case_id and observation["assessment_state"] == "evaluated"
+    assert (observation["observed"], observation["reported_decision"]) == ("deny", "denied")
+    assert (observation["source"], observation["write_verification"]) == ("http_status", "not_configured")
     assert hypotheses(data)[("GET /orders/{id}", "cross_tenant")]["status"] == "inconclusive"
     page = client.get(f"/engagements/{program_id}/api/relationships?limit=1", headers=auth_headers).json()
     assert len(page["boundary_matrix"]) == 1 and page["matrix_total"] == 3

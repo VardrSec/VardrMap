@@ -78,7 +78,7 @@ def queue(client, headers, pid, case_id):
     return res.json()["id"]
 
 
-def execute(client, headers, pid, case_id, case_spec, executions, findings=()):
+def execute(client, headers, pid, case_id, case_spec, executions, findings=(), *, assessments=()):
     job = queue(client, headers, pid, case_id)
     assert client.post(f"/jobs/{job}/claim", headers=headers).status_code == 200
     body = {
@@ -86,6 +86,7 @@ def execute(client, headers, pid, case_id, case_spec, executions, findings=()):
         "test_case_id": case_spec["id"],
         "executions": executions,
         "findings": list(findings),
+        "assessments": list(assessments),
     }
     assert client.post(f"/jobs/{job}/upload", headers=headers, json=body).status_code == 200
     assert client.patch(f"/jobs/{job}", headers=headers, json={"status": "done"}).status_code == 200
@@ -200,18 +201,22 @@ def test_inventory_labels_and_unmatched_cases_are_visible(client, auth_headers, 
     assert reasons == {"elsewhere": "no_observed_operation", "unreviewed": "no_reviewed_expectation"}
 
 
-def test_closing_a_candidate_as_a_false_positive_removes_the_flag_but_not_the_history(client, auth_headers, program_id):
+@pytest.mark.parametrize("triage,state", [("false_positive", "partial"), ("promoted", "violation_candidate")])
+def test_triaged_candidates_keep_their_backing_reference(client, auth_headers, program_id, triage, state):
     build_engagement(client, auth_headers, program_id)
+    before = operation(coverage(client, auth_headers, program_id), "GET", "/orders/{id}")["candidate_evidence"]
     db = SessionLocal()
     try:
         item = db.query(ScanItem).filter(ScanItem.program_id == program_id, ScanItem.source == "vardrgate").one()
-        item.status = "false_positive"
+        item.status = triage
         db.commit()
     finally:
         db.close()
     op = operation(coverage(client, auth_headers, program_id), "GET", "/orders/{id}")
-    assert op["candidates"] == {"open": 0, "promoted": 0, "false_positive": 1, "backing_evidence": 1}
-    assert op["state"] == "partial"  # executed with evaluated results, but not conclusive
+    counts = {"open": 0, "promoted": 0, "false_positive": 0, "backing_evidence": 1}
+    assert op["candidates"] == {**counts, triage: 1}
+    assert op["state"] == state
+    assert op["candidate_evidence"] == before
 
 
 def test_a_completed_job_without_an_assessment_is_not_an_execution(client, auth_headers, program_id):
@@ -406,14 +411,49 @@ def test_candidate_evidence_points_at_the_retained_redacted_record(client, auth_
     assert op["candidates"]["backing_evidence"] == len(op["candidate_evidence"]) == 1
     ref = op["candidate_evidence"][0]
     assert (ref["identity_id"], ref["expected"], ref["observed"]) == ("peer", "deny", "allow")
-    # The reference resolves through the ordinary evidence endpoint, redacted and hash-checked.
-    rows = client.get(
-        f"/engagements/{program_id}/evidence",
-        headers=auth_headers,
-        params={"job_id": ref["job_id"], "case_id": ref["case_id"], "identity_id": ref["identity_id"]},
-    ).json()["evidence"]
-    assert [r["id"] for r in rows] == [ref["evidence_id"]]
-    assert rows[0]["content_hash"] == ref["content_hash"] and rows[0]["redacted"] is True
+    row = client.get(f"/engagements/{program_id}/evidence/{ref['evidence_id']}", headers=auth_headers).json()
+    assert row["id"] == ref["evidence_id"]
+    assert row["content_hash"] == ref["content_hash"] and row["redacted"] is True
+
+
+@pytest.mark.parametrize("baseline,matched,has_candidate,state,backing", [
+    ("allow", [0], True, "evaluated", 1),
+    ("allow", [0], False, "evaluated", 0),
+    ("allow", [1], True, "inconclusive", 0),
+    ("allow", None, True, "inconclusive", 0),
+    ("deny", [0], True, "inconclusive", 0),
+])
+def test_only_a_bound_evaluated_assertion_supports_a_violation(
+    client, auth_headers, program_id, baseline, matched, has_candidate, state, backing,
+):
+    capture(client, auth_headers, program_id, "GET", "/record")
+    value = spec("assertions", "GET", "/record", [OWNER, PEER])
+    value["expected_access"][1]["response_assertions"] = [
+        {"json_pointer": "/access", "equals": "granted", "decision": "allow"}
+    ]
+    case_id = store(client, auth_headers, program_id, value)
+    proof = {"identity_id": "peer", "expected_access": "deny", "decision": "allowed",
+             "source": "response_assertion", "reason": "assertion_matched", "matched_assertions": matched}
+    # A semantic allow can back a reviewed deny even when the HTTP outcome was deny.
+    # Conversely, an HTTP allow alone cannot replace missing or invalid proof.
+    raw = "deny" if state == "evaluated" else "allow"
+    executions = [run(baseline, 200 if baseline == "allow" else 403, "owner"),
+                  run(raw, 403 if raw == "deny" else 200, "peer")]
+    findings = [{"category": "potential_bola", "identity_id": "peer"}] if has_candidate else []
+    job = execute(client, auth_headers, program_id, case_id, value, executions, findings,
+                  assessments=[proof] if matched is not None else [])
+    op = operation(coverage(client, auth_headers, program_id), "GET", "/record")
+    entry = op["cases"][0]
+    peer = entry["identity_results"]["peer"]
+    assert entry["baseline_valid"] == (baseline == "allow")
+    assert (peer["state"], peer["expected"], peer["observed"]) == (state, "deny", raw)
+    assert peer["reported_decision"] == ("allowed" if matched is not None else None)
+    assert op["candidates"]["open"] == len(findings)
+    assert op["candidates"]["backing_evidence"] == len(op["candidate_evidence"]) == backing
+    if backing:
+        ref = op["candidate_evidence"][0]
+        assert (ref["job_id"], ref["case_id"], ref["identity_id"]) == (job, case_id, "peer")
+        assert (ref["observed"], ref["reported_decision"], ref["source"]) == (raw, "allowed", "response_assertion")
 
 
 def test_operations_without_a_candidate_carry_no_evidence_references(client, auth_headers, program_id):
@@ -552,6 +592,7 @@ def test_a_deleted_case_leaves_its_history_and_findings_visible(client, auth_hea
     assert orders["state"] == "violation_candidate"  # an unresolved finding outlives its case
     assert {h["reason"] for h in orders["historical_assessments"]} == {"case_deleted"}
     assert len(orders["historical_assessments"]) == 2
+    assert len(orders["candidate_evidence"]) == orders["candidates"]["backing_evidence"] == 1
 
 
 def test_a_run_whose_case_snapshot_was_not_verified_never_counts_as_current(client, auth_headers, program_id):
@@ -724,3 +765,70 @@ def test_edited_case_keeps_candidate_and_evidence_on_frozen_route(
     rows = response.json()["evidence"]
     assert [row["id"] for row in rows] == [evidence[0]["evidence_id"]]
     assert rows[0]["content_hash"] == evidence[0]["content_hash"]
+
+
+@pytest.mark.parametrize("proof,owner_state,peer_state,status", [
+    ("write", "inconclusive", "inconclusive", "inconclusive"),
+    ("peer", "evaluated", "inconclusive", "partial"),
+    ("owner", "inconclusive", "inconclusive", "inconclusive"),
+    ("status_only", "evaluated", "evaluated", "conclusive"),
+])
+def test_coverage_rechecks_legacy_http_only_assessments(
+    client, auth_headers, program_id, proof, owner_state, peer_state, status,
+):
+    path = "/settings"
+    capture(client, auth_headers, program_id, "PUT", path, status=204)
+    people = [{**person, "tenant_id": "tenant-a"} for person in (OWNER, PEER)]
+    case = spec("legacy", "PUT", path, people)
+    case["resource"] = {"owner_identity": "owner"}
+    if proof == "write":
+        case["write_verification"] = {
+            "strategy": "changed", "environment": "synchronous_isolated", "identity": identity("reader"),
+            "request": {"method": "GET", "url": HOST + path}, "json_pointer": "/enabled", "changed_to": True,
+        }
+    elif proof in {"owner", "peer"}:
+        expectation = next(item for item in case["expected_access"] if item["identity_id"] == proof)
+        expectation["response_assertions"] = [{"json_pointer": "/applied", "equals": True, "decision": "allow"}]
+    case_id = store(client, auth_headers, program_id, case)
+    job_id = execute(client, auth_headers, program_id, case_id, case,
+                     [run("allow", 204, "owner"), run("allow", 204, "peer")])
+
+    # Older Map receivers checked HTTP alone, even for these protected cases.
+    with SessionLocal() as db:
+        job = db.get(ScanJob, job_id)
+        stored = {
+            **job.assessment, "status": "conclusive", "baseline_valid": True, "reasons": [],
+            "evaluated": 2, "inconclusive": 0,
+            "identities": [
+                {"identity_id": item["identity_id"], "expected_decision": item["decision"],
+                 "observed_outcome": "allow", "state": "evaluated", "reason": "reported_allow_or_deny"}
+                for item in case["expected_access"]
+            ],
+        }
+        job.assessment = stored
+        db.commit()
+
+    op = operation(coverage(client, auth_headers, program_id), "PUT", path)
+    entry, = op["cases"]
+    assert entry["latest_job_id"] == job_id
+    assert op["state"] == entry["assessment_status"] == status
+    assert entry["baseline_valid"] is (owner_state == "evaluated")
+    matrix = client.get(f"/engagements/{program_id}/api/relationships", headers=auth_headers).json()["boundary_matrix"]
+    cells = {cell["identity_id"]: cell for cell in matrix if cell["endpoint_id"] == op["endpoint_id"]}
+    for who, state in [("owner", owner_state), ("peer", peer_state)]:
+        result = entry["identity_results"][who]
+        observation, = cells[who]["observations"]
+        assert result["state"] == entry["identity_states"][who] == identity_states(op)[who]["state"] == state
+        assert cells[who]["state"] == observation["assessment_state"] == state
+        assert result["observed"] == observation["observed"] == "allow"
+        assert result["reported_decision"] is observation["reported_decision"] is None
+        if proof in {"write", who}:
+            assert result["reason"] == "semantic_assessment_missing"
+
+    edit_case(client, auth_headers, program_id, case_id, spec("legacy", "PUT", "/new-settings", people))
+    old = operation(coverage(client, auth_headers, program_id), "PUT", path)
+    history, = old["historical_assessments"]
+    assert old["state"] == "untested"
+    assert history["job_id"] == job_id and history["assessment_status"] == status
+    with SessionLocal() as db:
+        assert db.get(ScanJob, job_id).assessment == stored

@@ -99,6 +99,10 @@ export type CoverageState =
 export type CoverageIdentity = {
   identity_id: string; state: string; reason: string; expected: string | null;
 };
+export type AuthorizationObservation = {
+  expected: string; observed: string; reported_decision: string | null;
+  source: string | null; write_verification: string | null;
+};
 export type WorkflowReview = {
   setup_count: number | null;
   preflight_identity_ids: string[];
@@ -116,6 +120,8 @@ export type CoverageOperation = {
     case_id: string; name: string; test_case_id: string; identities: string[];
     expected: Record<string, string>; queued_jobs: number; executed: boolean; stale_runs: number;
     latest_job_id: string | null; assessment_status: string | null; reasons: string[];
+    baseline_valid: boolean | null;
+    identity_results: Record<string, AuthorizationObservation & { state: string; reason: string }>;
     workflow_review?: WorkflowReview;
   }[];
   identity_coverage: CoverageIdentity[];
@@ -129,9 +135,9 @@ export type CoverageHistory = {
   assessment_status: string | null; completed_at: string | null;
   candidates: { open: number; promoted: number; false_positive: number };
 };
-export type CoverageEvidenceRef = {
+export type CoverageEvidenceRef = AuthorizationObservation & {
   evidence_id: string; job_id: string; case_id: string | null; identity_id: string | null;
-  content_hash: string; expected: string; observed: string;
+  content_hash: string;
 };
 export type AuthorizationCoverage = {
   operations: CoverageOperation[];
@@ -161,10 +167,10 @@ export type AuthorizationRelationships = {
 export type BoundaryCoverageCell = {
   id: string; endpoint_id: string; operation: string; identity_id: string; boundary: string; state: string;
   scheme?: string; host?: string; port?: number | null;
-  observations: {
+  observations: (AuthorizationObservation & {
     case_id: string; case_name: string; job_id: string | null; state: string; reason: string;
-    expected: string; observed: string; owner_identity: string | null; basis: string[];
-  }[];
+    assessment_state: string | null; owner_identity: string | null; basis: string[];
+  })[];
 };
 export type ApiEndpoint = {
   id: string; program_id: string; method: string; scheme: string; host: string;
