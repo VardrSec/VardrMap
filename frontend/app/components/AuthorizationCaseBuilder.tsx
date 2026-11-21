@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import ApiPlaybookGuide from "./ApiPlaybookGuide";
+import DraftIdentityReview from "./DraftIdentityReview";
 import { useAppContext } from "../context/AppContext";
 import { Panel } from "./ui";
 import type { WorkflowReview } from "../types";
@@ -72,6 +73,7 @@ export default function AuthorizationCaseBuilder({ engagementId, endpointIds, id
           {context.conflicts.length > 0 && <p className="mt-1 text-[#f87171]">Contradictory declarations were not used: {context.conflicts.map((c) => `${c.identity_id} ${c.attribute} (${c.values.join(" vs ")})`).join("; ")}.</p>}
         </div>}
         <p className="text-xs text-[#94a3b8]">Edit the generated JSON. Identity credentials use <code>value_env</code> or <code>value_keychain</code>, never token values. Replace path variables, set one allow/deny/skip decision per identity, and review mutating operations. Remove unwanted cases from this page before saving.</p>
+        <DraftIdentityReview key={offset} json={drafts} />
         <Field label="Draft cases JSON"><textarea rows={20} spellCheck={false} disabled={busy} className={fieldClass + " font-mono"} value={drafts} onChange={e => { setDrafts(e.target.value); setReviewed(false); setWorkflowReviews([]); }} /></Field>
         {workflowReviews.length ? workflowReviews.map((review, index) => <WorkflowReviewSummary key={index} review={review} label={`Draft ${index + 1}: workflow prerequisites`} />) : <WorkflowReviewSummary />}
         <details className="text-xs text-[#94a3b8]"><summary className="cursor-pointer">Check authenticated identities before testing</summary><p>Add a preflight to each authenticated identity using a known-good GET endpoint on the API origin. Match public subject, role or tenant metadata. Any failed check stops the case before authorization requests. Anonymous identities have no preflight. Secrets remain local credential references.</p><pre className="overflow-auto whitespace-pre-wrap">{JSON.stringify({ preflight: { url: "https://api.example.test/session", expected_status: 200, json_fields: { "user.id": "reviewed-user-id", "user.tenant_id": "reviewed-tenant-id" } } }, null, 2)}</pre></details>

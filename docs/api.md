@@ -1774,6 +1774,12 @@ a human reviews them. Drafting never stores or queues anything, never copies cre
 bodies, examples or security values from its input, and never infers who *should* have access: every
 generated access decision is `skip`.
 
+In the case builder, select a draft to review its resource owner and tenant alongside each identity's
+ID, role, tenant, and declared access decision. A separately declared write-verification identity
+appears below the table. The summary displays only the type of credential source. It reads the
+draft JSON already in your browser. Edit the JSON to change a draft, then confirm
+your review before saving.
+
 ### `POST /engagements/{program_id}/test-cases/preview`
 Generate draft cases. Provide **exactly one** of `endpoint_ids` (API-surface operations of this
 engagement, max 100) or `openapi` (an inline OpenAPI 3.x JSON object, max 2 MiB; `$ref`s are
