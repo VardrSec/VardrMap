@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Review one draft case at a time in the case builder. A read-only summary shows identity and resource context, credential source types, and declared access decisions.
+
 - Show unmatched cases and unattributed assessments in Authorization coverage even before the first operation is captured. Reviewers can page through all captured operations with their selected filter and sort order.
 
 - Show verified authorization decisions alongside HTTP outcomes in coverage and the relationship matrix. Candidate findings link to the exact evidence record, and historical runs with missing proof show as inconclusive.
