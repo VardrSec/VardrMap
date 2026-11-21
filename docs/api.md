@@ -2172,6 +2172,10 @@ candidates, and are attributed to the operation their own snapshot exercised, bu
 changed definition. Executed runs that cannot be placed on any observed operation are listed in
 `unattributed_assessments`.
 
+The Authorization coverage panel shows unmatched cases and unattributed assessments even when the
+engagement has zero captured operations. Both lists apply to the whole engagement. The panel pages
+captured operations in groups of 500, keeping the selected state filter and sort order across pages.
+
 Each operation has one `state`: `violation_candidate` (an open or promoted `vardrgate`
 scan item from an executed job), `conclusive` (every matched case executed and every
 latest assessment is conclusive), `partial` (some evaluated results, not conclusive),
