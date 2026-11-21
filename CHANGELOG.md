@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Show unmatched cases and unattributed assessments in Authorization coverage even before the first operation is captured. Reviewers can page through all captured operations with their selected filter and sort order.
+
 - Show verified authorization decisions alongside HTTP outcomes in coverage and the relationship matrix. Candidate findings link to the exact evidence record, and historical runs with missing proof show as inconclusive.
 
 - Require a completed parent in the same engagement before a dependent job can be claimed.

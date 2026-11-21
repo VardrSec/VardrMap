@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAppContext } from "../context/AppContext";
 import type { AuthorizationCoverage, AuthorizationObservation, CoverageEvidenceRef, CoverageOperation, CoverageState } from "../types";
 import { Panel } from "./ui";
@@ -12,6 +12,7 @@ import WorkflowReviewSummary from "./WorkflowReviewSummary";
  * checks each run against the proof required by its frozen case.
  */
 
+const PAGE_SIZE = 500;
 const STATE_LABEL: Record<CoverageState, string> = {
   violation_candidate: "Violation candidate",
   inconclusive: "Inconclusive",
@@ -52,6 +53,10 @@ const HISTORY_REASON: Record<string, string> = {
   case_deleted: "the case was deleted",
   snapshot_unverified: "the case snapshot was not verified",
 };
+
+function operationCount(data: AuthorizationCoverage | null, state: CoverageState | "") {
+  return data?.filtered_total ?? (state ? data?.summary?.[state] : data?.summary?.total);
+}
 
 function StateBadge({ state }: { state: CoverageState }) {
   return <span className="rounded px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider"
@@ -99,20 +104,30 @@ export default function AuthorizationCoveragePanel({ engagementId, onDraft }: { 
   // Loading is derived from which request the stored result answers, so the effect
   // never sets state synchronously (only after the response arrives).
   const [byPriority, setByPriority] = useState(false);
-  const requestKey = `${engagementId}|${state}|${byPriority}`;
+  const [offset, setOffset] = useState(0);
+  const pageStatus = useRef<HTMLParagraphElement>(null);
+  const requestKey = `${engagementId}|${state}|${byPriority}|${offset}`;
   const [result, setResult] = useState<{ key: string; data: AuthorizationCoverage | null }>({ key: "", data: null });
 
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       try {
-        const params = new URLSearchParams({ limit: "500" });
+        const params = new URLSearchParams({ limit: String(PAGE_SIZE) });
         if (state) params.set("state", state);
         if (byPriority) params.set("sort", "priority");
+        if (offset) params.set("offset", String(offset));
         const res = await authFetch(`/engagements/${engagementId}/api/coverage?${params}`);
         if (!res.ok) throw new Error();
         const body = (await res.json()) as AuthorizationCoverage;
-        if (!cancelled) setResult({ key: requestKey, data: body });
+        if (cancelled) return;
+        const total = operationCount(body, state);
+        if (offset > 0 && total !== undefined && offset >= total) {
+          // Operations can disappear between page requests. Fetch the last remaining page.
+          setOffset(Math.max(0, Math.ceil(total / PAGE_SIZE) - 1) * PAGE_SIZE);
+          return;
+        }
+        setResult({ key: requestKey, data: body });
       } catch {
         if (!cancelled) {
           setMessage("Failed to load authorization coverage.");
@@ -121,14 +136,30 @@ export default function AuthorizationCoveragePanel({ engagementId, onDraft }: { 
       }
     })();
     return () => { cancelled = true; };
-  }, [authFetch, byPriority, engagementId, requestKey, setMessage, state]);
+  }, [authFetch, byPriority, engagementId, offset, requestKey, setMessage, state]);
 
   const loading = result.key !== requestKey;
   const data = result.data;
 
   const operations: CoverageOperation[] = data?.operations ?? [];
   const summary = data?.summary;
-  if (!loading && (!summary || summary.total === 0)) return null;
+  const unmatched = data?.unmatched_cases ?? [];
+  const unattributed = data?.unattributed_assessments ?? [];
+  const filteredTotal = operationCount(data, state) ?? 0;
+  const pageFailed = !summary && offset > 0;
+  if (!loading && !pageFailed && (!summary || (!summary.total && !unmatched.length && !unattributed.length))) return null;
+
+  function goToPage(nextOffset: number) {
+    pageStatus.current?.focus();
+    setOffset(nextOffset);
+  }
+
+  let statusText = summary?.total ? "No operations in this state." : "No captured operations yet.";
+  if (loading) statusText = "Computing coverage…";
+  else if (pageFailed) statusText = "This page of operations could not be loaded.";
+  else if (operations.length) {
+    statusText = `Showing ${offset + 1}–${offset + operations.length} of ${filteredTotal} operation${filteredTotal === 1 ? "" : "s"}`;
+  }
 
   return <Panel title="Authorization coverage">
     <p className="mb-4 text-xs text-muted">
@@ -136,21 +167,20 @@ export default function AuthorizationCoveragePanel({ engagementId, onDraft }: { 
       <strong className="text-[#94a3b8]"> Conclusive describes reported outcomes with a working baseline; it does not mean the operation is secure.</strong>{" "}
       Identities listed as <em>not reviewed</em> exist elsewhere in this engagement but not in a test for that operation.
     </p>
-    {summary && <div className="mb-4 grid grid-cols-2 gap-2 md:grid-cols-7">
+    {!!summary?.total && <div className="mb-4 grid grid-cols-2 gap-2 md:grid-cols-7">
       {STATE_ORDER.map((key) => <button key={key} type="button" aria-pressed={state === key}
-        onClick={() => setState(state === key ? "" : key)}
+        onClick={() => { setState(state === key ? "" : key); setOffset(0); }}
         className="rounded-lg border bg-[#171717] p-3 text-left transition hover:border-[#3a3a3a]"
         style={{ borderColor: state === key ? STATE_COLOR[key] : "#2e2e2e" }}>
         <div className="font-mono text-xl" style={{ color: STATE_COLOR[key] }}>{summary[key]}</div>
         <div className="mt-1 text-[10px] uppercase tracking-widest text-muted">{STATE_LABEL[key]}</div>
       </button>)}
     </div>}
-    <label className="mb-3 flex items-center gap-2 text-xs text-[#94a3b8]">
-      <input type="checkbox" checked={byPriority} onChange={(e) => setByPriority(e.target.checked)} />
+    {!!summary?.total && <label className="mb-3 flex items-center gap-2 text-xs text-[#94a3b8]">
+      <input type="checkbox" checked={byPriority} onChange={(e) => { setByPriority(e.target.checked); setOffset(0); }} />
       Look here first: least-tested states first, then operations with more reasons to look.
-    </label>
-    {loading && <p className="py-6 text-center text-sm text-muted">Computing coverage…</p>}
-    {!loading && operations.length === 0 && <p className="py-6 text-center text-sm text-muted">No operations in this state.</p>}
+    </label>}
+    <p ref={pageStatus} role="status" tabIndex={-1} className="my-3 text-xs text-muted">{statusText}</p>
     {!loading && operations.length > 0 && <div className="overflow-x-auto"><table className="w-full text-left text-xs">
       <thead><tr className="border-b border-[#2e2e2e]">{["Operation", "State", "Candidates", "Identities", ""].map((h) =>
         <th key={h} className="pb-2 pr-4 font-semibold uppercase tracking-widest text-muted">{h}</th>)}</tr></thead>
@@ -192,13 +222,29 @@ export default function AuthorizationCoveragePanel({ engagementId, onDraft }: { 
             className="rounded px-2 py-1 text-[10px] text-[#89b4fa] hover:bg-[#2e2e2e]">Draft test</button>}</td>
       </tr>)}</tbody>
     </table></div>}
-    {!loading && (data?.unmatched_cases.length ?? 0) > 0 && <details className="mt-4 rounded border border-[#2e2e2e] bg-[#111] p-3 text-xs text-[#94a3b8]">
-      <summary className="cursor-pointer">{data?.unmatched_cases.length} stored case{data?.unmatched_cases.length === 1 ? "" : "s"} not counted as coverage</summary>
-      <ul className="mt-2 space-y-1">{data?.unmatched_cases.map((item) => <li key={item.case_id}>
+    {!loading && (filteredTotal > PAGE_SIZE || pageFailed) && <nav aria-label="Coverage pages" className="mt-4 flex gap-2 text-xs text-muted">
+      <button type="button" disabled={offset === 0} onClick={() => goToPage(offset - PAGE_SIZE)}
+        className="rounded border border-[#2e2e2e] px-3 py-1.5 disabled:opacity-30">Previous page</button>
+      {!pageFailed && <button type="button" disabled={offset + PAGE_SIZE >= filteredTotal} onClick={() => goToPage(offset + PAGE_SIZE)}
+        className="rounded border border-[#2e2e2e] px-3 py-1.5 disabled:opacity-30">Next page</button>}
+    </nav>}
+    {!loading && unmatched.length > 0 && <details className="mt-4 rounded border border-[#2e2e2e] bg-[#111] p-3 text-xs text-[#94a3b8]">
+      <summary className="cursor-pointer">{unmatched.length} stored case{unmatched.length === 1 ? "" : "s"} not counted as coverage</summary>
+      <ul className="mt-2 space-y-1">{unmatched.map((item) => <li key={item.case_id}>
         <span className="text-[#f1f5f9]">{item.name}</span> — {item.reason === "no_observed_operation"
           ? "its request matches no observed operation" : item.reason === "no_reviewed_expectation"
           ? "no allow or deny expectation has been reviewed" : "its request URL is not usable"}
         {item.request ? <span className="ml-2 font-mono text-muted">{item.request}</span> : null}</li>)}</ul>
+    </details>}
+    {!loading && unattributed.length > 0 && <details className="mt-4 rounded border border-[#2e2e2e] bg-[#111] p-3 text-xs text-[#94a3b8]">
+      <summary className="cursor-pointer">{unattributed.length} unattributed assessment{unattributed.length === 1 ? "" : "s"}</summary>
+      <ul className="mt-2 space-y-1">{unattributed.map((item) => <li key={item.job_id}>
+        Job <span className="font-mono">{item.job_id}</span>
+        {item.case_id && <> · Case <span className="font-mono">{item.case_id}</span></>}
+        {item.assessment_status && <> · {item.assessment_status}</>}
+        {" · "}{item.reason === "no_observed_operation" ? "The recorded request matches no captured operation."
+          : item.reason === "no_usable_snapshot" ? "The job has no usable request snapshot." : item.reason}
+      </li>)}</ul>
     </details>}
   </Panel>;
 }

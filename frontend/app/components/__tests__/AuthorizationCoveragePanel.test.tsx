@@ -1,11 +1,11 @@
 import "@testing-library/jest-dom";
-import { screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 jest.mock("react-markdown", () => ({ __esModule: true, default: ({ children }: { children: string }) => children }));
 jest.mock("remark-gfm", () => ({ __esModule: true, default: () => {} }));
 
-import { renderWithApp } from "../../../test-utils/renderWithApp";
+import { mockResponse, renderWithApp } from "../../../test-utils/renderWithApp";
 import AuthorizationCoveragePanel from "../AuthorizationCoveragePanel";
 
 const base = { scheme: "https", host: "api.example.com", port: null, observed_identities: ["owner"] };
@@ -45,6 +45,11 @@ const coverage = {
       candidates,
     },
   ],
+};
+
+const emptyCoverage = {
+  summary: { total: 0, violation_candidate: 0, inconclusive: 0, partial: 0, conclusive: 0, reviewed_not_executed: 0, stale: 0, untested: 0 },
+  operations: [], identities: [], unmatched_cases: [], unattributed_assessments: [], filtered_total: 0,
 };
 
 describe("AuthorizationCoveragePanel", () => {
@@ -128,10 +133,32 @@ describe("AuthorizationCoveragePanel", () => {
     expect(screen.getByText(/its request matches no observed operation/)).toBeInTheDocument();
   });
 
-  it("renders nothing for an engagement with no observed operations", async () => {
-    const empty = { operations: [], summary: { total: 0, violation_candidate: 0, inconclusive: 0, partial: 0, conclusive: 0, reviewed_not_executed: 0, untested: 0 }, identities: [], unmatched_cases: [] };
+  it("shows an unmatched reviewed case before any operations are captured", async () => {
+    const body = { ...emptyCoverage, unmatched_cases: coverage.unmatched_cases };
+    renderWithApp(<AuthorizationCoveragePanel engagementId="eng-1" />, {
+      routes: { "GET /engagements/eng-1/api/coverage?limit=500": { body } },
+    });
+    await userEvent.click(await screen.findByText(/1 stored case not counted as coverage/));
+    expect(screen.getByText("elsewhere")).toBeVisible();
+    expect(screen.getByText(/its request matches no observed operation/)).toBeVisible();
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+  });
+
+  it("shows an unattributed assessment even without cases or captured operations", async () => {
+    const assessment = { job_id: "job-8412", case_id: null, assessment_status: "inconclusive", reason: "no_usable_snapshot" };
+    const body = { ...emptyCoverage, unattributed_assessments: [assessment] };
+    renderWithApp(<AuthorizationCoveragePanel engagementId="eng-1" />, {
+      routes: { "GET /engagements/eng-1/api/coverage?limit=500": { body } },
+    });
+    await userEvent.click(await screen.findByText(/1 unattributed assessment/i));
+    expect(screen.getByText(/job-8412/)).toBeVisible();
+    expect(screen.getByText(/no usable request snapshot/i)).toHaveTextContent(/inconclusive/);
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+  });
+
+  it("renders nothing without captured operations, unmatched cases, or unattributed assessments", async () => {
     const { container } = renderWithApp(<AuthorizationCoveragePanel engagementId="eng-1" />, {
-      routes: { "GET /engagements/eng-1/api/coverage?limit=500": { body: empty } },
+      routes: { "GET /engagements/eng-1/api/coverage?limit=500": { body: emptyCoverage } },
     });
     await waitFor(() => expect(screen.queryByText("Computing coverage…")).not.toBeInTheDocument());
     expect(container.textContent).not.toContain("Authorization coverage");
@@ -202,6 +229,113 @@ describe("AuthorizationCoveragePanel priority", () => {
     await screen.findByText("GET /orders/{id}");
     await userEvent.click(screen.getByRole("checkbox", { name: /Look here first/ }));
     await waitFor(() => expect(authFetch).toHaveBeenCalledWith("/engagements/eng-1/api/coverage?limit=500&sort=priority"));
+  });
+});
+
+describe("AuthorizationCoveragePanel pagination", () => {
+  const url = "/engagements/eng-1/api/coverage?limit=500";
+  const filteredUrl = `${url}&state=untested`;
+  const sortedUrl = `${filteredUrl}&sort=priority`;
+  const untested = Array.from({ length: 501 }, (_, index) => ({
+    ...coverage.operations[2], endpoint_id: `op-${index + 1}`, path_template: `/operation-${index + 1}`,
+  }));
+  const summary = { ...emptyCoverage.summary, total: 502, untested: 501, violation_candidate: 1 };
+  const first = { ...coverage, summary, filtered_total: 501, operations: untested.slice(0, 500) };
+  const last = { ...first, operations: untested.slice(500) };
+  const routes = {
+    [url]: { body: { ...first, filtered_total: 502, operations: [coverage.operations[0], ...untested.slice(0, 499)] } },
+    [filteredUrl]: { body: first },
+    [`${filteredUrl}&offset=500`]: { body: last },
+    [sortedUrl]: { body: first },
+    [`${sortedUrl}&offset=500`]: { body: last },
+  };
+
+  it("reaches operation 501 and returns with the same state filter and priority order", async () => {
+    const { authFetch } = renderWithApp(<AuthorizationCoveragePanel engagementId="eng-1" />, { routes });
+    await userEvent.click(await screen.findByRole("button", { name: /No reviewed test/ }));
+    await userEvent.click(screen.getByRole("checkbox", { name: /Look here first/ }));
+    expect(screen.getByText("GET /operation-500")).toBeVisible();
+    expect(screen.queryByText("GET /operation-501")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Previous page" })).toBeDisabled();
+    await userEvent.click(screen.getByRole("button", { name: "Next page" }));
+    expect(await screen.findByText("GET /operation-501")).toBeVisible();
+    expect(screen.getByText(/501–501 of 501 operations/)).toBeVisible();
+    expect(screen.getByRole("button", { name: "Next page" })).toBeDisabled();
+    expect(screen.queryByText("GET /operation-500")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Previous page" }));
+    expect(await screen.findByText("GET /operation-500")).toBeVisible();
+    expect(screen.getByRole("button", { name: /No reviewed test/ })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("checkbox", { name: /Look here first/ })).toBeChecked();
+    expect(authFetch.mock.calls.map(([path]) => path)).toEqual([
+      url, filteredUrl, sortedUrl, `${sortedUrl}&offset=500`, sortedUrl,
+    ]);
+  });
+
+  it.each(["filter", "sort"])("returns to the first page when the %s changes", async (control) => {
+    const { authFetch } = renderWithApp(<AuthorizationCoveragePanel engagementId="eng-1" />, { routes });
+    const filter = await screen.findByRole("button", { name: /No reviewed test/ });
+    await userEvent.click(filter);
+    await userEvent.click(screen.getByRole("button", { name: "Next page" }));
+    expect(await screen.findByText("GET /operation-501")).toBeVisible();
+    if (control === "filter") {
+      await userEvent.click(screen.getByRole("button", { name: /No reviewed test/ }));
+      expect(await screen.findByText("GET /orders/{id}")).toBeVisible();
+      expect(authFetch).toHaveBeenLastCalledWith(url);
+    } else {
+      await userEvent.click(screen.getByRole("checkbox", { name: /Look here first/ }));
+      expect(await screen.findByText("GET /operation-1")).toBeVisible();
+      expect(authFetch).toHaveBeenLastCalledWith(sortedUrl);
+    }
+    expect(screen.queryByText("GET /operation-501")).not.toBeInTheDocument();
+  });
+
+  it("keeps keyboard focus on the status while the next page loads and announces its range", async () => {
+    const { authFetch } = renderWithApp(<AuthorizationCoveragePanel engagementId="eng-1" />, {
+      routes: { [url]: { body: { ...first, operations: [untested[0]] } } },
+    });
+    const next = await screen.findByRole("button", { name: "Next page" });
+    let finishPage!: (response: Response) => void;
+    authFetch.mockReturnValueOnce(new Promise<Response>((resolve) => { finishPage = resolve; }));
+
+    next.focus();
+    await userEvent.keyboard("{Enter}");
+    expect(authFetch).toHaveBeenLastCalledWith(`${url}&offset=500`);
+    const status = screen.getByRole("status");
+    expect(status).toHaveFocus();
+
+    await act(async () => { finishPage(mockResponse({ body: last })); });
+    expect(screen.getByRole("status")).toBe(status);
+    expect(status).toHaveTextContent(/501–501 of 501 operations/);
+    expect(status).toHaveFocus();
+  });
+
+  it("can return to the first page after the second page fails to load", async () => {
+    const { authFetch } = renderWithApp(<AuthorizationCoveragePanel engagementId="eng-1" />, {
+      routes: {
+        [url]: { body: { ...first, operations: [untested[0]] } },
+        [`${url}&offset=500`]: { ok: false, status: 500 },
+      },
+    });
+    await userEvent.click(await screen.findByRole("button", { name: "Next page" }));
+    const previous = await screen.findByRole("button", { name: "Previous page" });
+    expect(previous).toBeEnabled();
+    await userEvent.click(previous);
+    expect(await screen.findByText("GET /operation-1")).toBeVisible();
+    expect(authFetch.mock.calls.map(([path]) => path)).toEqual([url, `${url}&offset=500`, url]);
+  });
+
+  it("reloads page one when a legacy summary shrinks past the requested offset", async () => {
+    const legacy = { ...coverage, summary: { ...emptyCoverage.summary, total: 1, untested: 1 } };
+    const { authFetch } = renderWithApp(<AuthorizationCoveragePanel engagementId="eng-1" />, {
+      routes: { [url]: { body: { ...coverage, summary, operations: [untested[0]] } } },
+    });
+    const next = await screen.findByRole("button", { name: "Next page" });
+    authFetch.mockResolvedValueOnce(mockResponse({ body: { ...legacy, operations: [] } }))
+      .mockResolvedValueOnce(mockResponse({ body: { ...legacy, operations: [coverage.operations[2]] } }));
+    await userEvent.click(next);
+    expect(await screen.findByText("GET /profile")).toBeVisible();
+    expect(screen.queryByText("GET /operation-1")).not.toBeInTheDocument();
+    expect(authFetch.mock.calls.map(([path]) => path)).toEqual([url, `${url}&offset=500`, url]);
   });
 });
 
