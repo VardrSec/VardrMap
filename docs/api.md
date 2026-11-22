@@ -2149,7 +2149,8 @@ Read-only authorization-testing coverage, computed on demand from stored records
 candidates and evidence). It writes nothing and requires a full-scope credential.
 Supports `state` (one of the states below), `limit` (default 200, maximum 1000) and
 `offset`; `filtered_total` counts the filtered set while `summary` always describes the
-whole engagement.
+whole engagement. Each request indexes the observed route templates by their literal
+prefix to narrow the matches for reviewed cases and historical job snapshots.
 
 A stored case covers an operation only when its request matches by method, scheme,
 host, effective port and path shape. Inventory `{placeholder}` segments match exactly

@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import re
 from collections import defaultdict
+from itertools import takewhile
 from urllib.parse import urlsplit
 
 from sqlalchemy.orm import Session
@@ -123,6 +124,31 @@ def operation_matches(endpoint: ApiEndpoint, request: dict) -> bool:
         and _port(endpoint.scheme or "https", endpoint.port) == request["port"]
         and _template_matches(endpoint.path_template, request["path"])
     )
+
+
+class _OperationIndex:
+    """Find candidate inventory templates by their literal prefix, then apply the route matcher."""
+
+    def __init__(self, endpoints):
+        self._prefix_widths = defaultdict(set)
+        self._templates = defaultdict(list)
+        for endpoint in endpoints:
+            parts = _segments(endpoint.path_template)
+            prefix = tuple(takewhile(lambda part: not _OBJECT_SEGMENT.fullmatch(part), parts))
+            group = (endpoint.method, (endpoint.host or "").lower(), len(parts))
+            self._prefix_widths[group].add(len(prefix))
+            self._templates[group, prefix].append(endpoint)
+
+    def matching_ids(self, request):
+        if not request:
+            return
+        parts = tuple(_segments(request["path"]))
+        group = (request["method"], request["host"], len(parts))
+        # Visit every indexed prefix width so all overlapping templates remain eligible.
+        for width in self._prefix_widths.get(group, ()):
+            for endpoint in self._templates.get((group, parts[:width]), ()):
+                if operation_matches(endpoint, request):
+                    yield endpoint.id
 
 
 def _identity_ids(spec: dict) -> list[str]:
@@ -261,9 +287,14 @@ def build_coverage(db: Session, program_id: str) -> dict:
         c.id: (case_hash(c.spec) if isinstance(c.spec, dict) and c.spec else None) for c in cases
     }
     runs = [_Run(j) for j in jobs if j.assessment]
+    routes = _OperationIndex(endpoints)
     runs_by_case: dict[str, list[_Run]] = defaultdict(list)
+    runs_by_endpoint: dict[str, list[_Run]] = defaultdict(list)
     for run in runs:
         runs_by_case[run.case_id].append(run)
+        # Attribute the run to its frozen request even if the current case moved.
+        for endpoint_id in routes.matching_ids(run.request):
+            runs_by_endpoint[endpoint_id].append(run)
     queued_by_case: dict[str, int] = defaultdict(int)
     for job in jobs:
         if job.status in {"pending", "running"} and not job.assessment:
@@ -328,6 +359,7 @@ def build_coverage(db: Session, program_id: str) -> dict:
                 fields_by[endpoint_id].add(str(name).lower())
 
     case_rows = []
+    cases_by_endpoint = defaultdict(list)
     unreviewed = []
     universe: set[str] = set()
     for case in cases:
@@ -337,17 +369,18 @@ def build_coverage(db: Session, program_id: str) -> dict:
             # A stored case with no allow/deny expectation reviews nothing yet.
             unreviewed.append(case)
             continue
-        case_rows.append((case, spec, parse_request(spec.get("request"))))
+        request = parse_request(spec.get("request"))
+        case_rows.append((case, spec, request))
+        for endpoint_id in routes.matching_ids(request):
+            cases_by_endpoint[endpoint_id].append((case, spec))
 
     operations = []
     matched_case_ids: set[str] = set()
     attributed_run_ids: set[str] = set()
     for endpoint in endpoints:
-        matched = [(c, s) for c, s, r in case_rows if r and operation_matches(endpoint, r)]
+        matched = cases_by_endpoint.get(endpoint.id, ())
         matched_case_ids.update(c.id for c, _ in matched)
-        # Runs are attributed by the request they actually executed, not by the case's
-        # present definition, so history and findings stay on the operation they hit.
-        attributed = [run for run in runs if run.request and operation_matches(endpoint, run.request)]
+        attributed = runs_by_endpoint.get(endpoint.id, ())
         attributed_run_ids.update(run.job.id for run in attributed)
         operations.append(_operation(
             endpoint, matched, attributed, runs_by_case, case_by_id, current_hash, queued_by_case,

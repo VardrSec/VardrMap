@@ -657,6 +657,26 @@ def test_a_candidate_from_one_case_outweighs_a_conclusive_other(client, auth_hea
     assert op["state"] == "violation_candidate" and op["candidates"]["open"] == 1
 
 
+def test_route_index_skips_unrelated_prefixes(client, auth_headers, program_id, monkeypatch):
+    for section in ("orders", "invoices", "customers", "payments", "products"):
+        capture(client, auth_headers, program_id, "GET", f"/api/{section}/7")
+    case = spec("one-order", "GET", "/api/orders/42", [OWNER, PEER])
+    case_id = store(client, auth_headers, program_id, case)
+
+    checked = set()
+
+    def track(endpoint, request):
+        checked.add(endpoint.path_template)
+        return operation_matches(endpoint, request)
+
+    monkeypatch.setattr("authorization_coverage.operation_matches", track)
+    data = coverage(client, auth_headers, program_id)
+    orders = operation(data, "GET", "/api/orders/{id}")
+    assert [row["case_id"] for row in orders["cases"]] == [case_id]
+    assert data["summary"]["untested"] == 4
+    assert checked == {"/api/orders/{id}"}
+
+
 @pytest.mark.parametrize("path", [
     "/users/42", "/users/550e8400-e29b-41d4-a716-446655440000",
     "/users/0123456789abcdef0123456789abcdef",
