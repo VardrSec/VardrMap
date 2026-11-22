@@ -8,6 +8,8 @@
 
 - Show verified authorization decisions alongside HTTP outcomes in coverage and the relationship matrix. Candidate findings link to the exact evidence record, and historical runs with missing proof show as inconclusive.
 
+- Speed up authorization coverage on larger inventories by indexing route templates when matching cases and historical runs.
+
 - Require a completed parent in the same engagement before a dependent job can be claimed.
 
 - Preserve stored service details when a scan re-observes an existing service with missing or empty details (#144).
