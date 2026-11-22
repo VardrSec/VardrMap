@@ -41,6 +41,12 @@ export default function AuthorizationCaseBuilder({ engagementId, endpointIds, id
       setMessage("Drafts are ready for review. No cases have been stored or queued.");
     } catch (e) { setError(errorText(e)); } finally { setBusy(false); }
   }
+  function editDrafts(json: string) {
+    setDrafts(json);
+    setReviewed(false);
+    setWorkflowReviews([]);
+  }
+
   async function save() {
     setBusy(true); setError(""); setMessage("");
     try {
@@ -72,9 +78,9 @@ export default function AuthorizationCaseBuilder({ engagementId, endpointIds, id
           {context.missing_context.length > 0 && <ul className="mt-1 list-disc pl-4">{context.missing_context.map((line) => <li key={line}>{line}</li>)}</ul>}
           {context.conflicts.length > 0 && <p className="mt-1 text-[#f87171]">Contradictory declarations were not used: {context.conflicts.map((c) => `${c.identity_id} ${c.attribute} (${c.values.join(" vs ")})`).join("; ")}.</p>}
         </div>}
-        <p className="text-xs text-[#94a3b8]">Edit the generated JSON. Identity credentials use <code>value_env</code> or <code>value_keychain</code>, never token values. Replace path variables, set one allow/deny/skip decision per identity, and review mutating operations. Remove unwanted cases from this page before saving.</p>
-        <DraftIdentityReview key={offset} json={drafts} />
-        <Field label="Draft cases JSON"><textarea rows={20} spellCheck={false} disabled={busy} className={fieldClass + " font-mono"} value={drafts} onChange={e => { setDrafts(e.target.value); setReviewed(false); setWorkflowReviews([]); }} /></Field>
+        <p className="text-xs text-[#94a3b8]">Review each identity and its expected access below. In JSON, reference credentials with <code>value_env</code> or <code>value_keychain</code>. Never paste token values. Use the JSON editor to replace path variables, review mutating operations, or remove unwanted cases before saving.</p>
+        <DraftIdentityReview key={offset} json={drafts} onChange={busy || readOnly ? undefined : editDrafts} />
+        <Field label="Draft cases JSON"><textarea rows={20} spellCheck={false} disabled={busy} className={fieldClass + " font-mono"} value={drafts} onChange={e => editDrafts(e.target.value)} /></Field>
         {workflowReviews.length ? workflowReviews.map((review, index) => <WorkflowReviewSummary key={index} review={review} label={`Draft ${index + 1}: workflow prerequisites`} />) : <WorkflowReviewSummary />}
         <details className="text-xs text-[#94a3b8]"><summary className="cursor-pointer">Check authenticated identities before testing</summary><p>Add a preflight to each authenticated identity using a known-good GET endpoint on the API origin. Match public subject, role or tenant metadata. Any failed check stops the case before authorization requests. Anonymous identities have no preflight. Secrets remain local credential references.</p><pre className="overflow-auto whitespace-pre-wrap">{JSON.stringify({ preflight: { url: "https://api.example.test/session", expected_status: 200, json_fields: { "user.id": "reviewed-user-id", "user.tenant_id": "reviewed-tenant-id" } } }, null, 2)}</pre></details>
         <p className="text-xs text-[#94a3b8]">Changing pages replaces this unsaved page. Save or copy your edits first.</p>

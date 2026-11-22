@@ -1776,9 +1776,12 @@ generated access decision is `skip`.
 
 In the case builder, select a draft to review its resource owner and tenant alongside each identity's
 ID, role, tenant, and declared access decision. A separately declared write-verification identity
-appears below the table. The summary displays only the type of credential source. It reads the
-draft JSON already in your browser. Edit the JSON to change a draft, then confirm
-your review before saving.
+appears below the table. The summary displays only the type of credential source. Choose **Edit**
+on an identity to change its ID, role, tenant, environment or keychain reference, and expected
+access. **No credentials** declares an anonymous caller. Applying an ID change updates that
+case's expected access, resource owner and setup actors. Use the JSON editor for other fields or
+ambiguous declarations. Both editors update the same local draft and clear the review confirmation.
+Confirm the edited draft before saving.
 
 ### `POST /engagements/{program_id}/test-cases/preview`
 Generate draft cases. Provide **exactly one** of `endpoint_ids` (API-surface operations of this

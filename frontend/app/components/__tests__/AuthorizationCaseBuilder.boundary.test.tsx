@@ -62,10 +62,16 @@ describe("AuthorizationCaseBuilder boundary drafts", () => {
 });
 
 describe("AuthorizationCaseBuilder identity review", () => {
+  beforeAll(() => {
+    // jsdom does not implement native dialog modality.
+    HTMLDialogElement.prototype.showModal = function () { this.open = true; };
+    HTMLDialogElement.prototype.close = function () { this.open = false; };
+  });
+
   async function openReview(cases: unknown[]) {
     const result = renderWithApp(<AuthorizationCaseBuilder engagementId="eng-1" endpointIds={["ep-1"]} />, {
       routes: {
-        [previewRoute]: { body: { drafts: cases, total: cases.length } },
+        [previewRoute]: { body: { drafts: cases, total: cases.length, workflow_reviews: [{ preflight_identity_ids: [], fixed_profile_blockers: [] }] } },
         [reviewedRoute]: { body: { test_cases: [{}] } },
       },
     });
@@ -104,7 +110,7 @@ describe("AuthorizationCaseBuilder identity review", () => {
     for (const [id, ...cells] of expectedRows) {
       const heading = within(table).getByRole("rowheader", { name: id });
       const row = heading.closest("tr")!;
-      expect(within(row).getAllByRole("cell").map(cell => cell.textContent)).toEqual(cells);
+      expect(within(row).getAllByRole("cell").map(cell => cell.textContent)).toEqual([...cells, "Edit"]);
     }
     expect(table.outerHTML).not.toMatch(/OWNER_TOKEN|private-keychain-entry|invalid-literal-marker|MISSING_HEADER_REF/);
     expect(authFetch).toHaveBeenCalledTimes(1);
@@ -165,5 +171,63 @@ describe("AuthorizationCaseBuilder identity review", () => {
     await userEvent.click(save);
     expect(authFetch.mock.calls.map(([path, init]) => `${init?.method} ${path}`)).toEqual([previewRoute, reviewedRoute]);
     expect(JSON.parse(String(authFetch.mock.calls[1][1]?.body))).toEqual({ reviewed: true, cases: edited });
+  });
+
+  it("applies identity edits to the selected case and saves the complete re-confirmed draft", async () => {
+    const identity = { ...draft.spec.identities[0], extra: { label: "keep" }, credential: {
+      type: "static_header", header: "X-Identity", value_env: "OWNER_TOKEN", annotation: "keep",
+    } };
+    const spec = { ...draft.spec, identities: [identity], resource: { owner_identity: "owner" },
+      setup: [{ as: "owner", name: "prepare" }], expected_access: [{ identity_id: "owner", decision: "skip", tags: ["keep"] }],
+      write_verification: { identity }, local_note: "keep" };
+    const { authFetch } = await openReview([draft, { ...draft, spec }]);
+    await userEvent.selectOptions(screen.getByLabelText("Case to review"), "1");
+    const confirm = screen.getByRole("checkbox", { name: /I reviewed/ });
+    await userEvent.click(confirm);
+    expect(screen.getByText(/Draft 1: workflow prerequisites/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Edit identity owner" }));
+    const edit = within(screen.getByRole("dialog", { name: "Edit draft identity" }));
+    fireEvent.change(edit.getByLabelText("Identity ID"), { target: { value: "  team:reader  " } });
+    fireEvent.change(edit.getByLabelText("Role"), { target: { value: "member" } });
+    fireEvent.change(edit.getByLabelText("Tenant"), { target: { value: "west" } });
+    await userEvent.selectOptions(edit.getByLabelText("Credential source"), "value_keychain");
+    fireEvent.change(edit.getByLabelText("Keychain account name"), { target: { value: "reader-credential" } });
+    await userEvent.selectOptions(edit.getByLabelText("Expected access"), "deny");
+    await userEvent.click(edit.getByRole("button", { name: "Apply to draft" }));
+    expect(confirm).not.toBeChecked();
+    expect(screen.queryByText(/Draft 1: workflow prerequisites/)).not.toBeInTheDocument();
+    const updated = [draft, { ...draft, spec: { ...spec, identities: [{ ...identity, id: "team:reader", role: "member", tenant_id: "west",
+      credential: { type: "static_header", header: "X-Identity", value_keychain: "reader-credential", annotation: "keep" } }],
+      resource: { owner_identity: "team:reader" }, setup: [{ as: "team:reader", name: "prepare" }],
+      expected_access: [{ identity_id: "team:reader", decision: "deny", tags: ["keep"] }] } }];
+    expect(JSON.parse((screen.getByLabelText("Draft cases JSON") as HTMLTextAreaElement).value)).toEqual(updated);
+    expect(authFetch).toHaveBeenCalledTimes(1);
+    await userEvent.click(confirm);
+    await userEvent.click(screen.getByRole("button", { name: "Save reviewed cases" }));
+    expect(JSON.parse(String(authFetch.mock.calls[1][1]?.body))).toEqual({ reviewed: true, cases: updated });
+  });
+
+  it("rejects colliding IDs and can change between anonymous and referenced credentials", async () => {
+    const { authFetch } = await openReview([{ ...draft, spec: { ...draft.spec, identities: [...draft.spec.identities,
+      { id: "guest", credential: { type: "static_header", header: "", value: "" } }] } }]);
+    const draftSpec = () => JSON.parse((screen.getByLabelText("Draft cases JSON") as HTMLTextAreaElement).value)[0].spec;
+    await userEvent.click(screen.getByRole("button", { name: "Edit identity guest" }));
+    const id = screen.getByLabelText("Identity ID");
+    fireEvent.change(id, { target: { value: "owner" } });
+    await userEvent.click(screen.getByRole("button", { name: "Apply to draft" }));
+    expect(screen.getByRole("alert")).toHaveTextContent(/unique/);
+    expect(draftSpec().identities[1].id).toBe("guest");
+    fireEvent.change(id, { target: { value: "guest" } });
+    await userEvent.selectOptions(screen.getByLabelText("Credential source"), "value_env");
+    fireEvent.change(screen.getByLabelText("Environment variable name"), { target: { value: "GUEST_CREDENTIAL" } });
+    await userEvent.selectOptions(screen.getByLabelText("Expected access"), "allow");
+    await userEvent.click(screen.getByRole("button", { name: "Apply to draft" }));
+    expect(draftSpec().identities[1].credential).toMatchObject({ type: "bearer", value_env: "GUEST_CREDENTIAL" });
+    expect(draftSpec().expected_access[1]).toEqual({ identity_id: "guest", decision: "allow" });
+    await userEvent.click(screen.getByRole("button", { name: "Edit identity guest" }));
+    await userEvent.selectOptions(screen.getByLabelText("Credential source"), "anonymous");
+    await userEvent.click(screen.getByRole("button", { name: "Apply to draft" }));
+    expect(draftSpec().identities[1].credential).toEqual({ type: "static_header", header: "", value: "" });
+    expect(authFetch).toHaveBeenCalledTimes(1);
   });
 });
