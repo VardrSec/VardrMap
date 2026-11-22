@@ -251,25 +251,41 @@ describe("AuthorizationCoveragePanel pagination", () => {
   };
 
   it("reaches operation 501 and returns with the same state filter and priority order", async () => {
-    const { authFetch } = renderWithApp(<AuthorizationCoveragePanel engagementId="eng-1" />, { routes });
-    await userEvent.click(await screen.findByRole("button", { name: /No reviewed test/ }));
-    await userEvent.click(screen.getByRole("checkbox", { name: /Look here first/ }));
-    expect(screen.getByText("GET /operation-500")).toBeVisible();
-    expect(screen.queryByText("GET /operation-501")).not.toBeInTheDocument();
+    const { authFetch, container } = renderWithApp(<AuthorizationCoveragePanel engagementId="eng-1" />, {
+      routes: {
+        ...routes,
+        // Select the controls with a small fixture. Both visits to the sorted first page render all 500 operations.
+        [url]: { body: coverage },
+        [filteredUrl]: { body: { ...coverage, filtered_total: 1, operations: [coverage.operations[2]] } },
+      },
+    });
+    const filter = await screen.findByRole("button", { name: /No reviewed test/ });
+    const priority = screen.getByRole("checkbox", { name: /Look here first/ });
+    const status = screen.getByRole("status");
+    // Read the rendered table once per response instead of querying every element for each path.
+    function expectPage(firstOperation: number, lastOperation: number) {
+      const rows = container.querySelector("tbody")!.rows;
+      const paths = Array.from(rows, row => row.cells[0].firstElementChild?.textContent);
+      expect(paths).toEqual(untested.slice(firstOperation - 1, lastOperation).map(op => `GET ${op.path_template}`));
+      expect(rows[rows.length - 1].cells[0]).toBeVisible();
+    }
+    await userEvent.click(filter);
+    await userEvent.click(priority);
+    expectPage(1, 500);
     expect(screen.getByRole("button", { name: "Previous page" })).toBeDisabled();
     await userEvent.click(screen.getByRole("button", { name: "Next page" }));
-    expect(await screen.findByText("GET /operation-501")).toBeVisible();
-    expect(screen.getByText(/501–501 of 501 operations/)).toBeVisible();
+    await waitFor(() => expect(status).toHaveTextContent("501–501 of 501 operations"));
+    expectPage(501, 501);
     expect(screen.getByRole("button", { name: "Next page" })).toBeDisabled();
-    expect(screen.queryByText("GET /operation-500")).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Previous page" }));
-    expect(await screen.findByText("GET /operation-500")).toBeVisible();
-    expect(screen.getByRole("button", { name: /No reviewed test/ })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("checkbox", { name: /Look here first/ })).toBeChecked();
+    await waitFor(() => expect(status).toHaveTextContent("1–500 of 501 operations"));
+    expectPage(1, 500);
+    expect(filter).toHaveAttribute("aria-pressed", "true");
+    expect(priority).toBeChecked();
     expect(authFetch.mock.calls.map(([path]) => path)).toEqual([
       url, filteredUrl, sortedUrl, `${sortedUrl}&offset=500`, sortedUrl,
     ]);
-  });
+  }, 15_000); // Rendering both full pages can exceed the default deadline on a shared CPU.
 
   it.each(["filter", "sort"])("returns to the first page when the %s changes", async (control) => {
     const { authFetch } = renderWithApp(<AuthorizationCoveragePanel engagementId="eng-1" />, { routes });
