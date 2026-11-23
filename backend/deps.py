@@ -1,8 +1,8 @@
 import hashlib
-import os
 from datetime import datetime, timezone
 
 import jwt
+from auth_methods import auth_methods, backend_jwt_secret
 from db import get_db
 from fastapi import Depends, Header, HTTPException, Request
 from jwt import PyJWTError
@@ -17,7 +17,7 @@ from models import (
 )
 from sqlalchemy.orm import Session
 
-BACKEND_JWT_SECRET = os.getenv("BACKEND_JWT_SECRET", "")
+BACKEND_JWT_SECRET = backend_jwt_secret()
 JWT_ALGORITHM = "HS256"
 _API_KEY_PREFIX = "vmap_"
 
@@ -66,7 +66,6 @@ def _resolve_api_key(token: str, db: Session) -> dict[str, str]:
 
 
 def _resolve_jwt(token: str) -> dict[str, str]:
-    from auth_methods import auth_methods
     if "github" not in auth_methods():
         raise HTTPException(status_code=401, detail="Unauthorized")
     try:

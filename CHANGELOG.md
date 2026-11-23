@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Reject the signing secrets from the example environment files at startup. Native installations need a generated backend JWT secret shared by both services and a separate frontend session secret.
+
 - Review one draft case at a time in the case builder. Edit identity IDs, roles, tenants, credential references and expected access before confirming the draft. The summary shows credential source types and resource context.
 
 - Show unmatched cases and unattributed assessments in Authorization coverage even before the first operation is captured. Reviewers can page through all captured operations with their selected filter and sort order.

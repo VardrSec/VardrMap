@@ -1,6 +1,18 @@
-"""One explicit provider policy for the existing backend."""
+"""Backend authentication provider and signing configuration."""
 
 import os
+
+
+def backend_jwt_secret() -> str:
+    secret = os.getenv("BACKEND_JWT_SECRET", "")
+    if secret in {
+        "change-me-to-a-long-random-string",
+        "change-me-to-a-long-random-hex-string",
+    }:
+        raise RuntimeError(
+            "Replace the example BACKEND_JWT_SECRET with a generated secret"
+        )
+    return secret
 
 
 def auth_methods() -> tuple[str, ...]:

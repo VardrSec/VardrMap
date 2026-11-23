@@ -95,6 +95,13 @@ python -m venv venv
 # Activate the virtual environment for your operating system.
 pip install -r requirements.txt
 cp .env.example .env
+```
+
+Generate a secret with `python -c "import secrets; print(secrets.token_hex(32))"`.
+Set `BACKEND_JWT_SECRET` in `backend/.env` to that value and configure your database.
+Then start the backend.
+
+```sh
 uvicorn main:app --reload
 ```
 
@@ -102,6 +109,13 @@ uvicorn main:app --reload
 cd frontend
 npm install
 cp .env.example .env.local
+```
+
+Set `BACKEND_JWT_SECRET` in `frontend/.env.local` to the same value as the backend.
+Run the generator again for an independent `AUTH_SECRET`. Configure your GitHub
+OAuth credentials, then start the frontend.
+
+```sh
 npm run dev
 ```
 
