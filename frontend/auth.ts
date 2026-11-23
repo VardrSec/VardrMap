@@ -2,7 +2,9 @@ import NextAuth from "next-auth";
 import GitHub from "next-auth/providers/github";
 import { SignJWT } from "jose";
 import { authMethods } from "./lib/auth-methods";
+import { validateSigningSecrets } from "./lib/signing-config";
 
+validateSigningSecrets();
 const methods = authMethods();
 
 const backendJwtSecret = new TextEncoder().encode(

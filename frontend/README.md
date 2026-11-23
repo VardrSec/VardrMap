@@ -5,8 +5,11 @@ distribution and hosted on Vercel.
 
 ## Setup
 
-Run `npm install`, copy `.env.example` to `.env.local`, and run `npm run dev`.
-See development setup for backend configuration and tests.
+Run `npm install` and copy `.env.example` to `.env.local`. Set `BACKEND_JWT_SECRET`
+to the generated value in `backend/.env` and generate a separate `AUTH_SECRET`.
+The server rejects the example signing secrets at startup. See the
+[development setup](../README.md#development-setup) for the generator and backend
+configuration. Start the frontend with `npm run dev` after configuring the login provider.
 Set `VARDRMAP_AUTH_METHODS` consistently on frontend and backend: `github` (default),
 `local`, or `github,local`. `AUTH_SECRET`, `BACKEND_JWT_SECRET` and
 `NEXT_PUBLIC_API_URL` remain required; `AUTH_GITHUB_ID` and `AUTH_GITHUB_SECRET`

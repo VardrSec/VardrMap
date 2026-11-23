@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 
 from argon2 import PasswordHasher, Type
 from argon2.exceptions import InvalidHashError, VerificationError
-from auth_methods import auth_methods
+from auth_methods import auth_methods, backend_jwt_secret
 from fastapi import HTTPException, Request, Response
 from models import LocalBootstrap, LocalCredential, LocalSession, User, new_uuid
 from sqlalchemy.exc import IntegrityError
@@ -49,7 +49,7 @@ def digest(value: str) -> str:
 
 
 def csrf_token(raw_session: str) -> str:
-    key = os.getenv("BACKEND_JWT_SECRET", "")
+    key = backend_jwt_secret()
     if len(key) < 32:
         raise HTTPException(
             status_code=500, detail="Local authentication is not configured"

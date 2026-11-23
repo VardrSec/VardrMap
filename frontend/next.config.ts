@@ -1,5 +1,8 @@
 import type { NextConfig } from "next";
 import path from "path";
+import { validateSigningSecrets } from "./lib/signing-config";
+
+validateSigningSecrets();
 
 // Sent with every page and asset, in Compose and on Vercel. None of these limits
 // which scripts, styles or connections the app may use, so Next.js rendering and
