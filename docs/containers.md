@@ -25,7 +25,8 @@ methods and allowed origins at runtime. No database file or credentials enter th
 image. Keep its port private and set FORWARDED_ALLOW_IPS to the exact proxy address
 when terminating HTTPS upstream; never trust arbitrary forwarded headers.
 
-Build the browser with:
+Build the browser image on a Linux/amd64 builder. Its Dockerfile verifies the
+rebuilt glibc packages against the recorded amd64 checksums.
 
 ```sh
 docker build --build-arg NEXT_PUBLIC_API_URL=https://localhost:8443/backend -t vardrmap-web:local frontend
